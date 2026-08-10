@@ -1,8 +1,17 @@
 # mpg — multi-protocol gateway (prototype)
 
-Protocol-agnostic routing engine plus pluggable adapters. The core never parses a payload and never names a protocol. Adapters own framing, handshake, and any schema logic. Only data messages cross the engine.
+- [Introduction](#introduction)
+- [Layout](#layout)
+- [Getting started](#getting-started)
+- [Documentation](#documentation)
+- [Internal model](#internal-model)
+- [Not in v0](#not-in-v0)
+- [Contributing](#contributing)
+- [License](#license)
 
-Licensed under [Apache License 2.0](LICENSE) (copyright John Henry Burns). Compatible with Open Arsenal A-GRA / sleet (Apache-2.0) and MIT projects such as Ghost Detector.
+## Introduction
+
+Protocol-agnostic routing engine plus pluggable adapters. The core never parses a payload and never names a protocol. Adapters own framing, handshake, and any schema logic. Only data messages cross the engine.
 
 ```
 loopback ──publish/subscribe──► Engine ◄──PUB/SUB── owp (WebSocket)
@@ -30,9 +39,7 @@ loopback ──publish/subscribe──► Engine ◄──PUB/SUB── owp (Web
 
 Reference clones under `repos/` are not compiled into this workspace.
 
-New here? [docs/glossary.md](docs/glossary.md) defines the acronyms, and [docs/writing-an-adapter.md](docs/writing-an-adapter.md) walks through adding a protocol.
-
-## Run
+## Getting started
 
 ```bash
 cargo test --workspace --locked
@@ -42,8 +49,6 @@ cargo run -p mpg -- config/asb.toml              # + ActiveMQ STOMP (compose up 
 ```
 
 With no argument mpg looks for `config/default.toml` in the current directory and its two parents, then falls back to built-in defaults. A config path you name explicitly must exist. Unknown keys are rejected rather than ignored, so a misspelled `topics` fails at startup instead of silently doing nothing. `owp.bind` and `stomp.broker` accept `host:port` as well as a literal address, preferring IPv4 when a name offers both.
-
-CI (GitHub Actions + GitLab CI) runs `fmt`, `clippy -D warnings`, `cargo test --workspace --locked`, then the ignored ActiveMQ XML round-trip. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 OWP listens on `ws://127.0.0.1:9000/` with subprotocol `owp`. There is **no TLS and no authentication** — loopback bind only.
 
@@ -106,6 +111,12 @@ python3 scripts/stomp_xml_smoke.py send
 
 No TLS. Console: <http://127.0.0.1:8161> (`admin` / `admin`).
 
+## Documentation
+
+- [docs/glossary.md](docs/glossary.md) — the acronyms, and mpg's own vocabulary
+- [docs/writing-an-adapter.md](docs/writing-an-adapter.md) — adding a protocol
+- `cargo doc --workspace --no-deps --open` — the crate APIs. `mpg-adapter` carries a runnable minimal adapter.
+
 ## Internal model
 
 - `Envelope` — id, route, string headers, content-type, opaque `Bytes` payload
@@ -132,3 +143,11 @@ Platform interfaces (MA-VI, MA-MS) use native MTs and skip this envelope.
 ## Not in v0
 
 Identity map, full UCI XSD load, OpenWire/JMS and DDS adapters, QoS, queue groups, TLS.
+
+## Contributing
+
+CI (GitHub Actions + GitLab CI) runs `fmt`, `clippy -D warnings`, `cargo test --workspace --locked`, and `cargo doc` with warnings denied, then the ignored ActiveMQ XML round-trip. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+Licensed under [Apache License 2.0](LICENSE) (copyright John Henry Burns). Compatible with Open Arsenal A-GRA / sleet (Apache-2.0) and MIT projects such as Ghost Detector.
