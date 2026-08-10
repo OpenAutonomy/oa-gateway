@@ -2,6 +2,13 @@
 
 use std::fmt;
 
+/// Largest single frame (header block plus body) accepted from a peer.
+///
+/// Both bounds this implies matter: a peer that never terminates a frame would
+/// otherwise grow the read buffer without limit, and a peer-supplied
+/// `content-length` must never be trusted as an unbounded buffer offset.
+pub const DEFAULT_MAX_FRAME_SIZE: usize = 16 * 1024 * 1024;
+
 /// One STOMP frame (command + headers + body).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Frame {
@@ -81,6 +88,10 @@ pub enum CodecError {
     BadEscape,
     #[error("STOMP content-length is not a number")]
     BadContentLength,
+    #[error("STOMP header block contains a NUL byte")]
+    NulInHeaders,
+    #[error("STOMP frame exceeds the {max} byte limit")]
+    FrameTooLarge { max: usize },
     #[error("STOMP frame missing NUL terminator")]
     MissingNull,
     #[error("I/O error: {0}")]
@@ -93,9 +104,27 @@ impl From<std::io::Error> for CodecError {
     }
 }
 
+/// Pull one complete frame from `buf`, rejecting frames larger than
+/// [`DEFAULT_MAX_FRAME_SIZE`]. See [`decode_one_with_limit`].
+pub fn decode_one(buf: &mut Vec<u8>) -> Result<Option<Frame>, CodecError> {
+    decode_one_with_limit(buf, DEFAULT_MAX_FRAME_SIZE)
+}
+
 /// Pull one complete frame from `buf`. Incomplete data returns `Ok(None)` and leaves `buf` intact
 /// aside from leading heartbeat bytes (`\n` / `\r` / NUL).
-pub fn decode_one(buf: &mut Vec<u8>) -> Result<Option<Frame>, CodecError> {
+///
+/// Everything here is peer-controlled input. `content-length` is bounded by `max_frame_size`
+/// and added to the body offset with checked arithmetic, so it can neither wrap into a bogus
+/// offset nor address memory past the frame. An unterminated header block or body is refused
+/// once it passes the limit rather than buffered forever.
+pub fn decode_one_with_limit(
+    buf: &mut Vec<u8>,
+    max_frame_size: usize,
+) -> Result<Option<Frame>, CodecError> {
+    let too_large = || CodecError::FrameTooLarge {
+        max: max_frame_size,
+    };
+
     let start = match buf.iter().position(|&b| b != b'\n' && b != b'\r' && b != 0) {
         Some(i) => i,
         None => {
@@ -109,10 +138,23 @@ pub fn decode_one(buf: &mut Vec<u8>) -> Result<Option<Frame>, CodecError> {
 
     let header_end = match find_header_end(buf) {
         Some(end) => end,
-        None => return Ok(None),
+        None => {
+            if buf.len() > max_frame_size {
+                return Err(too_large());
+            }
+            return Ok(None);
+        }
     };
+    if header_end > max_frame_size {
+        return Err(too_large());
+    }
 
     let header_bytes = &buf[..header_end];
+    // A NUL is valid UTF-8, so it would otherwise survive header parsing and make the
+    // frame boundary ambiguous.
+    if header_bytes.contains(&0) {
+        return Err(CodecError::NulInHeaders);
+    }
     let header_text = std::str::from_utf8(header_bytes).map_err(|_| CodecError::NotUtf8)?;
     let mut lines = header_text.split('\n').map(|l| l.trim_end_matches('\r'));
     let command = lines.next().ok_or(CodecError::MissingCommand)?;
@@ -138,7 +180,10 @@ pub fn decode_one(buf: &mut Vec<u8>) -> Result<Option<Frame>, CodecError> {
 
     let body_start = header_end;
     let (body_end, frame_end) = if let Some(len) = content_length {
-        let end = body_start + len;
+        if len > max_frame_size {
+            return Err(too_large());
+        }
+        let end = body_start.checked_add(len).ok_or_else(too_large)?;
         if buf.len() <= end {
             return Ok(None);
         }
@@ -149,7 +194,12 @@ pub fn decode_one(buf: &mut Vec<u8>) -> Result<Option<Frame>, CodecError> {
     } else {
         match buf[body_start..].iter().position(|&b| b == 0) {
             Some(rel) => (body_start + rel, body_start + rel + 1),
-            None => return Ok(None),
+            None => {
+                if buf.len() > max_frame_size {
+                    return Err(too_large());
+                }
+                return Ok(None);
+            }
         }
     };
 
@@ -281,6 +331,68 @@ mod tests {
         buf.extend_from_slice(&encoded[encoded.len() - 3..]);
         let decoded = decode_one(&mut buf).unwrap().unwrap();
         assert_eq!(decoded.body, vec![1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn absurd_content_length_is_refused_not_added() {
+        let mut buf =
+            b"MESSAGE\ndestination:/topic/demo\ncontent-length:18446744073709551615\n\n".to_vec();
+        assert_eq!(
+            decode_one(&mut buf),
+            Err(CodecError::FrameTooLarge {
+                max: DEFAULT_MAX_FRAME_SIZE
+            })
+        );
+    }
+
+    #[test]
+    fn nul_in_header_value_is_refused() {
+        // A NUL is valid UTF-8, so without this check it reaches the body-offset
+        // arithmetic and can point body_end before body_start.
+        let mut buf =
+            b"MESSAGE\ndestination:/topic/demo\nx:\0\ncontent-length:4\n\nbody\0".to_vec();
+        assert_eq!(decode_one(&mut buf), Err(CodecError::NulInHeaders));
+    }
+
+    #[test]
+    fn content_length_beyond_limit_is_refused() {
+        let mut buf = b"MESSAGE\ndestination:/topic/demo\ncontent-length:5000\n\n".to_vec();
+        assert_eq!(
+            decode_one_with_limit(&mut buf, 1024),
+            Err(CodecError::FrameTooLarge { max: 1024 })
+        );
+    }
+
+    #[test]
+    fn unterminated_header_block_stops_buffering() {
+        let mut buf = b"MESSAGE\n".to_vec();
+        buf.extend(std::iter::repeat_n(b'a', 200));
+        assert_eq!(
+            decode_one_with_limit(&mut buf, 64),
+            Err(CodecError::FrameTooLarge { max: 64 })
+        );
+    }
+
+    #[test]
+    fn unterminated_body_stops_buffering() {
+        let mut buf = b"SEND\ndestination:/topic/demo\n\n".to_vec();
+        buf.extend(std::iter::repeat_n(b'a', 200));
+        assert_eq!(
+            decode_one_with_limit(&mut buf, 64),
+            Err(CodecError::FrameTooLarge { max: 64 })
+        );
+    }
+
+    #[test]
+    fn frame_at_the_limit_still_decodes() {
+        let frame = Frame::new("SEND")
+            .with_header("destination", "/topic/demo")
+            .with_body(b"hello".to_vec());
+        let mut buf = frame.encode();
+        let limit = buf.len();
+        let decoded = decode_one_with_limit(&mut buf, limit).unwrap().unwrap();
+        assert_eq!(decoded.body, b"hello");
+        assert!(buf.is_empty());
     }
 
     #[test]

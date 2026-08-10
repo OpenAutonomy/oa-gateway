@@ -10,7 +10,7 @@ mod config;
 mod dest;
 
 pub use adapter::StompAdapter;
-pub use codec::{decode_one, CodecError, Frame};
+pub use codec::{decode_one, decode_one_with_limit, CodecError, Frame, DEFAULT_MAX_FRAME_SIZE};
 pub use config::StompConfig;
 pub use dest::{
     inbound_route, sniff_content_type, sniff_type_hint, DestinationMap, HDR_ID, HDR_ORIGIN,

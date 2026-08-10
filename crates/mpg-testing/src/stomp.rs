@@ -260,6 +260,7 @@ pub async fn start_stomp_adapter(
             unwrap_ma_payloads: true,
             reconnect: false,
             connect_timeout: Duration::from_secs(5),
+            max_frame_size: mpg_stomp::DEFAULT_MAX_FRAME_SIZE,
         },
     ));
     let (ready_tx, ready_rx) = oneshot::channel();

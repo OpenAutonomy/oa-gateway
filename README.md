@@ -70,6 +70,7 @@ enabled = true
 broker = "127.0.0.1:61613"
 destination_prefix = "/topic/"
 topics = ["demo"]   # or PositionReport, SubsystemStatus, … for sk-cal
+max_frame_size = 16777216   # optional; refuse larger frames from the broker
 ```
 
 Each listed name is bridged both ways:
@@ -78,7 +79,7 @@ Each listed name is bridged both ways:
 - `type_hint` is sniffed from OMS JSON / XML or carried in `mpg.type_hint`
 - inbound frames tagged `mpg.origin_adapter` are not echoed back to the broker
 
-No TLS and no authentication unless you set `login` / `passcode`. Heartbeats are disabled (`0,0`).
+No TLS and no authentication unless you set `login` / `passcode`. Heartbeats are disabled (`0,0`). Frames over `max_frame_size` (16 MiB default) end the session and reconnect rather than growing the read buffer.
 
 For Ghost Detector / `uci-cal-jms`, put UCI message type names in `topics` — that is what those CALs use as JMS destinations.
 

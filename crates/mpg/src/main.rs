@@ -97,6 +97,8 @@ struct StompSection {
     unwrap_ma_payloads: bool,
     #[serde(default = "default_true")]
     reconnect: bool,
+    #[serde(default = "default_stomp_max_frame_size")]
+    max_frame_size: usize,
 }
 
 impl Default for StompSection {
@@ -112,6 +114,7 @@ impl Default for StompSection {
             topics: default_stomp_topics(),
             unwrap_ma_payloads: true,
             reconnect: true,
+            max_frame_size: default_stomp_max_frame_size(),
         }
     }
 }
@@ -151,6 +154,9 @@ fn default_stomp_prefix() -> String {
 }
 fn default_stomp_topics() -> Vec<String> {
     vec!["demo".into()]
+}
+fn default_stomp_max_frame_size() -> usize {
+    mpg_stomp::DEFAULT_MAX_FRAME_SIZE
 }
 
 #[tokio::main]
@@ -244,6 +250,7 @@ async fn main() {
                 unwrap_ma_payloads: config.stomp.unwrap_ma_payloads,
                 reconnect: config.stomp.reconnect,
                 connect_timeout: std::time::Duration::from_secs(5),
+                max_frame_size: config.stomp.max_frame_size,
             },
         ));
         info!(id = %adapter.id(), %broker, "starting stomp adapter");

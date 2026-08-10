@@ -5,7 +5,7 @@ use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
 
-use crate::codec::{decode_one, CodecError, Frame};
+use crate::codec::{decode_one_with_limit, CodecError, Frame};
 use crate::config::StompConfig;
 
 pub struct FrameWriter {
@@ -23,13 +23,14 @@ impl FrameWriter {
 pub struct FrameReader {
     read: OwnedReadHalf,
     buf: Vec<u8>,
+    max_frame_size: usize,
 }
 
 impl FrameReader {
     /// Next frame, or `None` on EOF.
     pub async fn recv(&mut self) -> Result<Option<Frame>, CodecError> {
         loop {
-            if let Some(frame) = decode_one(&mut self.buf)? {
+            if let Some(frame) = decode_one_with_limit(&mut self.buf, self.max_frame_size)? {
                 return Ok(Some(frame));
             }
             let mut tmp = [0u8; 8192];
@@ -53,6 +54,7 @@ pub async fn connect(config: &StompConfig) -> Result<(FrameReader, FrameWriter),
     let mut reader = FrameReader {
         read,
         buf: Vec::new(),
+        max_frame_size: config.max_frame_size,
     };
     let mut writer = FrameWriter { write };
 
