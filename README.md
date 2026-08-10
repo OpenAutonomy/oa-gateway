@@ -44,6 +44,7 @@ The files in `config/` are worked examples. The gateway has no TLS or authentica
 - [docs/glossary.md](docs/glossary.md) — the acronyms, and OA-Gateway's own vocabulary
 - [docs/writing-an-adapter.md](docs/writing-an-adapter.md) — adding a protocol
 - [docs/using-custom-xsd.md](docs/using-custom-xsd.md) — running against your own message set
+- [docs/connecting-active-mq.md](docs/connecting-active-mq.md) — bridging an ActiveMQ broker
 - [SECURITY.md](SECURITY.md) — deployment assumptions, reporting, known limitations
 - `cargo doc --workspace --no-deps --open` — the crate APIs. `oa-gateway-adapter` carries a runnable minimal adapter.
 
@@ -52,6 +53,7 @@ The files in `config/` are worked examples. The gateway has no TLS or authentica
 1. [STOMP, UCI, ASB? What do all these terms mean?](docs/glossary.md)
 1. [How can I add a new protocol?](docs/writing-an-adapter.md)
 1. [How can I use my own XSD?](docs/using-custom-xsd.md)
+1. [How can I connect my ActiveMQ instance?](docs/connecting-active-mq.md)
 
 ## Contributing
 
