@@ -20,7 +20,7 @@ Goals:
 - Topic- and destination-level routing, so traffic is addressed by name rather than by peer.
 - Ease of extensibility (i.e., adding new protocol adapters).
 
-Current scope is a prototype: conversion is driven by the published UCI 2.5 XSD, which you supply locally since the standard is not redistributed here, and there is no TLS or authentication.
+Current scope is a prototype: conversion is driven by the published UCI 2.5 XSD, and there is no TLS or authentication.
 
 ```
 loopback ──publish/subscribe──► Engine ◄──PUB/SUB── owp (WebSocket)
