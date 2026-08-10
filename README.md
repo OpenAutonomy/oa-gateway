@@ -1,11 +1,11 @@
 # mpg — multi-protocol gateway (prototype)
 
 - [Introduction](#introduction)
-- [Layout](#layout)
+<!-- - [Layout](#layout) -->
 - [Getting started](#getting-started)
 - [Documentation](#documentation)
-- [Internal model](#internal-model)
-- [Not in v0](#not-in-v0)
+<!-- - [Internal model](#internal-model) -->
+<!-- - [Not in v0](#not-in-v0) -->
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -23,6 +23,7 @@ loopback ──publish/subscribe──► Engine ◄──PUB/SUB── owp (Web
                          (Java CAL / OpenWire peers)
 ```
 
+<!--
 ## Layout
 
 | Crate | Role |
@@ -38,6 +39,7 @@ loopback ──publish/subscribe──► Engine ◄──PUB/SUB── owp (Web
 | `crates/mpg` | Host binary |
 
 Reference clones under `repos/` are not compiled into this workspace.
+-->
 
 ## Getting started
 
@@ -117,6 +119,7 @@ No TLS. Console: <http://127.0.0.1:8161> (`admin` / `admin`).
 - [docs/writing-an-adapter.md](docs/writing-an-adapter.md) — adding a protocol
 - `cargo doc --workspace --no-deps --open` — the crate APIs. `mpg-adapter` carries a runnable minimal adapter.
 
+<!--
 ## Internal model
 
 - `Envelope` — id, route, string headers, content-type, opaque `Bytes` payload
@@ -139,10 +142,13 @@ External MA interfaces (MA-C2, MA-MA) wrap inner UCI messages as `xs:hexBinary` 
 Platform interfaces (MA-VI, MA-MS) use native MTs and skip this envelope.
 
 `mpg-agra` wraps and unwraps both OMS JSON and XML wrappers. With `owp.unwrap_ma_payloads = true` (default), a PUB of a wrapper fans out **two** envelopes: the wrapper MT (so Command-2 status still correlates) and the inner MT (so platform subscribers see `PositionReport`, etc.). Inner `EncodedPayload` may be hex-encoded XML or OMS JSON; `type_hint` is taken from the inner document element.
+-->
 
+<!--
 ## Not in v0
 
 Identity map, full UCI XSD load, OpenWire/JMS and DDS adapters, QoS, queue groups, TLS.
+-->
 
 ## Contributing
 
