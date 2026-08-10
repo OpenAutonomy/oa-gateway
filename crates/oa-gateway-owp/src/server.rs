@@ -1,6 +1,6 @@
 //! OWP/WebSocket adapter. Protocol control stays here; data crosses the engine.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -204,10 +204,48 @@ struct LiveSub {
     forwarder: JoinHandle<()>,
 }
 
+/// Whether an unroutable publish is worth reporting yet.
+enum Report {
+    /// Not seen on this connection before.
+    New,
+    /// As [`Report::New`], and the last one this connection will report.
+    Final,
+    /// Already reported, or reporting has stopped.
+    Skip,
+}
+
+/// Routes this connection has been warned about publishing into thin air.
+///
+/// A client publishing where nothing is subscribed rarely does it once, so
+/// reporting every message would bury the log. Reporting also stops past
+/// [`Unroutable::CAP`] distinct routes, so a client cycling through topics
+/// cannot turn the warning into unbounded memory or log volume.
+#[derive(Default)]
+struct Unroutable {
+    seen: HashSet<RouteKey>,
+}
+
+impl Unroutable {
+    const CAP: usize = 64;
+
+    fn report(&mut self, route: &RouteKey) -> Report {
+        if self.seen.len() >= Self::CAP || self.seen.contains(route) {
+            return Report::Skip;
+        }
+        self.seen.insert(route.clone());
+        if self.seen.len() == Self::CAP {
+            Report::Final
+        } else {
+            Report::New
+        }
+    }
+}
+
 async fn run_session(mut session: Session) -> Result<(), AdapterError> {
     let (out_tx, mut out_rx) = mpsc::channel::<ServerOp>(DEFAULT_CHANNEL_CAPACITY);
     let mut state = State::AwaitingInit;
     let mut subs: HashMap<String, LiveSub> = HashMap::new();
+    let mut unroutable = Unroutable::default();
 
     loop {
         tokio::select! {
@@ -230,6 +268,7 @@ async fn run_session(mut session: Session) -> Result<(), AdapterError> {
                             &session,
                             &mut state,
                             &mut subs,
+                            &mut unroutable,
                             &out_tx,
                             text.as_str(),
                         )
@@ -273,6 +312,7 @@ async fn handle_text(
     session: &Session,
     state: &mut State,
     subs: &mut HashMap<String, LiveSub>,
+    unroutable: &mut Unroutable,
     out_tx: &mpsc::Sender<ServerOp>,
     text: &str,
 ) -> Result<(), Fatal> {
@@ -331,7 +371,7 @@ async fn handle_text(
                 service_id,
             },
             ClientOp::Pub { topic, payload },
-        ) => match publish_owp(session, service_id, topic, payload).await {
+        ) => match publish_owp(session, unroutable, service_id, topic, payload).await {
             Ok(()) => {
                 if *verbose {
                     send(out_tx, ServerOp::Ok).await;
@@ -443,6 +483,7 @@ async fn handle_text(
 
 async fn publish_owp(
     session: &Session,
+    unroutable: &mut Unroutable,
     service_id: &str,
     topic: String,
     payload: String,
@@ -492,7 +533,33 @@ async fn publish_owp(
         } else {
             env
         };
-        session.engine.publish(stamp(env)).await;
+        let env = stamp(env);
+        let route = env.route.clone();
+        // A publish that matches nothing is legal pub/sub, but it is far more
+        // often a topic the gateway was never configured to carry — a STOMP
+        // topics list without this entry, say — and the client is told "+OK"
+        // either way. Say so here rather than let the message vanish.
+        if session.engine.publish(env).await.matched == 0 {
+            match unroutable.report(&route) {
+                Report::Skip => {}
+                report => {
+                    warn!(
+                        adapter = %session.adapter_id,
+                        service = %service_id,
+                        route = %route,
+                        "nothing is subscribed to this route, so the publish went nowhere"
+                    );
+                    if matches!(report, Report::Final) {
+                        warn!(
+                            adapter = %session.adapter_id,
+                            service = %service_id,
+                            "reached the unroutable route limit; no more will be reported \
+                             on this connection"
+                        );
+                    }
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -561,4 +628,42 @@ fn err_op(error: OwpError, details: Option<&str>) -> ServerOp {
 
 async fn send(tx: &mpsc::Sender<ServerOp>, op: ServerOp) {
     let _ = tx.send(op).await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_route_is_reported_once() {
+        let mut unroutable = Unroutable::default();
+        let route = RouteKey::typed("SystemStatus", "SystemStatus");
+
+        assert!(matches!(unroutable.report(&route), Report::New));
+        assert!(matches!(unroutable.report(&route), Report::Skip));
+        assert!(matches!(unroutable.report(&route), Report::Skip));
+
+        // A different type on the same topic is a different route.
+        let other = RouteKey::typed("SystemStatus", "PositionReport");
+        assert!(matches!(unroutable.report(&other), Report::New));
+    }
+
+    #[test]
+    fn reporting_stops_at_the_cap() {
+        let mut unroutable = Unroutable::default();
+        for i in 0..Unroutable::CAP - 1 {
+            let route = RouteKey::typed(format!("topic-{i}"), "Ping");
+            assert!(matches!(unroutable.report(&route), Report::New));
+        }
+
+        let last = RouteKey::typed("topic-last", "Ping");
+        assert!(matches!(unroutable.report(&last), Report::Final));
+
+        // Nothing further is reported or remembered, however many routes arrive.
+        for i in 0..1000 {
+            let route = RouteKey::typed(format!("flood-{i}"), "Ping");
+            assert!(matches!(unroutable.report(&route), Report::Skip));
+        }
+        assert_eq!(unroutable.seen.len(), Unroutable::CAP);
+    }
 }
