@@ -50,9 +50,9 @@ fn read_element(
     type_name: &str,
     path: &str,
 ) -> Result<Node, UciError> {
-    if Schema::is_simple(type_name) || !schema.is_complex(type_name) {
+    if schema.is_simple(type_name) || !schema.is_complex(type_name) {
         let text = node.text().unwrap_or("").trim();
-        return Ok(Node::Simple(parse_text(type_name, text)));
+        return Ok(Node::Simple(parse_text(schema.primitive(type_name), text)));
     }
 
     let xsi = node

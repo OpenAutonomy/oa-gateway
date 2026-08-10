@@ -1,11 +1,24 @@
-//! In-memory XSD slice. Enough OMS JSON rules; not a full XSD processor.
+//! In-memory model of a UCI schema. Enough for the OMS JSON rules; not a full
+//! XSD processor.
+//!
+//! Build one by hand with the builder methods below, or compile the published
+//! XSD into one with [`crate::xsd::compile`].
 
 use std::collections::HashMap;
+
+/// How many links of a named-simple-type chain [`Schema::primitive`] will follow
+/// before giving up. The published schema nests three deep at most; the limit
+/// exists so a cyclic hand-built schema cannot hang the caller.
+const MAX_SIMPLE_DEPTH: usize = 16;
 
 #[derive(Debug, Clone)]
 pub struct Schema {
     pub global_elements: HashMap<String, GlobalElement>,
     pub complex_types: HashMap<String, ComplexType>,
+    /// Named simple types, mapped to the type each one restricts. The target is
+    /// usually an `xs:` primitive but may be another named simple type, so read
+    /// this through [`Schema::primitive`] rather than directly.
+    pub simple_types: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone)]
@@ -58,6 +71,7 @@ impl Schema {
         Self {
             global_elements: HashMap::new(),
             complex_types: HashMap::new(),
+            simple_types: HashMap::new(),
         }
     }
 
@@ -68,6 +82,12 @@ impl Schema {
                 type_name: type_name.into(),
             },
         );
+        self
+    }
+
+    /// Declare a named simple type that restricts `base`.
+    pub fn simple(&mut self, name: impl Into<String>, base: impl Into<String>) -> &mut Self {
+        self.simple_types.insert(name.into(), base.into());
         self
     }
 
@@ -152,9 +172,35 @@ impl Schema {
         self.complex_types.contains_key(type_name)
     }
 
+    /// Whether `type_name` holds a scalar value rather than child elements.
+    ///
+    /// Covers both `xs:` primitives and the schema's own named simple types —
+    /// the published catalog defines over nine hundred of the latter, so a
+    /// prefix test alone would misread them as complex.
     #[must_use]
-    pub fn is_simple(type_name: &str) -> bool {
-        type_name.starts_with("xs:")
+    pub fn is_simple(&self, type_name: &str) -> bool {
+        type_name.starts_with("xs:") || self.simple_types.contains_key(type_name)
+    }
+
+    /// Reduce `type_name` to the `xs:` primitive it ultimately restricts.
+    ///
+    /// Leaf coercion matches on primitive names to decide whether a value is a
+    /// JSON number, boolean, or string, so every named simple type has to be
+    /// resolved through its restriction chain first. Returns `type_name`
+    /// unchanged when it is already a primitive or is not a known simple type.
+    #[must_use]
+    pub fn primitive<'a>(&'a self, type_name: &'a str) -> &'a str {
+        let mut current = type_name;
+        for _ in 0..MAX_SIMPLE_DEPTH {
+            if current.starts_with("xs:") {
+                return current;
+            }
+            match self.simple_types.get(current) {
+                Some(base) => current = base.as_str(),
+                None => return current,
+            }
+        }
+        current
     }
 }
 

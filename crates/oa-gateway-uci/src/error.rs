@@ -10,6 +10,8 @@ pub enum UciError {
     UnknownElement(String),
     #[error("unknown type '{0}'")]
     UnknownType(String),
+    #[error("unsupported or malformed XSD: {0}")]
+    Xsd(String),
     #[error("at {path}: {message}")]
     At { path: String, message: String },
 }

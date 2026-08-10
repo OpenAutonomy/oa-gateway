@@ -1,8 +1,13 @@
 //! Schema-aware UCI XML ↔ OMS JSON.
 //!
 //! The engine stays on opaque bytes. Adapters call [`Message::from_json`] /
-//! [`Message::from_xml`] and emit the other serialization. v0 ships a hand-built
-//! [`mod@slice`] of UCI 2.5, not the full XSD catalog.
+//! [`Message::from_xml`] and emit the other serialization.
+//!
+//! A [`Schema`] tells the converter what it cannot infer from a single document:
+//! whether a field repeats, and whether a leaf is a number, a boolean, or a
+//! string. Get one either from the published XSD via [`xsd::compile`], or from
+//! the small hand-written [`mod@slice`] that the tests and the current OWP
+//! baseline use.
 
 mod error;
 mod instance;
@@ -10,6 +15,7 @@ mod json;
 mod schema;
 pub mod slice;
 mod xml;
+pub mod xsd;
 
 pub use error::UciError;
 pub use instance::{Complex, Field, Message, Node, Simple};

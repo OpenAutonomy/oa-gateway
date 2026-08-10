@@ -40,8 +40,12 @@ fn read_node(
     type_name: &str,
     path: &str,
 ) -> Result<Node, UciError> {
-    if Schema::is_simple(type_name) || !schema.is_complex(type_name) {
-        return Ok(Node::Simple(read_simple(value, type_name, path)?));
+    if schema.is_simple(type_name) || !schema.is_complex(type_name) {
+        return Ok(Node::Simple(read_simple(
+            value,
+            schema.primitive(type_name),
+            path,
+        )?));
     }
 
     let obj = value.as_object().ok_or_else(|| {
