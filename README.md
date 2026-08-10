@@ -36,7 +36,15 @@ Reference clones under `repos/` are not compiled into this workspace.
 
 ## Getting started
 
-The toolchain is pinned in `rust-toolchain.toml`, so any `cargo` command picks up the right compiler and there is nothing else to install. Start with the default configuration: it brings up a WebSocket listener on `127.0.0.1:9000` and routes entirely in memory, which is enough to publish a message and watch it reach a second connection. Everything past that is opt-in — bridging ActiveMQ needs a running broker, and converting between OMS JSON and UCI XML needs a local copy of the UCI schema.
+To get started, download and build the project. The toolchain is pinned in `rust-toolchain.toml`, so `cargo` picks up the right compiler and there is nothing else to install.
+
+```bash
+git clone https://gitlab.com/open-arsenal/oa-gateway.git
+cd oa-gateway
+cargo build --release
+```
+
+That leaves the host binary at `target/release/oa-gateway`.
 
 <!--
 
