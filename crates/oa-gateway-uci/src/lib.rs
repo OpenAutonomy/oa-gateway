@@ -5,9 +5,8 @@
 //!
 //! A [`Schema`] tells the converter what it cannot infer from a single document:
 //! whether a field repeats, and whether a leaf is a number, a boolean, or a
-//! string. Get one either from the published XSD via [`xsd::compile`], or from
-//! the small hand-written [`mod@slice`] that the tests and the current OWP
-//! baseline use.
+//! string. Compile one from the published XSD with [`xsd::compile`]. The
+//! [`mod@slice`] module holds a small hand-written schema for tests only.
 
 mod error;
 mod instance;

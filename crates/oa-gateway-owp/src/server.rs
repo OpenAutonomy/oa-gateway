@@ -11,6 +11,7 @@ use oa_gateway_agra::{unwrap as unwrap_ma, wrapper_kind};
 use oa_gateway_core::{
     AdapterId, ContentType, Delivery, Engine, Envelope, RouteKey, SubId, DEFAULT_CHANNEL_CAPACITY,
 };
+use oa_gateway_uci::Schema;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -60,6 +61,7 @@ pub struct OwpAdapter {
     id: AdapterId,
     config: OwpConfig,
     conn_seq: AtomicU64,
+    schema: Option<Arc<Schema>>,
 }
 
 impl OwpAdapter {
@@ -69,7 +71,20 @@ impl OwpAdapter {
             id: id.into(),
             config,
             conn_seq: AtomicU64::new(1),
+            schema: None,
         }
+    }
+
+    /// Supply the UCI schema used to convert between OMS JSON and UCI XML.
+    ///
+    /// Without one the adapter still routes, but it cannot convert: XML payloads
+    /// keep their topic as the type hint and are forwarded verbatim. A schema is
+    /// mandatory for [`OwpConfig::xml_baseline`], which the host enforces at
+    /// startup so the failure surfaces before any traffic arrives.
+    #[must_use]
+    pub fn with_schema(mut self, schema: Arc<Schema>) -> Self {
+        self.schema = Some(schema);
+        self
     }
 
     #[must_use]
@@ -137,6 +152,7 @@ impl OwpAdapter {
         run_session(Session {
             adapter_id: self.id.clone(),
             config: self.config.clone(),
+            schema: self.schema.clone(),
             conn_id,
             ws,
             engine,
@@ -171,6 +187,7 @@ fn check_subprotocol(req: &Request, mut response: Response) -> Result<Response, 
 struct Session {
     adapter_id: AdapterId,
     config: OwpConfig,
+    schema: Option<Arc<Schema>>,
     conn_id: u64,
     ws: WebSocketStream<TcpStream>,
     engine: Arc<Engine>,
@@ -367,6 +384,7 @@ async fn handle_text(
             let forward_tx = out_tx.clone();
             let local_sid = sid.clone();
             let xml_baseline = session.config.xml_baseline;
+            let schema = session.schema.clone();
             let forwarder = tokio::spawn(async move {
                 while let Some(delivery) = rx.recv().await {
                     let Ok(raw) = String::from_utf8(delivery.envelope.payload.to_vec()) else {
@@ -374,7 +392,7 @@ async fn handle_text(
                         continue;
                     };
                     let payload = if xml_baseline {
-                        xml_to_oms_json(&raw)
+                        xml_to_oms_json(&raw, schema.as_deref())
                     } else {
                         raw
                     };
@@ -444,9 +462,14 @@ async fn publish_owp(
         outgoing.push(peeled.inner);
     } else {
         let hint = if oa_gateway_uci::looks_like_xml(payload.as_bytes()) {
-            oa_gateway_uci::Message::from_xml(&payload, oa_gateway_uci::slice::v25())
+            // Without a schema the element name cannot be read reliably, so the
+            // topic stands in — the same fallback used when conversion fails.
+            session
+                .schema
+                .as_deref()
+                .and_then(|schema| oa_gateway_uci::Message::from_xml(&payload, schema).ok())
                 .map(|m| m.name)
-                .unwrap_or_else(|_| topic.clone())
+                .unwrap_or_else(|| topic.clone())
         } else {
             type_hint_from_json(&payload).map_err(|e| e.to_string())?
         };
@@ -462,7 +485,10 @@ async fn publish_owp(
 
     for env in outgoing {
         let env = if session.config.xml_baseline {
-            toward_xml(env)?
+            let schema = session.schema.as_deref().ok_or_else(|| {
+                "owp.xml_baseline is enabled but no UCI schema is loaded".to_string()
+            })?;
+            toward_xml(env, schema)?
         } else {
             env
         };
@@ -471,13 +497,12 @@ async fn publish_owp(
     Ok(())
 }
 
-fn toward_xml(mut env: Envelope) -> Result<Envelope, String> {
+fn toward_xml(mut env: Envelope, schema: &Schema) -> Result<Envelope, String> {
     if oa_gateway_uci::looks_like_xml(&env.payload) {
         env.content_type = ContentType::xml();
         return Ok(env);
     }
     let text = std::str::from_utf8(&env.payload).map_err(|e| e.to_string())?;
-    let schema = oa_gateway_uci::slice::v25();
     let msg = oa_gateway_uci::Message::from_json(text, schema).map_err(|e| e.to_string())?;
     env.route.type_hint = Some(msg.name.clone());
     env.payload = bytes::Bytes::from(msg.to_xml(schema).map_err(|e| e.to_string())?);
@@ -485,11 +510,13 @@ fn toward_xml(mut env: Envelope) -> Result<Envelope, String> {
     Ok(env)
 }
 
-fn xml_to_oms_json(raw: &str) -> String {
+fn xml_to_oms_json(raw: &str, schema: Option<&Schema>) -> String {
     if !oa_gateway_uci::looks_like_xml(raw.as_bytes()) {
         return raw.to_owned();
     }
-    let schema = oa_gateway_uci::slice::v25();
+    let Some(schema) = schema else {
+        return raw.to_owned();
+    };
     match oa_gateway_uci::Message::from_xml(raw, schema).and_then(|m| m.to_json(schema)) {
         Ok(json) => json,
         Err(err) => {

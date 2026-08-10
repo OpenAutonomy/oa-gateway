@@ -202,9 +202,11 @@ fn complex_content(node: Node<'_, '_>, owner: &str) -> Result<ComplexContent, Uc
             // siblings; the alternation is not enforced, matching how
             // Schema::flatten already treats a top-level choice.
             "sequence" | "choice" => extra.extend(compositor(inner, owner)?),
-            other => return Err(UciError::Xsd(format!(
-                "complexType '{owner}' extends its base with 'xs:{other}', which is not supported"
-            ))),
+            other => {
+                return Err(UciError::Xsd(format!(
+                    "complexType '{owner}' extends its base with unsupported 'xs:{other}'"
+                )))
+            }
         }
     }
     Ok(ComplexContent::Extension { base, extra })

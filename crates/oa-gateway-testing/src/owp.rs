@@ -13,22 +13,31 @@ use tokio_util::sync::CancellationToken;
 
 pub type OwpWs = WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
+/// Start an OWP adapter on an ephemeral port, wired to the fixture schema.
+///
+/// The fixture schema stands in for a real UCI schema, which the gateway
+/// otherwise loads from the published XSD at startup. It covers the message
+/// types the fixtures use, so `xml_baseline` conversion works without requiring
+/// a local copy of the standard.
 pub async fn start_owp(engine: Arc<Engine>, xml_baseline: bool) -> (String, CancellationToken) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let shutdown = CancellationToken::new();
-    let adapter = Arc::new(OwpAdapter::new(
-        "owp-test",
-        OwpConfig {
-            bind: addr,
-            server_id: "oa-gateway-test".into(),
-            system_label: "test".into(),
-            schema: Some("002.5.0".into()),
-            system_uuid: "11111111-1111-4111-8111-111111111111".into(),
-            unwrap_ma_payloads: true,
-            xml_baseline,
-        },
-    ));
+    let adapter = Arc::new(
+        OwpAdapter::new(
+            "owp-test",
+            OwpConfig {
+                bind: addr,
+                server_id: "oa-gateway-test".into(),
+                system_label: "test".into(),
+                schema: Some("002.5.0".into()),
+                system_uuid: "11111111-1111-4111-8111-111111111111".into(),
+                unwrap_ma_payloads: true,
+                xml_baseline,
+            },
+        )
+        .with_schema(Arc::new(oa_gateway_uci::slice::v25().clone())),
+    );
     let token = shutdown.clone();
     tokio::spawn(async move {
         adapter.serve(listener, engine, token).await.unwrap();

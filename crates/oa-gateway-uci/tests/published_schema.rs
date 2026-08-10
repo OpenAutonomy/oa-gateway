@@ -11,7 +11,61 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use oa_gateway_uci::xsd;
+use oa_gateway_uci::{xsd, Message, Schema};
+
+/// Convert a real message that the hand-written fixture never covered.
+///
+/// `SubsystemStatus` is a useful subject because its leaves are named simple
+/// types rather than `xs:` primitives — `Timestamp` is a `DateTimeType` and
+/// `Mode` a `MessageModeEnum`. Before the schema carried a simple-type map those
+/// would have been mistaken for complex types and failed outright.
+fn round_trips_a_message_the_fixture_never_had(schema: &Schema) {
+    let src = r#"{
+        "SubsystemStatus": {
+            "MessageHeader": {
+                "Timestamp": "2026-01-22T00:00:00Z",
+                "SchemaVersion": "002.5.0",
+                "Mode": "SIMULATION"
+            },
+            "MessageData": {
+                "SubsystemState": "OPERATE"
+            }
+        }
+    }"#;
+
+    let message = Message::from_json(src, schema).expect("SubsystemStatus should convert");
+    assert_eq!(message.type_hint(), "SubsystemStatus");
+
+    let xml = message.to_xml(schema).expect("should emit XML");
+    assert!(xml.contains("<SubsystemStatus"), "{xml}");
+    assert!(
+        xml.contains("<Timestamp>2026-01-22T00:00:00Z</Timestamp>"),
+        "{xml}"
+    );
+    assert!(
+        xml.contains("<SubsystemState>OPERATE</SubsystemState>"),
+        "{xml}"
+    );
+
+    let back = Message::from_xml(&xml, schema).expect("should read its own XML");
+    let value: serde_json::Value =
+        serde_json::from_str(&back.to_json(schema).expect("should emit JSON")).unwrap();
+
+    // A dateTime and an enumeration are both strings on the way back, not the
+    // objects a missing simple-type map would have produced.
+    assert_eq!(
+        value
+            .pointer("/SubsystemStatus/MessageHeader/Timestamp")
+            .and_then(serde_json::Value::as_str),
+        Some("2026-01-22T00:00:00Z")
+    );
+    assert_eq!(
+        value
+            .pointer("/SubsystemStatus/MessageData/SubsystemState")
+            .and_then(serde_json::Value::as_str),
+        Some("OPERATE")
+    );
+}
 
 fn schema_documents() -> Vec<PathBuf> {
     let raw = env::var_os("OAG_UCI_XSD").unwrap_or_else(|| {
@@ -87,6 +141,8 @@ fn the_published_schema_compiles_and_every_type_resolves() {
         "expected hundreds of simpleTypes, found {}",
         schema.simple_types.len()
     );
+
+    round_trips_a_message_the_fixture_never_had(&schema);
 
     eprintln!(
         "compiled {} documents ({:.1} MiB) in {:?}: {} messages, {} complexTypes, {} simpleTypes",

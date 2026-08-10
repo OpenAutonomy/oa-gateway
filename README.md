@@ -18,9 +18,9 @@ Goals:
 
 - Compliance with the OMS, UCI, and A-GRA standards.
 - Topic- and destination-level routing, so traffic is addressed by name rather than by peer.
-- Ease of extensibility, so supporting a new protocol is a new adapter.
+- Ease of extensibility (i.e., adding new protocol adapters).
 
-Current scope is a prototype: a hand-built slice of UCI 2.5 rather than the full XSD catalog, and no TLS or authentication.
+Current scope is a prototype: conversion is driven by the published UCI 2.5 XSD, which you supply locally since the standard is not redistributed here, and there is no TLS or authentication.
 
 ```
 loopback ──publish/subscribe──► Engine ◄──PUB/SUB── owp (WebSocket)
@@ -43,7 +43,7 @@ loopback ──publish/subscribe──► Engine ◄──PUB/SUB── owp (Web
 | `crates/oa-gateway-loopback` | In-process adapter |
 | `crates/oa-gateway-owp` | OWP 1.0 over WebSocket |
 | `crates/oa-gateway-stomp` | STOMP 1.2 client (ActiveMQ Classic) |
-| `crates/oa-gateway-uci` | Schema-aware UCI XML ↔ OMS JSON (2.5 slice) |
+| `crates/oa-gateway-uci` | Schema-aware UCI XML ↔ OMS JSON, compiled from the published XSD |
 | `crates/oa-gateway-testing` | Fixtures (always) + optional `harness` (OWP/STOMP helpers, mini broker). Cross-adapter tests live here. |
 | `crates/oa-gateway` | Host binary |
 
@@ -62,6 +62,24 @@ cargo run -p oa-gateway -- config/asb.toml              # + ActiveMQ STOMP (comp
 With no argument oa-gateway looks for `config/default.toml` in the current directory and its two parents, then falls back to built-in defaults. A config path you name explicitly must exist. Unknown keys are rejected rather than ignored, so a misspelled `topics` fails at startup instead of silently doing nothing. `owp.bind` and `stomp.broker` accept `host:port` as well as a literal address, preferring IPv4 when a name offers both.
 
 OWP listens on `ws://127.0.0.1:9000/` with subprotocol `owp`. There is **no TLS and no authentication** — loopback bind only.
+
+### UCI schema
+
+Converting between OMS JSON and UCI XML needs the UCI schema. The standard is not redistributed here, so name your own copy:
+
+```toml
+[uci]
+schema = [
+  "/path/to/UCI_MessageDefinitions_v2_5_0.xsd",
+  "/path/to/UCI_SecurityMarkings_v2_5_0.xsd",
+]
+```
+
+List every document the schema spans. Naming `UCI_MessageDefinitions` alone leaves the security-marking types unresolved, and startup reports the dangling names rather than letting a missing type surface later against live traffic. Compiling the published catalog takes roughly 60 ms and yields 722 message types.
+
+Without a schema the gateway still routes: payloads cross the engine untouched and the topic stands in for the type hint. `owp.xml_baseline` exists only to convert, so enabling it without a schema is refused at startup.
+
+The schema is read at startup only. Upgrading to a new UCI release, or narrowing to a program-specific Message Set, means pointing this at different files and restarting — no rebuild.
 
 ### websocat
 
@@ -137,9 +155,9 @@ No TLS. Console: <http://127.0.0.1:8161> (`admin` / `admin`).
 
 **Name rule (ASB path):** UCI message type = engine topic = `/topic/{type}` = JMS topic. OWP `SUB`/`PUB` use `PositionReport`, not a toy channel name.
 
-OWP `PUB` extracts `type_hint` from the single root JSON key. With `owp.xml_baseline = true` (`config/asb.toml`), PUB converts OMS JSON → UCI XML before the engine; MSG converts XML → JSON for the OWP client. STOMP stays XML identity. Conversion uses `oa-gateway-uci`’s hand-built 2.5 *slice* (Ping, PositionReport, PolySample `$type`, MA Rx/Tx wrappers) — not the full XSD catalog.
+OWP `PUB` extracts `type_hint` from the single root JSON key. With `owp.xml_baseline = true` (`config/asb.toml`), PUB converts OMS JSON → UCI XML before the engine; MSG converts XML → JSON for the OWP client. STOMP stays XML identity. Conversion covers whatever the schema you loaded defines, which for the published catalog is all 722 message types.
 
-OWP `PUB` does **not** full-XSD-validate UCI.
+Conversion is schema-*driven*, not schema-*validating*: `PUB` does not check occurrence constraints, enumeration values, or patterns, and a field the schema does not declare is passed through rather than rejected.
 
 ### A-GRA Rx/Tx wrappers
 
@@ -156,7 +174,7 @@ Platform interfaces (MA-VI, MA-MS) use native MTs and skip this envelope.
 <!--
 ## Not in v0
 
-Identity map, full UCI XSD load, OpenWire/JMS and DDS adapters, QoS, queue groups, TLS.
+Identity map, schema validation, OpenWire/JMS and DDS adapters, QoS, queue groups, TLS.
 -->
 
 ## Contributing

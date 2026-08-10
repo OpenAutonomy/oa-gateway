@@ -1,5 +1,12 @@
 # Prototype host config. No TLS and no authentication — bind loopback only.
 
+# No UCI schema is needed here, because xml_baseline is off and payloads cross
+# the engine untouched. Naming the schema documents turns on JSON ↔ XML
+# conversion; see config/asb.toml.
+# [uci]
+# schema = ["/path/to/UCI_MessageDefinitions_v2_5_0.xsd",
+#           "/path/to/UCI_SecurityMarkings_v2_5_0.xsd"]
+
 [loopback]
 enabled = true
 id = "loopback"

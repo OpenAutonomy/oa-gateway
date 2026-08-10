@@ -1,13 +1,19 @@
-//! Hand-authored UCI 2.5 *slice* — not the full message catalog.
+//! Test fixture: a hand-authored sliver of UCI 2.5, not the message catalog.
 //!
 //! Covers Ping, PositionReport (oa-gateway-testing fixtures), PolySample (`$type`),
 //! and MA_RxDataPayload / MA_TxDataPayloadCommand enough to convert wrap shells.
+//!
+//! This exists so the conversion tests can run without a local copy of the
+//! standard. Nothing in the gateway uses it: adapters are handed a schema
+//! compiled from the published XSD by [`crate::xsd::compile`]. Reach for this
+//! only in tests, and prefer a small inline schema when the shape is what
+//! matters.
 
 use std::sync::OnceLock;
 
 use crate::schema::{el, el_many, el_opt, Schema};
 
-/// Shared slice used by OWP when `xml_baseline` is on.
+/// The fixture schema, built once on first use.
 #[must_use]
 pub fn v25() -> &'static Schema {
     static SCHEMA: OnceLock<Schema> = OnceLock::new();

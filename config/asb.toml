@@ -1,7 +1,19 @@
 # OA-Gateway on a local ActiveMQ Classic ASB. Requires:
 #   docker compose -f compose/activemq.yml up -d
+#   a local copy of the UCI schema, named under [uci] below
 #
 # Engine topic == JMS / STOMP dest suffix (UCI message type name).
+
+# The UCI schema that drives JSON ↔ XML conversion. The standard is not
+# redistributed with this repository, so point these at your own copy and list
+# every document the schema spans — naming UCI_MessageDefinitions alone leaves
+# the security-marking types unresolved, which is reported as an error.
+# xml_baseline below cannot work without this, and startup will say so.
+[uci]
+schema = [
+  # "/path/to/UCI_MessageDefinitions_v2_5_0.xsd",
+  # "/path/to/UCI_SecurityMarkings_v2_5_0.xsd",
+]
 
 [loopback]
 enabled = true
