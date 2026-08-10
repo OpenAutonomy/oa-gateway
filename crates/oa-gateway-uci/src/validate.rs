@@ -1172,6 +1172,34 @@ mod tests {
         );
     }
 
+    /// A type this build has no check for is named, so bringing an unfamiliar
+    /// schema does not quietly mean bringing unexamined values.
+    #[test]
+    fn a_primitive_with_no_check_behind_it_is_reported() {
+        let schema = xsd::compile(&[r#"
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:element name="R" type="RT"/>
+              <xs:complexType name="RT"><xs:sequence>
+                <xs:element name="Image" type="xs:base64Binary"/>
+                <xs:element name="Where" type="LinkType"/>
+                <xs:element name="Name" type="xs:string"/>
+                <xs:element name="When" type="xs:dateTime"/>
+              </xs:sequence></xs:complexType>
+              <xs:simpleType name="LinkType">
+                <xs:restriction base="xs:anyURI"/>
+              </xs:simpleType>
+            </xs:schema>"#])
+        .expect("compiles");
+
+        // Named through an element and through a simple type alike, and
+        // xs:string is not among them: it has nothing to check.
+        assert_eq!(
+            schema.unchecked_primitives(),
+            vec!["xs:anyURI", "xs:base64Binary"]
+        );
+        assert!(crate::slice::v25().unchecked_primitives().is_empty());
+    }
+
     #[test]
     fn a_mode_reads_back_the_way_it_is_written() {
         use std::str::FromStr;

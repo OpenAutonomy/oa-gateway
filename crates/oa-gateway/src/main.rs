@@ -502,9 +502,16 @@ fn load_schema(config: &Config) -> Result<Option<Arc<Schema>>, String> {
         "uci schema compiled"
     );
 
-    // A pattern this build cannot express enforces nothing. Nothing downstream
+    // A constraint this build cannot read enforces nothing. Nothing downstream
     // can tell that from a value that passed, so the one place to say so is here,
     // where an operator is still reading startup output.
+    let primitives = schema.unchecked_primitives();
+    if !primitives.is_empty() {
+        warn!(
+            primitives = primitives.join(", "),
+            "values of these types will not be checked beyond the facets on them"
+        );
+    }
     let unchecked = schema.unchecked_patterns();
     if !unchecked.is_empty() {
         warn!(

@@ -5,9 +5,11 @@
 //! XSD into one with [`crate::xsd::compile`].
 
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use regex::Regex;
+
+use crate::primitive;
 
 /// How many links of a named-simple-type chain [`Schema::primitive`] will follow
 /// before giving up. The published schema nests three deep at most; the limit
@@ -478,6 +480,35 @@ impl Schema {
             current = simple.base.as_str();
         }
         out
+    }
+
+    /// Every primitive in use that this build has no check for.
+    ///
+    /// `xs:string` is left out: there is nothing to check about a string beyond
+    /// the facets of the type declaring it. What appears here is a type whose
+    /// values pass unexamined — `xs:base64Binary`, `xs:anyURI`, `xs:QName` —
+    /// which is worth knowing when loading a schema this project has not seen.
+    #[must_use]
+    pub fn unchecked_primitives(&self) -> Vec<&str> {
+        let mut found: BTreeSet<&str> = BTreeSet::new();
+        for name in self.simple_types.keys() {
+            found.insert(self.primitive(name));
+        }
+        for name in self.complex_types.keys() {
+            // A type whose chain does not resolve is the compiler's complaint,
+            // not this one's.
+            if let Ok(groups) = self.groups(name) {
+                for element in groups.iter().flat_map(|group| &group.elements) {
+                    found.insert(self.primitive(&element.type_name));
+                }
+            }
+        }
+        found
+            .into_iter()
+            .filter(|name| {
+                name.starts_with("xs:") && *name != "xs:string" && !primitive::is_checked(name)
+            })
+            .collect()
     }
 
     /// Every pattern this build cannot check, paired with the type declaring it.
