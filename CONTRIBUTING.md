@@ -1,6 +1,6 @@
 # Contributing
 
-Apache-2.0 prototype. PRs / MRs welcome.
+MIT prototype. PRs / MRs welcome.
 
 Start with [docs/glossary.md](docs/glossary.md) for the acronyms and [docs/writing-an-adapter.md](docs/writing-an-adapter.md) if you are adding a protocol.
 
