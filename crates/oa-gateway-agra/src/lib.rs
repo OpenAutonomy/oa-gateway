@@ -62,6 +62,8 @@ pub enum AgraError {
     MissingField(&'static str),
     #[error("EncodedPayload is not hexBinary: {0}")]
     BadHex(String),
+    #[error("EncodedPayload decodes to more than {MAX_DECODED_PAYLOAD} bytes")]
+    PayloadTooLarge,
 }
 
 /// Metadata lifted off the wrapper (not the inner UCI message).
@@ -382,9 +384,61 @@ fn sniff_content_type(bytes: &[u8]) -> ContentType {
     }
 }
 
+/// Largest payload an `EncodedPayload` element may decode to.
+///
+/// The adapters cap an inbound frame at 16 MiB, and hex doubles what it encodes,
+/// so this is the bound that already applies — stated here so that raising a
+/// frame limit does not silently raise this one too, and so the crate holds on
+/// its own if some future caller has no frame cap of its own.
+pub const MAX_DECODED_PAYLOAD: usize = 8 * 1024 * 1024;
+
+/// Decode `xs:hexBinary`, tolerating the whitespace the type permits.
+///
+/// Hand-rolled rather than `hex::decode` on a filtered copy, which would hold
+/// the whole payload twice: once stripped, once decoded. Refuses before
+/// allocating past [`MAX_DECODED_PAYLOAD`] rather than after.
 fn decode_hex(s: &str) -> Result<Vec<u8>, AgraError> {
-    let compact: String = s.chars().filter(|c| !c.is_ascii_whitespace()).collect();
-    hex::decode(&compact).map_err(|e| AgraError::BadHex(e.to_string()))
+    // An upper bound, not the answer: whitespace makes the input longer than
+    // twice the output, never shorter.
+    let bound = s.len() / 2;
+    if bound > MAX_DECODED_PAYLOAD {
+        // Only refuse once the digits are known to be there, since a huge run of
+        // whitespace is malformed rather than oversized.
+        let digits = s.bytes().filter(|b| !b.is_ascii_whitespace()).count();
+        if digits / 2 > MAX_DECODED_PAYLOAD {
+            return Err(AgraError::PayloadTooLarge);
+        }
+    }
+
+    let mut out = Vec::with_capacity(bound.min(MAX_DECODED_PAYLOAD));
+    let mut high: Option<u8> = None;
+    for b in s.bytes() {
+        if b.is_ascii_whitespace() {
+            continue;
+        }
+        let nibble = match b {
+            b'0'..=b'9' => b - b'0',
+            b'a'..=b'f' => b - b'a' + 10,
+            b'A'..=b'F' => b - b'A' + 10,
+            other => {
+                return Err(AgraError::BadHex(format!(
+                    "invalid character {:?}",
+                    char::from(other)
+                )))
+            }
+        };
+        match high {
+            None => high = Some(nibble),
+            Some(hi) => {
+                out.push((hi << 4) | nibble);
+                high = None;
+            }
+        }
+    }
+    if high.is_some() {
+        return Err(AgraError::BadHex("odd number of digits".into()));
+    }
+    Ok(out)
 }
 
 fn json_str<'a>(data: &'a Value, field: &'static str) -> Result<&'a str, AgraError> {
@@ -637,6 +691,30 @@ mod tests {
         assert_eq!(u.inner.route.type_hint.as_deref(), Some("SystemStatus"));
         assert_eq!(u.wrapper.route.topic, "MA_TxDataPayloadCommand");
         assert_eq!(u.inner.route.topic, "MA_TxDataPayloadCommand");
+    }
+
+    #[test]
+    fn hex_decoding_tolerates_whitespace_and_rejects_the_rest() {
+        // xs:hexBinary permits whitespace, and producers wrap long payloads.
+        assert_eq!(decode_hex("48 65\n6c 6C\t6f").unwrap(), b"Hello");
+        assert_eq!(decode_hex("").unwrap(), b"");
+
+        assert!(matches!(decode_hex("abc"), Err(AgraError::BadHex(_))));
+        assert!(matches!(decode_hex("zz"), Err(AgraError::BadHex(_))));
+    }
+
+    #[test]
+    fn hex_decoding_refuses_an_oversized_payload() {
+        let too_big = "00".repeat(MAX_DECODED_PAYLOAD + 1);
+        assert!(matches!(
+            decode_hex(&too_big),
+            Err(AgraError::PayloadTooLarge)
+        ));
+
+        // Whitespace inflates the input past the bound without inflating the
+        // payload, and must not be mistaken for an oversized one.
+        let padded = format!("{:width$}41", "", width = MAX_DECODED_PAYLOAD * 2 + 4);
+        assert_eq!(decode_hex(&padded).unwrap(), b"A");
     }
 
     #[test]

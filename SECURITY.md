@@ -55,9 +55,6 @@ Both edges now cap what a peer can hand them: `stomp.max_frame_size` and
 `owp.max_subscriptions` bound how much state one caller can create. What remains
 unbounded is the work done *after* a frame is accepted:
 
-- **A-GRA hex payloads are decoded without a length limit**, and decoding first
-  makes a whitespace-stripped copy of the input. Reachable by default, since
-  `unwrap_ma_payloads` is on.
 - **UCI XML and JSON conversion recurses without a depth limit**, so deep
   nesting is bounded only by the stack.
 - **`maxOccurs` and `choice` are not enforced during conversion.** `maxOccurs`
