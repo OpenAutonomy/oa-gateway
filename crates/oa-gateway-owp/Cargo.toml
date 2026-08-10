@@ -1,0 +1,23 @@
+[package]
+name = "oa-gateway-owp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "OMS WebSocket Protocol (OWP) adapter"
+
+[dependencies]
+async-trait.workspace = true
+bytes.workspace = true
+futures-util.workspace = true
+oa-gateway-adapter.workspace = true
+oa-gateway-agra.workspace = true
+oa-gateway-core.workspace = true
+oa-gateway-uci.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+uuid.workspace = true

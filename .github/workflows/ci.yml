@@ -42,6 +42,6 @@ jobs:
       - name: start ActiveMQ Classic
         run: docker compose -f compose/activemq.yml up -d --wait
       - name: XML PositionReport round-trip
-        run: cargo test -p mpg-testing --test live_activemq --locked -- --ignored --nocapture --test-threads=1
+        run: cargo test -p oa-gateway-testing --test live_activemq --locked -- --ignored --nocapture --test-threads=1
         env:
-          MPG_ACTIVEMQ_STOMP: 127.0.0.1:61613
+          OAG_ACTIVEMQ_STOMP: 127.0.0.1:61613

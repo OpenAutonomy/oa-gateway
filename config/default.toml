@@ -8,8 +8,8 @@ id = "loopback"
 enabled = true
 id = "owp"
 bind = "127.0.0.1:9000"
-server_id = "mpg-0"
-system_label = "MPG Prototype"
+server_id = "oa-gateway-0"
+system_label = "OA-Gateway Prototype"
 schema = "002.5.0"
 # Peel A-GRA MA_RxDataPayload / MA_TxDataPayloadCommand hex wrappers on PUB.
 # Engine sees both the wrapper MT and the inner UCI message.

@@ -1,14 +1,14 @@
 [workspace]
 members = [
-    "crates/mpg-core",
-    "crates/mpg-adapter",
-    "crates/mpg-agra",
-    "crates/mpg-loopback",
-    "crates/mpg-owp",
-    "crates/mpg-stomp",
-    "crates/mpg-uci",
-    "crates/mpg-testing",
-    "crates/mpg",
+    "crates/oa-gateway-core",
+    "crates/oa-gateway-adapter",
+    "crates/oa-gateway-agra",
+    "crates/oa-gateway-loopback",
+    "crates/oa-gateway-owp",
+    "crates/oa-gateway-stomp",
+    "crates/oa-gateway-uci",
+    "crates/oa-gateway-testing",
+    "crates/oa-gateway",
 ]
 resolver = "2"
 
@@ -34,11 +34,11 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4", "v5", "serde"] }
 
-mpg-core = { path = "crates/mpg-core" }
-mpg-adapter = { path = "crates/mpg-adapter" }
-mpg-agra = { path = "crates/mpg-agra" }
-mpg-uci = { path = "crates/mpg-uci" }
-mpg-loopback = { path = "crates/mpg-loopback" }
-mpg-owp = { path = "crates/mpg-owp" }
-mpg-stomp = { path = "crates/mpg-stomp" }
-mpg-testing = { path = "crates/mpg-testing", default-features = false }
+oa-gateway-core = { path = "crates/oa-gateway-core" }
+oa-gateway-adapter = { path = "crates/oa-gateway-adapter" }
+oa-gateway-agra = { path = "crates/oa-gateway-agra" }
+oa-gateway-uci = { path = "crates/oa-gateway-uci" }
+oa-gateway-loopback = { path = "crates/oa-gateway-loopback" }
+oa-gateway-owp = { path = "crates/oa-gateway-owp" }
+oa-gateway-stomp = { path = "crates/oa-gateway-stomp" }
+oa-gateway-testing = { path = "crates/oa-gateway-testing", default-features = false }

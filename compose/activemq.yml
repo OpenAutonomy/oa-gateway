@@ -1,13 +1,13 @@
-# ActiveMQ Classic ASB stand-in. OpenWire :61616 (Java CAL) + STOMP :61613 (mpg).
+# ActiveMQ Classic ASB stand-in. OpenWire :61616 (Java CAL) + STOMP :61613 (oa-gateway).
 # Console :8161  admin / admin
 #
 #   docker compose -f compose/activemq.yml up -d
-#   cargo run -p mpg -- config/asb.toml
+#   cargo run -p oa-gateway -- config/asb.toml
 
 services:
   activemq:
     image: apache/activemq-classic:5.18.7
-    container_name: mpg-activemq
+    container_name: oa-gateway-activemq
     ports:
       - "8161:8161"
       - "61613:61613"

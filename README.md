@@ -1,11 +1,8 @@
-# mpg — multi-protocol gateway (prototype)
+# OA-Gateway (prototype)
 
 - [Introduction](#introduction)
-<!-- - [Layout](#layout) -->
 - [Getting started](#getting-started)
 - [Documentation](#documentation)
-<!-- - [Internal model](#internal-model) -->
-<!-- - [Not in v0](#not-in-v0) -->
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -28,15 +25,15 @@ loopback ──publish/subscribe──► Engine ◄──PUB/SUB── owp (Web
 
 | Crate | Role |
 |---|---|
-| `crates/mpg-core` | `Envelope`, `RouteKey`, `Engine` |
-| `crates/mpg-adapter` | `Adapter` trait |
-| `crates/mpg-agra` | A-GRA `MA_RxDataPayload` / `MA_TxDataPayloadCommand` wrap/unwrap |
-| `crates/mpg-loopback` | In-process adapter |
-| `crates/mpg-owp` | OWP 1.0 over WebSocket |
-| `crates/mpg-stomp` | STOMP 1.2 client (ActiveMQ Classic) |
-| `crates/mpg-uci` | Schema-aware UCI XML ↔ OMS JSON (2.5 slice) |
-| `crates/mpg-testing` | Fixtures (always) + optional `harness` (OWP/STOMP helpers, mini broker). Cross-adapter tests live here. |
-| `crates/mpg` | Host binary |
+| `crates/oa-gateway-core` | `Envelope`, `RouteKey`, `Engine` |
+| `crates/oa-gateway-adapter` | `Adapter` trait |
+| `crates/oa-gateway-agra` | A-GRA `MA_RxDataPayload` / `MA_TxDataPayloadCommand` wrap/unwrap |
+| `crates/oa-gateway-loopback` | In-process adapter |
+| `crates/oa-gateway-owp` | OWP 1.0 over WebSocket |
+| `crates/oa-gateway-stomp` | STOMP 1.2 client (ActiveMQ Classic) |
+| `crates/oa-gateway-uci` | Schema-aware UCI XML ↔ OMS JSON (2.5 slice) |
+| `crates/oa-gateway-testing` | Fixtures (always) + optional `harness` (OWP/STOMP helpers, mini broker). Cross-adapter tests live here. |
+| `crates/oa-gateway` | Host binary |
 
 Reference clones under `repos/` are not compiled into this workspace.
 -->
@@ -45,12 +42,12 @@ Reference clones under `repos/` are not compiled into this workspace.
 
 ```bash
 cargo test --workspace --locked
-cargo run -p mpg -- --help
-cargo run -p mpg -- config/default.toml          # OWP only
-cargo run -p mpg -- config/asb.toml              # + ActiveMQ STOMP (compose up first)
+cargo run -p oa-gateway -- --help
+cargo run -p oa-gateway -- config/default.toml          # OWP only
+cargo run -p oa-gateway -- config/asb.toml              # + ActiveMQ STOMP (compose up first)
 ```
 
-With no argument mpg looks for `config/default.toml` in the current directory and its two parents, then falls back to built-in defaults. A config path you name explicitly must exist. Unknown keys are rejected rather than ignored, so a misspelled `topics` fails at startup instead of silently doing nothing. `owp.bind` and `stomp.broker` accept `host:port` as well as a literal address, preferring IPv4 when a name offers both.
+With no argument oa-gateway looks for `config/default.toml` in the current directory and its two parents, then falls back to built-in defaults. A config path you name explicitly must exist. Unknown keys are rejected rather than ignored, so a misspelled `topics` fails at startup instead of silently doing nothing. `owp.bind` and `stomp.broker` accept `host:port` as well as a literal address, preferring IPv4 when a name offers both.
 
 OWP listens on `ws://127.0.0.1:9000/` with subprotocol `owp`. There is **no TLS and no authentication** — loopback bind only.
 
@@ -88,8 +85,8 @@ max_frame_size = 16777216   # optional; refuse larger frames from the broker
 Each listed name is bridged both ways:
 
 - engine topic `demo` ↔ STOMP `/topic/demo` (JMS topic `demo`)
-- `type_hint` is sniffed from OMS JSON / XML or carried in `mpg.type_hint`
-- inbound frames tagged `mpg.origin_adapter` are not echoed back to the broker
+- `type_hint` is sniffed from OMS JSON / XML or carried in `oag.type_hint`
+- inbound frames tagged `oag.origin_adapter` are not echoed back to the broker
 
 No TLS and no authentication unless you set `login` / `passcode`. Heartbeats are disabled (`0,0`). Frames over `max_frame_size` (16 MiB default) end the session and reconnect rather than growing the read buffer.
 
@@ -99,25 +96,25 @@ For Ghost Detector / `uci-cal-jms`, put UCI message type names in `topics` — t
 
 ```bash
 ./scripts/live-activemq.sh          # compose up + ignored rust round-trip
-# or: cargo test -p mpg-testing --test live_activemq -- --ignored --test-threads=1
-cargo run -p mpg -- config/asb.toml # OWP :9000 + STOMP → /topic/PositionReport
+# or: cargo test -p oa-gateway-testing --test live_activemq -- --ignored --test-threads=1
+cargo run -p oa-gateway -- config/asb.toml # OWP :9000 + STOMP → /topic/PositionReport
 ```
 
-Manual broker → mpg → OWP: `websocat` SUB `PositionReport` / `PositionReport`, then:
+Manual broker → oa-gateway → OWP: `websocat` SUB `PositionReport` / `PositionReport`, then:
 
 ```bash
 python3 scripts/stomp_xml_smoke.py send
 ```
 
-`scripts/stomp_xml_smoke.py recv` watches the topic directly (ActiveMQ fan-out, not mpg). Outbound XML (loopback → broker) is what the ignored test asserts. Fixture XML lives in `crates/mpg-testing/fixtures/`.
+`scripts/stomp_xml_smoke.py recv` watches the topic directly (ActiveMQ fan-out, not oa-gateway). Outbound XML (loopback → broker) is what the ignored test asserts. Fixture XML lives in `crates/oa-gateway-testing/fixtures/`.
 
 No TLS. Console: <http://127.0.0.1:8161> (`admin` / `admin`).
 
 ## Documentation
 
-- [docs/glossary.md](docs/glossary.md) — the acronyms, and mpg's own vocabulary
+- [docs/glossary.md](docs/glossary.md) — the acronyms, and OA-Gateway's own vocabulary
 - [docs/writing-an-adapter.md](docs/writing-an-adapter.md) — adding a protocol
-- `cargo doc --workspace --no-deps --open` — the crate APIs. `mpg-adapter` carries a runnable minimal adapter.
+- `cargo doc --workspace --no-deps --open` — the crate APIs. `oa-gateway-adapter` carries a runnable minimal adapter.
 
 <!--
 ## Internal model
@@ -128,7 +125,7 @@ No TLS. Console: <http://127.0.0.1:8161> (`admin` / `admin`).
 
 **Name rule (ASB path):** UCI message type = engine topic = `/topic/{type}` = JMS topic. OWP `SUB`/`PUB` use `PositionReport`, not a toy channel name.
 
-OWP `PUB` extracts `type_hint` from the single root JSON key. With `owp.xml_baseline = true` (`config/asb.toml`), PUB converts OMS JSON → UCI XML before the engine; MSG converts XML → JSON for the OWP client. STOMP stays XML identity. Conversion uses `mpg-uci`’s hand-built 2.5 *slice* (Ping, PositionReport, PolySample `$type`, MA Rx/Tx wrappers) — not the full XSD catalog.
+OWP `PUB` extracts `type_hint` from the single root JSON key. With `owp.xml_baseline = true` (`config/asb.toml`), PUB converts OMS JSON → UCI XML before the engine; MSG converts XML → JSON for the OWP client. STOMP stays XML identity. Conversion uses `oa-gateway-uci`’s hand-built 2.5 *slice* (Ping, PositionReport, PolySample `$type`, MA Rx/Tx wrappers) — not the full XSD catalog.
 
 OWP `PUB` does **not** full-XSD-validate UCI.
 
@@ -141,7 +138,7 @@ External MA interfaces (MA-C2, MA-MA) wrap inner UCI messages as `xs:hexBinary` 
 
 Platform interfaces (MA-VI, MA-MS) use native MTs and skip this envelope.
 
-`mpg-agra` wraps and unwraps both OMS JSON and XML wrappers. With `owp.unwrap_ma_payloads = true` (default), a PUB of a wrapper fans out **two** envelopes: the wrapper MT (so Command-2 status still correlates) and the inner MT (so platform subscribers see `PositionReport`, etc.). Inner `EncodedPayload` may be hex-encoded XML or OMS JSON; `type_hint` is taken from the inner document element.
+`oa-gateway-agra` wraps and unwraps both OMS JSON and XML wrappers. With `owp.unwrap_ma_payloads = true` (default), a PUB of a wrapper fans out **two** envelopes: the wrapper MT (so Command-2 status still correlates) and the inner MT (so platform subscribers see `PositionReport`, etc.). Inner `EncodedPayload` may be hex-encoded XML or OMS JSON; `type_hint` is taken from the inner document element.
 -->
 
 <!--

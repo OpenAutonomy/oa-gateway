@@ -4,11 +4,11 @@
   python3 scripts/stomp_xml_smoke.py send
   python3 scripts/stomp_xml_smoke.py recv
 
-`send` publishes crates/mpg-testing/fixtures/PositionReport.xml.
-`recv` prints the next MESSAGE. Together with `cargo run -p mpg -- config/asb.toml`,
-SUB on OWP `PositionReport` / `PositionReport` to see broker → mpg → web.
+`send` publishes crates/oa-gateway-testing/fixtures/PositionReport.xml.
+`recv` prints the next MESSAGE. Together with `cargo run -p oa-gateway -- config/asb.toml`,
+SUB on OWP `PositionReport` / `PositionReport` to see broker → oa-gateway → web.
 Outbound XML is asserted by
-`cargo test -p mpg-testing --test live_activemq -- --ignored`.
+`cargo test -p oa-gateway-testing --test live_activemq -- --ignored`.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ HOST = "127.0.0.1"
 PORT = 61613
 DEST = "/topic/PositionReport"
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / "crates" / "mpg-testing" / "fixtures" / "PositionReport.xml"
+FIXTURE = ROOT / "crates" / "oa-gateway-testing" / "fixtures" / "PositionReport.xml"
 
 
 def encode(command: str, headers: list[tuple[str, str]], body: bytes = b"") -> bytes:

@@ -23,5 +23,5 @@ fi
 # Broker accepts TCP before STOMP CONNECTED is reliable.
 sleep 1
 
-export MPG_ACTIVEMQ_STOMP="${MPG_ACTIVEMQ_STOMP:-127.0.0.1:61613}"
-cargo test -p mpg-testing --test live_activemq -- --ignored --nocapture --test-threads=1
+export OAG_ACTIVEMQ_STOMP="${OAG_ACTIVEMQ_STOMP:-127.0.0.1:61613}"
+cargo test -p oa-gateway-testing --test live_activemq -- --ignored --nocapture --test-threads=1

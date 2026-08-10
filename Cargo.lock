@@ -291,14 +291,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "mpg"
+name = "nu-ansi-term"
+version = "0.50.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
+dependencies = [
+ "windows-sys",
+]
+
+[[package]]
+name = "oa-gateway"
 version = "0.1.0"
 dependencies = [
- "mpg-adapter",
- "mpg-core",
- "mpg-loopback",
- "mpg-owp",
- "mpg-stomp",
+ "oa-gateway-adapter",
+ "oa-gateway-core",
+ "oa-gateway-loopback",
+ "oa-gateway-owp",
+ "oa-gateway-stomp",
  "serde",
  "tokio",
  "tokio-util",
@@ -309,23 +318,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "mpg-adapter"
+name = "oa-gateway-adapter"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "mpg-core",
+ "oa-gateway-core",
  "thiserror",
  "tokio",
  "tokio-util",
 ]
 
 [[package]]
-name = "mpg-agra"
+name = "oa-gateway-agra"
 version = "0.1.0"
 dependencies = [
  "bytes",
  "hex",
- "mpg-core",
+ "oa-gateway-core",
  "serde",
  "serde_json",
  "thiserror",
@@ -333,7 +342,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "mpg-core"
+name = "oa-gateway-core"
 version = "0.1.0"
 dependencies = [
  "bytes",
@@ -343,28 +352,28 @@ dependencies = [
 ]
 
 [[package]]
-name = "mpg-loopback"
+name = "oa-gateway-loopback"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "bytes",
- "mpg-adapter",
- "mpg-core",
+ "oa-gateway-adapter",
+ "oa-gateway-core",
  "tokio",
  "tokio-util",
 ]
 
 [[package]]
-name = "mpg-owp"
+name = "oa-gateway-owp"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "bytes",
  "futures-util",
- "mpg-adapter",
- "mpg-agra",
- "mpg-core",
- "mpg-uci",
+ "oa-gateway-adapter",
+ "oa-gateway-agra",
+ "oa-gateway-core",
+ "oa-gateway-uci",
  "serde",
  "serde_json",
  "thiserror",
@@ -376,14 +385,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "mpg-stomp"
+name = "oa-gateway-stomp"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "bytes",
- "mpg-adapter",
- "mpg-agra",
- "mpg-core",
+ "oa-gateway-adapter",
+ "oa-gateway-agra",
+ "oa-gateway-core",
  "serde_json",
  "thiserror",
  "tokio",
@@ -392,16 +401,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "mpg-testing"
+name = "oa-gateway-testing"
 version = "0.1.0"
 dependencies = [
  "bytes",
  "futures-util",
- "mpg-agra",
- "mpg-core",
- "mpg-loopback",
- "mpg-owp",
- "mpg-stomp",
+ "oa-gateway-agra",
+ "oa-gateway-core",
+ "oa-gateway-loopback",
+ "oa-gateway-owp",
+ "oa-gateway-stomp",
  "serde_json",
  "tokio",
  "tokio-tungstenite",
@@ -409,22 +418,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "mpg-uci"
+name = "oa-gateway-uci"
 version = "0.1.0"
 dependencies = [
- "mpg-testing",
+ "oa-gateway-testing",
  "roxmltree",
  "serde_json",
  "thiserror",
-]
-
-[[package]]
-name = "nu-ansi-term"
-version = "0.50.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
-dependencies = [
- "windows-sys",
 ]
 
 [[package]]

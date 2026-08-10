@@ -1,4 +1,4 @@
-# mpg on a local ActiveMQ Classic ASB. Requires:
+# OA-Gateway on a local ActiveMQ Classic ASB. Requires:
 #   docker compose -f compose/activemq.yml up -d
 #
 # Engine topic == JMS / STOMP dest suffix (UCI message type name).
@@ -11,8 +11,8 @@ id = "loopback"
 enabled = true
 id = "owp"
 bind = "127.0.0.1:9000"
-server_id = "mpg-0"
-system_label = "MPG ASB"
+server_id = "oa-gateway-0"
+system_label = "OA-Gateway ASB"
 schema = "002.5.0"
 unwrap_ma_payloads = true
 # OMS JSON at the WebSocket; UCI XML toward ActiveMQ.

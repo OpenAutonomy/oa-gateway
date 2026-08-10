@@ -35,7 +35,7 @@ test:
   script:
     - cargo test --workspace --locked
 
-# Keeps intra-doc links and the runnable adapter example in mpg-adapter honest.
+# Keeps intra-doc links and the runnable adapter example in oa-gateway-adapter honest.
 docs:
   stage: check
   variables:
@@ -50,7 +50,7 @@ live-activemq:
     - name: apache/activemq-classic:5.18.7
       alias: activemq
   variables:
-    MPG_ACTIVEMQ_STOMP: activemq:61613
+    OAG_ACTIVEMQ_STOMP: activemq:61613
   script:
     - |
       echo "waiting for STOMP activemq:61613 …"
@@ -65,4 +65,4 @@ live-activemq:
         exit 1
       fi
       sleep 1
-    - cargo test -p mpg-testing --test live_activemq --locked -- --ignored --nocapture --test-threads=1
+    - cargo test -p oa-gateway-testing --test live_activemq --locked -- --ignored --nocapture --test-threads=1
