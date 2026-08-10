@@ -312,3 +312,65 @@ async fn xml_with_no_element_is_refused_rather_than_named_after_the_topic() {
 
     shutdown.cancel();
 }
+
+/// A delivery that will not convert is dropped, and the client is told which
+/// subscription lost it.
+///
+/// Forwarding the XML instead would hand a JSON subscriber a document it has no
+/// way to distinguish from an expected payload. The session stays usable either
+/// way: one unconvertible message is not a reason to end it.
+#[tokio::test]
+async fn an_unconvertible_delivery_is_refused_not_forwarded_as_xml() {
+    let engine = Arc::new(Engine::new());
+    let loopback = Loopback::new(engine.clone(), "loop-bad");
+
+    let (url, shutdown) = start_owp(engine, true).await;
+    let mut ws = connect(&url).await;
+    handshake(&mut ws).await;
+    send_text(&mut ws, "SUB sub-1 PositionReport PositionReport").await;
+    match parse_server(&recv_text(&mut ws).await).unwrap() {
+        ServerOp::Ok => {}
+        other => panic!("expected +OK, got {other}"),
+    }
+
+    // Well-formed XML naming a message the schema does not define, which is what
+    // a broker carrying a wider catalog than the gateway was given looks like.
+    let unknown = r#"<NotInTheSchema xmlns="https://www.vdl.afrl.af.mil/programs/oam"><MessageData/></NotInTheSchema>"#;
+    loopback
+        .publish(
+            Envelope::new(
+                RouteKey::typed("PositionReport", "PositionReport"),
+                Bytes::from(unknown),
+            )
+            .with_content_type(ContentType::xml()),
+        )
+        .await;
+
+    match parse_server(&recv_text(&mut ws).await).unwrap() {
+        ServerOp::Err { details, .. } => {
+            let details = details.unwrap_or_default();
+            assert!(details.contains("sub-1"), "unhelpful details: {details}");
+        }
+        ServerOp::Msg { payload, .. } => {
+            panic!("XML was forwarded to a JSON subscriber: {payload}")
+        }
+        other => panic!("expected ERR, got {other}"),
+    }
+
+    // Still usable: a convertible payload on the same subscription arrives.
+    loopback
+        .publish(
+            Envelope::new(
+                RouteKey::typed("PositionReport", "PositionReport"),
+                Bytes::from_static(POSITION_REPORT_XML_BYTES),
+            )
+            .with_content_type(ContentType::xml()),
+        )
+        .await;
+    match parse_server(&recv_text(&mut ws).await).unwrap() {
+        ServerOp::Msg { sid, .. } => assert_eq!(sid, "sub-1"),
+        other => panic!("expected the subscription to keep working, got {other}"),
+    }
+
+    shutdown.cancel();
+}

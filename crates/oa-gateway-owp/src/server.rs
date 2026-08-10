@@ -502,14 +502,47 @@ async fn handle_text(
             let local_sid = sid.clone();
             let xml_baseline = session.config.xml_baseline;
             let schema = session.schema.clone();
+            let adapter_id = session.adapter_id.clone();
             let forwarder = tokio::spawn(async move {
+                // The client is told about every dropped delivery, since each is
+                // a message it will not receive; the log is told once, since the
+                // cause is the same for every payload on this route.
+                let mut logged = false;
                 while let Some(delivery) = rx.recv().await {
                     let Ok(raw) = String::from_utf8(delivery.envelope.payload.to_vec()) else {
                         warn!("dropping non-utf8 payload destined for OWP");
                         continue;
                     };
                     let payload = if xml_baseline {
-                        xml_to_oms_json(&raw, schema.as_deref())
+                        match xml_to_oms_json(&raw, schema.as_deref()) {
+                            Ok(json) => json,
+                            Err(err) => {
+                                if !logged {
+                                    logged = true;
+                                    warn!(
+                                        adapter = %adapter_id,
+                                        sid = %local_sid,
+                                        error = %err,
+                                        "dropping a delivery that will not convert to JSON; \
+                                         later failures on this subscription are not logged"
+                                    );
+                                }
+                                // Forwarding the XML instead would hand the client
+                                // a format it did not subscribe for, and it has no
+                                // way to tell that from an ordinary payload.
+                                let details = format!(
+                                    "delivery on {local_sid} could not be converted: {err}"
+                                );
+                                if forward_tx
+                                    .send(err_op(OwpError::InvalidMessage, Some(&details)))
+                                    .await
+                                    .is_err()
+                                {
+                                    break;
+                                }
+                                continue;
+                            }
+                        }
                     } else {
                         raw
                     };
@@ -653,20 +686,23 @@ fn toward_xml(mut env: Envelope, schema: &Schema) -> Result<Envelope, String> {
     Ok(env)
 }
 
-fn xml_to_oms_json(raw: &str, schema: Option<&Schema>) -> String {
+/// Convert a payload the engine carried in XML into the OMS JSON a client
+/// subscribed for.
+///
+/// A payload that is not XML is already what the client asked for and passes
+/// through. Anything else is either converted or refused: the caller drops the
+/// delivery and says so, rather than forwarding a document in a format the
+/// client has no way to distinguish from an expected one.
+fn xml_to_oms_json(raw: &str, schema: Option<&Schema>) -> Result<String, String> {
     if !oa_gateway_uci::looks_like_xml(raw.as_bytes()) {
-        return raw.to_owned();
+        return Ok(raw.to_owned());
     }
-    let Some(schema) = schema else {
-        return raw.to_owned();
-    };
-    match oa_gateway_uci::Message::from_xml(raw, schema).and_then(|m| m.to_json(schema)) {
-        Ok(json) => json,
-        Err(err) => {
-            warn!(error = %err, "xml→json failed; forwarding XML to OWP client");
-            raw.to_owned()
-        }
-    }
+    // The host refuses to start with xml_baseline and no schema, so this is a
+    // guard against an embedding that skips that check, not a reachable path.
+    let schema = schema.ok_or("no UCI schema is loaded")?;
+    oa_gateway_uci::Message::from_xml(raw, schema)
+        .and_then(|m| m.to_json(schema))
+        .map_err(|e| e.to_string())
 }
 
 fn negotiate(config: &OwpConfig, init: &InitPayload) -> Result<(), OwpError> {

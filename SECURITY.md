@@ -61,9 +61,12 @@ are capped before they are decoded, and conversion refuses nesting deeper than
   hold, and an alternation converts as a set of optional siblings. A document can
   convert cleanly and still not be a valid instance of the standard: conversion
   is not validation.
-- **Some conversion failures degrade silently rather than erroring**: an
-  unparseable XML payload falls back to using the topic as its type hint, and a
-  failed XML-to-JSON conversion forwards the raw XML to the subscriber.
+- **Conversion is best-effort in one direction that still matters.** A payload
+  the engine carries in XML is converted for a JSON subscriber or the delivery is
+  dropped and the client told, so nothing arrives in an unannounced format. What
+  is not covered is the reverse question of whether a conversion that *succeeded*
+  produced a valid instance of the standard — see the `maxOccurs` and `choice`
+  note above.
 
 ## Supported versions
 
