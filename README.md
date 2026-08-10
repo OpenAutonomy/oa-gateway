@@ -30,6 +30,8 @@ loopback ──publish/subscribe──► Engine ◄──PUB/SUB── owp (Web
 
 Reference clones under `repos/` are not compiled into this workspace.
 
+New here? [docs/glossary.md](docs/glossary.md) defines the acronyms, and [docs/writing-an-adapter.md](docs/writing-an-adapter.md) walks through adding a protocol.
+
 ## Run
 
 ```bash

@@ -315,6 +315,7 @@ dependencies = [
  "async-trait",
  "mpg-core",
  "thiserror",
+ "tokio",
  "tokio-util",
 ]
 

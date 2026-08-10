@@ -53,7 +53,7 @@ impl StompAdapter {
         self.serve_inner(engine, shutdown, None).await
     }
 
-    /// Same as [`serve`] but signals `ready` after the first CONNECTED + subscriptions.
+    /// Same as [`Self::serve`] but signals `ready` after the first CONNECTED + subscriptions.
     pub async fn serve_ready(
         self: Arc<Self>,
         engine: Arc<Engine>,

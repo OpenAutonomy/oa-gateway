@@ -35,6 +35,14 @@ test:
   script:
     - cargo test --workspace --locked
 
+# Keeps intra-doc links and the runnable adapter example in mpg-adapter honest.
+docs:
+  stage: check
+  variables:
+    RUSTDOCFLAGS: "-D warnings"
+  script:
+    - cargo doc --workspace --no-deps --locked
+
 live-activemq:
   stage: test
   needs: [test]

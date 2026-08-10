@@ -2,7 +2,7 @@
 //!
 //! The engine stays on opaque bytes. Adapters call [`Message::from_json`] /
 //! [`Message::from_xml`] and emit the other serialization. v0 ships a hand-built
-//! [`slice`] of UCI 2.5, not the full XSD catalog.
+//! [`mod@slice`] of UCI 2.5, not the full XSD catalog.
 
 mod error;
 mod instance;
