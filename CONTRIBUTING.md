@@ -4,6 +4,10 @@ MIT prototype. PRs / MRs welcome.
 
 Start with [docs/glossary.md](docs/glossary.md) for the acronyms and [docs/writing-an-adapter.md](docs/writing-an-adapter.md) if you are adding a protocol.
 
+Found a vulnerability? Do not open a PR for it first — [SECURITY.md](SECURITY.md)
+says how to report it, and lists the resource limits already known to be missing
+so you can tell a finding from a chore.
+
 ## Gate
 
 Pinned toolchain is in `rust-toolchain.toml` (`1.85.0`, plus `rustfmt` and `clippy`).

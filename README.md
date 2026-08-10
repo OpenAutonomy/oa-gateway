@@ -52,12 +52,13 @@ Next, launch the service with your configuration file. This will create adapters
 
 A config is a short set of TOML sections: one per adapter, plus one naming the UCI schema. Each adapter section carries an `enabled` flag and an id, then whatever that protocol needs — an address to listen on or a broker to dial, which topics to bridge, and whether payloads are converted on the way through or passed along untouched. Settings you leave out fall back to built-in defaults, and settings the gateway does not recognize are rejected at startup rather than ignored.
 
-The files in `config/` are worked examples. The gateway has no TLS or authentication of its own, so bind to loopback.
+The files in `config/` are worked examples. The gateway has no TLS or authentication of its own, so bind to loopback — see [SECURITY.md](SECURITY.md) for what that means and what it assumes about the network around it.
 
 ## Documentation
 
 - [docs/glossary.md](docs/glossary.md) — the acronyms, and OA-Gateway's own vocabulary
 - [docs/writing-an-adapter.md](docs/writing-an-adapter.md) — adding a protocol
+- [SECURITY.md](SECURITY.md) — deployment assumptions, reporting, known limitations
 - `cargo doc --workspace --no-deps --open` — the crate APIs. `oa-gateway-adapter` carries a runnable minimal adapter.
 
 ## Contributing
