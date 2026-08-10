@@ -63,13 +63,16 @@ are capped before they are decoded, and conversion refuses nesting deeper than
   and defaults to `warn` where a schema is loaded — but warning is not refusing:
   a non-conforming payload still crosses unless the mode is `reject`.
 - **A valid instance is not a fully checked instance.** Validation reads
-  declarations, occurrence ranges, alternations, abstract types, and the facets a
-  type declares — enumerations, lengths, numeric bounds, and patterns. What it
-  does not read is the lexical space of the primitives underneath: a value typed
-  `xs:dateTime` is not checked for being a date, and an `xs:int` is not checked
-  against the range of an int, so `not-a-timestamp` and 99999999999999 both pass.
+  declarations, occurrence ranges, alternations, abstract types, the facets a type
+  declares — enumerations, lengths, numeric bounds, patterns — and the lexical
+  space of the primitive underneath, including the calendar, so `2026-02-30` is
+  not a date and 99999999999999 is not an `xs:int`. Two things are still outside
+  it. Identity constraints (`xs:unique`, `xs:key`) are not read, and neither is
+  the co-occurrence logic a standard states in prose rather than in schema.
   Patterns from the corners of XSD's regex language that this build cannot
-  translate are reported at startup rather than enforced.
+  translate are named in a startup warning rather than enforced, as are
+  primitives it does not recognize; against the published catalog both lists are
+  empty.
 - **Conversion is best-effort in one direction that still matters.** A payload
   the engine carries in XML is converted for a JSON subscriber or the delivery is
   dropped and the client told, so nothing arrives in an unannounced format. What

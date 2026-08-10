@@ -4,6 +4,7 @@ use roxmltree::{Document, Node as XmlNode};
 use serde_json::Number;
 
 use crate::instance::{Complex, Field, Message, Node, Simple};
+use crate::primitive::{self, Kind};
 use crate::schema::Schema;
 use crate::{UciError, MAX_DEPTH};
 
@@ -217,14 +218,27 @@ fn read_element(
     Ok(Node::Complex(Complex { type_name, fields }))
 }
 
+/// Carry XML text as the JSON shape its declared type calls for.
+///
+/// Text that does not fit the type is carried as written rather than coerced.
+/// Reading `yes` in an `xs:boolean` as `false` would hand a subscriber a value
+/// no one sent, and a value the gateway invented is worse than one it reports —
+/// validation is where a value that does not fit its type gets named.
 fn parse_text(type_name: &str, text: &str) -> Simple {
-    match type_name {
-        "xs:boolean" => Simple::Bool(text == "true" || text == "1"),
-        "xs:int" | "xs:integer" | "xs:long" | "xs:short" | "xs:byte" => text
+    match primitive::kind(type_name) {
+        Kind::Boolean => match text {
+            "true" | "1" => Simple::Bool(true),
+            "false" | "0" => Simple::Bool(false),
+            _ => Simple::String(text.to_owned()),
+        },
+        // Signed and unsigned alike, since JSON numbers cover both. Whether the
+        // value sits inside the range its type declares is validation's question.
+        Kind::Integer { .. } => text
             .parse::<i64>()
             .map(|n| Simple::Number(n.into()))
+            .or_else(|_| text.parse::<u64>().map(|n| Simple::Number(n.into())))
             .unwrap_or_else(|_| Simple::String(text.to_owned())),
-        "xs:double" | "xs:float" | "xs:decimal" => text
+        Kind::Number { .. } => text
             .parse::<f64>()
             .ok()
             .and_then(Number::from_f64)
@@ -338,6 +352,60 @@ fn escape(s: String) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Text that is not a boolean stays text.
+    ///
+    /// This read `yes` as `false` and handed that to every JSON subscriber, which
+    /// is the one outcome worse than refusing the value: a subscriber cannot tell
+    /// an answer from an invention.
+    #[test]
+    fn a_word_that_is_not_a_boolean_is_not_read_as_false() {
+        assert_eq!(parse_text("xs:boolean", "true"), Simple::Bool(true));
+        assert_eq!(parse_text("xs:boolean", "1"), Simple::Bool(true));
+        assert_eq!(parse_text("xs:boolean", "false"), Simple::Bool(false));
+        assert_eq!(parse_text("xs:boolean", "0"), Simple::Bool(false));
+        for text in ["yes", "TRUE", "2", ""] {
+            assert_eq!(
+                parse_text("xs:boolean", text),
+                Simple::String(text.to_owned()),
+                "{text} is not a boolean and must not become one"
+            );
+        }
+    }
+
+    /// The unsigned types are numbers too.
+    ///
+    /// They were left off the list, so `xs:unsignedInt` — the catalog's most
+    /// common integer type, on 320 declarations — reached JSON clients quoted.
+    #[test]
+    fn the_unsigned_types_are_carried_as_numbers() {
+        for primitive in [
+            "xs:unsignedByte",
+            "xs:unsignedShort",
+            "xs:unsignedInt",
+            "xs:unsignedLong",
+            "xs:nonNegativeInteger",
+            "xs:positiveInteger",
+            "xs:int",
+            "xs:long",
+        ] {
+            assert_eq!(
+                parse_text(primitive, "42"),
+                Simple::Number(42.into()),
+                "{primitive} carries a number"
+            );
+        }
+        // The whole of xs:unsignedLong fits, which i64 alone would not hold.
+        assert_eq!(
+            parse_text("xs:unsignedLong", "18446744073709551615"),
+            Simple::Number(u64::MAX.into())
+        );
+        // And text that is not a number is still carried as written.
+        assert_eq!(
+            parse_text("xs:unsignedInt", "abc"),
+            Simple::String("abc".to_owned())
+        );
+    }
 
     fn depth_of(text: &str) -> usize {
         // The smallest limit the text does not exceed is its depth.

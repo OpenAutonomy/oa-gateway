@@ -13,8 +13,8 @@ The gateway's own vocabulary, then the domain terms it borrows. Expansions below
 | **Adapter** | A protocol plugin owning its own I/O loop. Talks only to the engine, never to another adapter. |
 | **Engine** | The router. Protocol-agnostic, payload-blind, in-process. |
 | **wildcard subscription** | A subscription with `type_hint: None`, matching every type on its topic. |
-| **conversion** | Mapping a payload between OMS JSON and UCI XML. Deliberately forgiving: an element the schema does not declare is carried rather than refused. |
-| **validation** | Checking a payload against what the compiled schema states — declarations, occurrence ranges, alternations, abstract types, and facets. Separate from conversion, because a message can convert cleanly in both directions and still not be a valid instance of the standard. Controlled by `uci.validate`. |
+| **conversion** | Mapping a payload between OMS JSON and UCI XML. Deliberately forgiving: an element the schema does not declare is carried rather than refused, and a value that does not fit its declared type is carried as written rather than coerced into fitting. |
+| **validation** | Checking a payload against what the compiled schema states — declarations, occurrence ranges, alternations, abstract types, facets, and the primitive a value has to be. Separate from conversion, because a message can convert cleanly in both directions and still not be a valid instance of the standard. Controlled by `uci.validate`. |
 | **facet** | A constraint a simple type puts on a value: the enumeration it has to belong to, the length it has to be, the numeric bounds it sits within, the pattern it has to match. The published UCI catalog declares 7,766 enumerated values and 143 patterns across 945 types. |
 | **violation** | One way a payload departs from the schema, with a dotted path to the element. A message is reported in full rather than at the first fault. |
 

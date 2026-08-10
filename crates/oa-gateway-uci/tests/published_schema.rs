@@ -12,12 +12,13 @@
 //!   OAG_UCI_XSD=/path/UCI_MessageDefinitions_v2_5_0.xsd:/path/UCI_SecurityMarkings_v2_5_0.xsd \
 //!     cargo test -p oa-gateway-uci -- --ignored
 
+use std::collections::BTreeSet;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use oa_gateway_uci::{xsd, Facets, Message, Schema, MAX_DEPTH};
+use oa_gateway_uci::{primitive, xsd, Facets, Message, Schema, MAX_DEPTH};
 
 /// Convert a real message that the hand-written fixture never covered.
 ///
@@ -115,6 +116,10 @@ fn reports_what_conversion_accepts(schema: &Schema) {
         !reported.iter().any(|v| v.contains("SIMULATION")),
         "a valid enumeration member must not be reported: {reported:?}"
     );
+    assert!(
+        !reported.iter().any(|v| v.contains("Timestamp")),
+        "a well-formed xs:dateTime must not be reported: {reported:?}"
+    );
 
     // The same message as XML has to report the same list: validation reads the
     // schema, not the serialization it arrived in.
@@ -195,6 +200,36 @@ fn reports_values_the_standard_does_not_allow(schema: &Schema) {
     assert!(
         !reported.iter().any(|v| v.contains("SystemID.UUID")),
         "a well-formed UUID must not be reported: {reported:?}"
+    );
+}
+
+/// Every primitive the catalog resolves to is one this build understands.
+///
+/// `xs:string` is the exception by design: there is nothing to check about a
+/// string beyond the facets of the type declaring it. Anything else appearing
+/// here — `xs:base64Binary`, `xs:anyURI`, `xs:QName` — would be a type whose
+/// values pass unexamined, which is a decision to take rather than to discover.
+fn every_primitive_is_checked(schema: &Schema) {
+    let mut resolved: BTreeSet<&str> = BTreeSet::new();
+    for name in schema.simple_types.keys() {
+        resolved.insert(schema.primitive(name));
+    }
+    for name in schema.complex_types.keys() {
+        for group in schema.groups(name).expect("every type resolves") {
+            for element in &group.elements {
+                resolved.insert(schema.primitive(&element.type_name));
+            }
+        }
+    }
+
+    let unchecked: Vec<&str> = resolved
+        .into_iter()
+        .filter(|name| name.starts_with("xs:") && !primitive::is_checked(name))
+        .collect();
+    assert_eq!(
+        unchecked,
+        vec!["xs:string"],
+        "these primitives would pass unexamined"
     );
 }
 
@@ -366,6 +401,7 @@ fn the_published_schema_compiles_and_every_type_resolves() {
     reports_what_conversion_accepts(&schema);
     reports_values_the_standard_does_not_allow(&schema);
     every_pattern_is_checkable(&schema);
+    every_primitive_is_checked(&schema);
 
     let (deepest, depth) = deepest_message(&schema);
     assert!(

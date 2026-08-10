@@ -11,6 +11,7 @@
 mod error;
 mod instance;
 mod json;
+pub mod primitive;
 mod schema;
 pub mod slice;
 pub mod validate;

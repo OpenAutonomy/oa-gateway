@@ -21,6 +21,7 @@
 use std::fmt;
 
 use crate::instance::{Field, Message, Node};
+use crate::primitive;
 use crate::schema::{GroupKind, MaxOccurs, Schema};
 use crate::MAX_DEPTH;
 
@@ -157,6 +158,12 @@ pub enum ViolationKind {
         value: String,
         patterns: Vec<String>,
     },
+    /// A value that is not one of the primitive underneath its type at all.
+    NotLexical {
+        value: String,
+        primitive: String,
+        expected: String,
+    },
 }
 
 impl fmt::Display for Violation {
@@ -229,6 +236,15 @@ impl fmt::Display for ViolationKind {
                     abbreviated(value)
                 )
             }
+            Self::NotLexical {
+                value,
+                primitive,
+                expected,
+            } => write!(
+                f,
+                "'{}' is not a valid {primitive}: expected {expected}",
+                abbreviated(value)
+            ),
             Self::PatternMismatch { value, patterns } => match patterns.as_slice() {
                 [only] => write!(
                     f,
@@ -471,6 +487,23 @@ fn check(
 /// counts octets — so a length facet on binary content would be read too
 /// strictly. Nothing in the published catalog does that.
 fn check_value(text: &str, schema: &Schema, type_name: &str, path: &str, out: &mut Vec<Violation>) {
+    // What the value is comes before what it is narrowed to. A value that is not
+    // a number at all has nothing to say to a bound, and reporting both would
+    // describe one mistake twice.
+    let primitive = schema.primitive(type_name);
+    if let Some(expected) = primitive::refuses(&primitive::kind(primitive), text) {
+        note(
+            out,
+            path,
+            ViolationKind::NotLexical {
+                value: text.to_owned(),
+                primitive: primitive.to_owned(),
+                expected,
+            },
+        );
+        return;
+    }
+
     let facets = schema.effective_facets(type_name);
     if facets.is_empty() {
         return;
@@ -1060,6 +1093,82 @@ mod tests {
         assert_eq!(
             violations(&label("anything"), &schema),
             Vec::<String>::new()
+        );
+    }
+
+    /// A leaf is checked against the primitive under its type before the facets
+    /// that narrow it.
+    #[test]
+    fn a_value_that_is_not_of_its_primitive_is_reported() {
+        let schema = xsd::compile(&[r#"
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:element name="R" type="RT"/>
+              <xs:complexType name="RT"><xs:sequence>
+                <xs:element name="When" type="StampType" minOccurs="0"/>
+                <xs:element name="Count" type="xs:int" minOccurs="0"/>
+                <xs:element name="Flag" type="xs:boolean" minOccurs="0"/>
+              </xs:sequence></xs:complexType>
+              <xs:simpleType name="StampType">
+                <xs:restriction base="xs:dateTime"/>
+              </xs:simpleType>
+            </xs:schema>"#])
+        .expect("compiles");
+
+        // Reached through a named type, as the catalog declares its timestamps.
+        assert_eq!(
+            violations(r#"{"R":{"When":"not-a-timestamp"}}"#, &schema),
+            vec![
+                "R.When: 'not-a-timestamp' is not a valid xs:dateTime: expected a date and \
+                 time, as CCYY-MM-DDThh:mm:ss with an optional fraction and time zone"
+            ]
+        );
+        assert_eq!(
+            violations(r#"{"R":{"When":"2026-01-22T00:00:00Z"}}"#, &schema),
+            Vec::<String>::new()
+        );
+
+        // A range that no machine type would have caught on its own.
+        assert_eq!(
+            violations(r#"{"R":{"Count":99999999999999}}"#, &schema),
+            vec![
+                "R.Count: '99999999999999' is not a valid xs:int: expected between \
+                 -2147483648 and 2147483647"
+            ]
+        );
+        assert_eq!(
+            violations(r#"{"R":{"Count":-5}}"#, &schema),
+            Vec::<String>::new()
+        );
+        assert_eq!(violations(r#"{"R":{"Flag":"yes"}}"#, &schema).len(), 1);
+    }
+
+    /// A value that is not of its type has nothing to say to the constraints
+    /// narrowing that type, so it is reported once rather than twice.
+    #[test]
+    fn a_value_of_the_wrong_kind_is_reported_once() {
+        let schema = xsd::compile(&[r#"
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:element name="R" type="RT"/>
+              <xs:complexType name="RT"><xs:sequence>
+                <xs:element name="Level" type="LevelType"/>
+              </xs:sequence></xs:complexType>
+              <xs:simpleType name="LevelType">
+                <xs:restriction base="xs:int">
+                  <xs:maxInclusive value="100"/>
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:schema>"#])
+        .expect("compiles");
+
+        let reported = violations(r#"{"R":{"Level":"not-a-number"}}"#, &schema);
+        assert_eq!(reported.len(), 1, "{reported:?}");
+        assert!(reported[0].contains("not a valid xs:int"), "{reported:?}");
+
+        // A number of the right kind is still held to the bound.
+        let reported = violations(r#"{"R":{"Level":500}}"#, &schema);
+        assert_eq!(
+            reported,
+            vec!["R.Level: 500 is out of range: it has to be at most 100"]
         );
     }
 
