@@ -12,7 +12,7 @@ use oa_gateway_stomp::{StompAdapter, StompConfig};
 use oa_gateway_uci::{Schema, ValidateMode};
 use serde::Deserialize;
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 const USAGE: &str = "\
 OA-Gateway — protocol-agnostic routing with pluggable adapters (prototype)
@@ -501,6 +501,23 @@ fn load_schema(config: &Config) -> Result<Option<Arc<Schema>>, String> {
         simple_types = schema.simple_types.len(),
         "uci schema compiled"
     );
+
+    // A pattern this build cannot express enforces nothing. Nothing downstream
+    // can tell that from a value that passed, so the one place to say so is here,
+    // where an operator is still reading startup output.
+    let unchecked = schema.unchecked_patterns();
+    if !unchecked.is_empty() {
+        warn!(
+            count = unchecked.len(),
+            types = unchecked
+                .iter()
+                .map(|(name, _)| *name)
+                .collect::<Vec<_>>()
+                .join(", "),
+            "some schema patterns cannot be checked and will not be enforced"
+        );
+    }
+
     Ok(Some(Arc::new(schema)))
 }
 

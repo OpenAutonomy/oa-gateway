@@ -7,6 +7,8 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
+use regex::Regex;
+
 /// How many links of a named-simple-type chain [`Schema::primitive`] will follow
 /// before giving up. The published schema nests three deep at most; the limit
 /// exists so a cyclic hand-built schema cannot hang the caller.
@@ -21,6 +23,100 @@ pub struct Schema {
     /// it through [`Schema::primitive`] rather than directly, and read the
     /// constraints through [`Schema::effective_facets`].
     pub simple_types: HashMap<String, SimpleType>,
+}
+
+/// A pattern facet: what the XSD wrote, and the matcher it translates to.
+///
+/// Constructing one never fails. A pattern this build cannot express is held
+/// unchecked and reported by [`Schema::unchecked_patterns`], because refusing to
+/// load a schema over one exotic pattern would stop a gateway that otherwise
+/// converts every message in the catalog.
+#[derive(Debug, Clone)]
+pub struct Pattern {
+    source: String,
+    matcher: Option<Regex>,
+}
+
+impl Pattern {
+    #[must_use]
+    pub fn new(source: impl Into<String>) -> Self {
+        let source = source.into();
+        let matcher = Regex::new(&translate(&source)).ok();
+        Self { source, matcher }
+    }
+
+    /// The pattern as the XSD wrote it.
+    #[must_use]
+    pub fn source(&self) -> &str {
+        &self.source
+    }
+
+    /// Whether this pattern can say no to anything.
+    #[must_use]
+    pub fn is_checked(&self) -> bool {
+        self.matcher.is_some()
+    }
+
+    /// Whether `value` satisfies the pattern. An unchecked pattern accepts
+    /// everything: it has no opinion to offer, and guessing one would invent
+    /// violations rather than find them.
+    #[must_use]
+    pub fn accepts(&self, value: &str) -> bool {
+        self.matcher
+            .as_ref()
+            .is_none_or(|matcher| matcher.is_match(value))
+    }
+}
+
+/// Rewrite an XSD pattern as an equivalent Rust regex.
+///
+/// Two differences matter. An XSD pattern has to match the value entire, so the
+/// result is anchored. And XSD's regex grammar has no anchors at all, which
+/// makes `^` and `$` ordinary characters there and metacharacters here, so they
+/// are escaped. Everything the published catalog uses beyond that — classes,
+/// bounded repetition, alternation, `\d` and its relatives — means the same in
+/// both languages.
+///
+/// What is left untranslated is XSD's character-class subtraction, `[a-z-[aeiou]]`,
+/// and its `\i` and `\c` shorthands for XML name characters. None appears in the
+/// published catalog. One that did would fail to compile and be reported as
+/// unchecked rather than quietly matching everything.
+fn translate(xsd: &str) -> String {
+    let mut out = String::with_capacity(xsd.len() + 8);
+    out.push_str("\\A(?:");
+    let mut chars = xsd.chars();
+    let mut in_class = false;
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => {
+                out.push(c);
+                if let Some(escaped) = chars.next() {
+                    out.push(escaped);
+                }
+            }
+            '[' if !in_class => {
+                in_class = true;
+                out.push(c);
+            }
+            ']' if in_class => {
+                in_class = false;
+                out.push(c);
+            }
+            // Literal in XSD, an anchor here. Inside a class both languages
+            // agree, and escaping there is harmless.
+            '^' | '$' => {
+                if c == '^' && in_class && out.ends_with('[') {
+                    out.push(c); // Class negation, which does mean the same.
+                } else {
+                    out.push('\\');
+                    out.push(c);
+                }
+            }
+            _ => out.push(c),
+        }
+    }
+    out.push_str(")\\z");
+    out
 }
 
 /// A named simple type: the type it restricts, and the facets it adds.
@@ -38,8 +134,9 @@ pub struct SimpleType {
 pub struct Facets {
     /// Permitted values. Empty means unconstrained rather than "nothing allowed".
     pub enumeration: Vec<String>,
-    /// Patterns as the XSD wrote them. Several at one link are alternatives.
-    pub patterns: Vec<String>,
+    /// Patterns declared here, which XSD reads as alternatives: a value matching
+    /// any one of them satisfies this link.
+    pub patterns: Vec<Pattern>,
     pub length: Option<usize>,
     pub min_length: Option<usize>,
     pub max_length: Option<usize>,
@@ -55,12 +152,18 @@ pub struct Facets {
 /// The facets in force for a type, gathered along its restriction chain.
 ///
 /// A derived type's own enumeration is the operative one, since XSD requires it
-/// to be a subset of its base's. Patterns at different links all have to hold.
-/// For a length or a bound, the tightest wins.
+/// to be a subset of its base's. Patterns are grouped by link, because XSD reads
+/// several patterns in one restriction as alternatives while patterns in
+/// different restrictions all have to hold — six types in the published catalog
+/// declare up to eight alternatives at once, and treating those as a conjunction
+/// would reject every value they were written to accept. For a length or a
+/// bound, the tightest wins.
 #[derive(Debug, Default)]
 pub struct Effective<'a> {
     pub enumeration: Option<&'a [String]>,
-    pub patterns: Vec<&'a str>,
+    /// One entry per link in the chain that declares patterns. A value has to
+    /// satisfy every entry, and satisfies an entry by matching any pattern in it.
+    pub patterns: Vec<&'a [Pattern]>,
     pub length: Option<usize>,
     pub min_length: Option<usize>,
     pub max_length: Option<usize>,
@@ -362,8 +465,9 @@ impl Schema {
             if out.enumeration.is_none() && !facets.enumeration.is_empty() {
                 out.enumeration = Some(&facets.enumeration);
             }
-            out.patterns
-                .extend(facets.patterns.iter().map(String::as_str));
+            if !facets.patterns.is_empty() {
+                out.patterns.push(&facets.patterns);
+            }
             out.length = out.length.or(facets.length);
             out.min_length = stricter(out.min_length, facets.min_length, Ordering::Greater);
             out.max_length = stricter(out.max_length, facets.max_length, Ordering::Less);
@@ -373,6 +477,29 @@ impl Schema {
             out.max_exclusive = stricter_f64(out.max_exclusive, facets.max_exclusive, f64::min);
             current = simple.base.as_str();
         }
+        out
+    }
+
+    /// Every pattern this build cannot check, paired with the type declaring it.
+    ///
+    /// Empty for the published catalog. A program whose own schema uses a corner
+    /// of XSD's regex language that does not translate would see it here, which
+    /// is the moment to know a constraint is going unread.
+    #[must_use]
+    pub fn unchecked_patterns(&self) -> Vec<(&str, &str)> {
+        let mut out: Vec<_> = self
+            .simple_types
+            .iter()
+            .flat_map(|(name, simple)| {
+                simple
+                    .facets
+                    .patterns
+                    .iter()
+                    .filter(|pattern| !pattern.is_checked())
+                    .map(move |pattern| (name.as_str(), pattern.source()))
+            })
+            .collect();
+        out.sort_unstable();
         out
     }
 }

@@ -14,7 +14,7 @@ use roxmltree::{Document, Node};
 
 use crate::schema::{
     choice, sequence, ComplexContent, ComplexType, Element, Facets, GlobalElement, MaxOccurs,
-    Schema, SimpleType,
+    Pattern, Schema, SimpleType,
 };
 use crate::UciError;
 
@@ -322,7 +322,7 @@ fn simple_type(node: Node<'_, '_>) -> Result<(String, SimpleType), UciError> {
         };
         match tag {
             "enumeration" => facets.enumeration.push(value.to_owned()),
-            "pattern" => facets.patterns.push(value.to_owned()),
+            "pattern" => facets.patterns.push(Pattern::new(value)),
             "length" => facets.length = Some(count("a length")?),
             "minLength" => facets.min_length = Some(count("a minLength")?),
             "maxLength" => facets.max_length = Some(count("a maxLength")?),

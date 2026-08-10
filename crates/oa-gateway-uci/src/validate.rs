@@ -151,6 +151,12 @@ pub enum ViolationKind {
     },
     /// A number outside the bounds its type declares.
     Range { value: String, requirement: String },
+    /// A value matching none of the patterns declared at one link of its type's
+    /// restriction chain.
+    PatternMismatch {
+        value: String,
+        patterns: Vec<String>,
+    },
 }
 
 impl fmt::Display for Violation {
@@ -203,7 +209,8 @@ impl fmt::Display for ViolationKind {
                 let more = if *total > allowed.len() { ", …" } else { "" };
                 write!(
                     f,
-                    "'{value}' is not one of the {total} values this type allows: {sample}{more}"
+                    "'{}' is not one of the {total} values this type allows: {sample}{more}",
+                    abbreviated(value)
                 )
             }
             Self::Length {
@@ -212,13 +219,42 @@ impl fmt::Display for ViolationKind {
                 requirement,
             } => write!(
                 f,
-                "'{value}' is {len} characters, and has to be {requirement}"
+                "'{}' is {len} characters, and has to be {requirement}",
+                abbreviated(value)
             ),
             Self::Range { value, requirement } => {
-                write!(f, "{value} is out of range: it has to be {requirement}")
+                write!(
+                    f,
+                    "{} is out of range: it has to be {requirement}",
+                    abbreviated(value)
+                )
             }
+            Self::PatternMismatch { value, patterns } => match patterns.as_slice() {
+                [only] => write!(
+                    f,
+                    "'{}' does not match the pattern '{}'",
+                    abbreviated(value),
+                    abbreviated(only)
+                ),
+                many => write!(
+                    f,
+                    "'{}' does not match any of the {} patterns this type allows",
+                    abbreviated(value),
+                    many.len()
+                ),
+            },
         }
     }
+}
+
+/// Values arrive from the wire and leave through logs and error frames, so a
+/// long one is cut rather than repeated whole.
+fn abbreviated(text: &str) -> String {
+    const MAX: usize = 60;
+    if text.chars().count() <= MAX {
+        return text.to_owned();
+    }
+    format!("{}…", text.chars().take(MAX).collect::<String>())
 }
 
 fn quoted(names: &[String]) -> String {
@@ -480,6 +516,22 @@ fn check_value(text: &str, schema: &Schema, type_name: &str, path: &str, out: &m
     if let Some(max) = facets.max_length {
         if len > max {
             length(format!("at most {max}"));
+        }
+    }
+
+    for alternatives in &facets.patterns {
+        if !alternatives.iter().any(|pattern| pattern.accepts(text)) {
+            note(
+                out,
+                path,
+                ViolationKind::PatternMismatch {
+                    value: text.to_owned(),
+                    patterns: alternatives
+                        .iter()
+                        .map(|pattern| pattern.source().to_owned())
+                        .collect(),
+                },
+            );
         }
     }
 
@@ -893,6 +945,122 @@ mod tests {
             "{reported:?}"
         );
         assert!(reported[0].ends_with('…'), "{reported:?}");
+    }
+
+    /// One element named Text, typed by the simple type this XSD defines.
+    fn patterned(simple: &str) -> Schema {
+        xsd::compile(&[&format!(
+            r#"
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:element name="Label" type="LabelType"/>
+              <xs:complexType name="LabelType">
+                <xs:sequence><xs:element name="Text" type="TextType"/></xs:sequence>
+              </xs:complexType>
+              {simple}
+            </xs:schema>"#
+        )])
+        .expect("compiles")
+    }
+
+    fn label(text: &str) -> String {
+        format!(r#"{{"Label":{{"Text":"{text}"}}}}"#)
+    }
+
+    /// An XSD pattern constrains the whole value, not some part of it.
+    #[test]
+    fn a_pattern_has_to_match_the_value_entire() {
+        let schema = patterned(
+            r#"<xs:simpleType name="TextType">
+                 <xs:restriction base="xs:string">
+                   <xs:pattern value="[0-9]{3}"/>
+                 </xs:restriction>
+               </xs:simpleType>"#,
+        );
+        assert_eq!(violations(&label("123"), &schema), Vec::<String>::new());
+        assert_eq!(
+            violations(&label("1234"), &schema),
+            vec!["Label.Text: '1234' does not match the pattern '[0-9]{3}'"]
+        );
+        assert_eq!(violations(&label("x123"), &schema).len(), 1);
+    }
+
+    /// XSD's regex grammar has no anchors, so these are ordinary characters.
+    #[test]
+    fn a_dollar_sign_in_a_pattern_is_a_character_not_an_anchor() {
+        let schema = patterned(
+            r#"<xs:simpleType name="TextType">
+                 <xs:restriction base="xs:string">
+                   <xs:pattern value="US$[0-9]+"/>
+                 </xs:restriction>
+               </xs:simpleType>"#,
+        );
+        assert_eq!(violations(&label("US$50"), &schema), Vec::<String>::new());
+        assert_eq!(violations(&label("US50"), &schema).len(), 1);
+    }
+
+    /// Several patterns in one restriction are alternatives. Six types in the
+    /// published catalog rely on this, one of them with eight alternatives.
+    #[test]
+    fn patterns_in_one_restriction_are_alternatives() {
+        let schema = patterned(
+            r#"<xs:simpleType name="TextType">
+                 <xs:restriction base="xs:string">
+                   <xs:pattern value="[A-Z]{2}"/>
+                   <xs:pattern value="[0-9]{4}"/>
+                 </xs:restriction>
+               </xs:simpleType>"#,
+        );
+        assert_eq!(violations(&label("AB"), &schema), Vec::<String>::new());
+        assert_eq!(violations(&label("1234"), &schema), Vec::<String>::new());
+        assert_eq!(
+            violations(&label("AB12"), &schema),
+            vec!["Label.Text: 'AB12' does not match any of the 2 patterns this type allows"]
+        );
+    }
+
+    /// Patterns in different restrictions all have to hold.
+    #[test]
+    fn patterns_down_a_chain_all_apply() {
+        let schema = patterned(
+            r#"<xs:simpleType name="BroadType">
+                 <xs:restriction base="xs:string">
+                   <xs:pattern value="[A-Z0-9]+"/>
+                 </xs:restriction>
+               </xs:simpleType>
+               <xs:simpleType name="TextType">
+                 <xs:restriction base="BroadType">
+                   <xs:pattern value=".{4}"/>
+                 </xs:restriction>
+               </xs:simpleType>"#,
+        );
+        assert_eq!(violations(&label("AB12"), &schema), Vec::<String>::new());
+        // Fits the base but not the derived length.
+        assert_eq!(violations(&label("AB123"), &schema).len(), 1);
+        // Fits the derived length but not the base's alphabet.
+        assert_eq!(violations(&label("ab12"), &schema).len(), 1);
+    }
+
+    /// XSD's regex language is wider than this one in a couple of corners. A
+    /// pattern from one of them is reported as unread, and enforces nothing,
+    /// rather than rejecting every value or refusing to load the schema.
+    #[test]
+    fn a_pattern_this_build_cannot_express_is_reported_not_guessed_at() {
+        let schema = patterned(
+            r#"<xs:simpleType name="TextType">
+                 <xs:restriction base="xs:string">
+                   <xs:pattern value="\i\c*"/>
+                 </xs:restriction>
+               </xs:simpleType>"#,
+        );
+        assert_eq!(
+            schema.unchecked_patterns(),
+            vec![("TextType", r"\i\c*")],
+            "an untranslatable pattern has to be visible"
+        );
+        assert_eq!(
+            violations(&label("anything"), &schema),
+            Vec::<String>::new()
+        );
     }
 
     #[test]

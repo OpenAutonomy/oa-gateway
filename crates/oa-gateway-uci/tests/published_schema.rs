@@ -17,7 +17,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use oa_gateway_uci::{xsd, Message, Schema, MAX_DEPTH};
+use oa_gateway_uci::{xsd, Facets, Message, Schema, MAX_DEPTH};
 
 /// Convert a real message that the hand-written fixture never covered.
 ///
@@ -172,21 +172,54 @@ fn reports_values_the_standard_does_not_allow(schema: &Schema) {
     assert!(mode.contains("'OFFLINE' is not one of"), "{mode}");
     assert!(mode.contains("SIMULATION"), "{mode}");
 
-    // The A-GRA form of a UUID is not the UCI form, and the length facet is
-    // enough to say so.
+    // The A-GRA form of a UUID is not the UCI form, and both the length and the
+    // RFC 4122 pattern say so.
     let reported = report(&with_mode("SIMULATION", unhyphenated));
-    let uuid = reported
+    let uuid: Vec<&String> = reported
         .iter()
-        .find(|v| v.contains("SystemID.UUID"))
-        .unwrap_or_else(|| panic!("expected the UUID to be reported: {reported:?}"));
-    assert!(uuid.contains("32 characters"), "{uuid}");
-    assert!(uuid.contains("exactly 36"), "{uuid}");
+        .filter(|v| v.contains("SystemID.UUID"))
+        .collect();
+    assert!(
+        uuid.iter()
+            .any(|v| v.contains("32 characters") && v.contains("exactly 36")),
+        "expected the length to be reported: {reported:?}"
+    );
+    assert!(
+        uuid.iter()
+            .any(|v| v.contains("does not match the pattern")),
+        "expected the pattern to be reported: {reported:?}"
+    );
 
     // The UCI form passes, so the check is about the form and not about UUIDs.
     let reported = report(&with_mode("SIMULATION", hyphenated));
     assert!(
         !reported.iter().any(|v| v.contains("SystemID.UUID")),
         "a well-formed UUID must not be reported: {reported:?}"
+    );
+}
+
+/// Every pattern in the catalog translates into something this build can check.
+///
+/// XSD's regex language is wider than Rust's in two corners — character-class
+/// subtraction and the `\i` and `\c` name shorthands — and neither appears in
+/// the 143 patterns the standard declares. This is the test that would notice if
+/// a later revision added one, since the alternative is a constraint that reads
+/// as satisfied because nothing could evaluate it.
+fn every_pattern_is_checkable(schema: &Schema) {
+    assert_eq!(
+        schema.unchecked_patterns(),
+        Vec::new(),
+        "these patterns would go unchecked"
+    );
+
+    let declared: usize = schema
+        .simple_types
+        .values()
+        .map(|simple| simple.facets.patterns.len())
+        .sum();
+    assert!(
+        declared > 100,
+        "expected the catalog's patterns to be read; found {declared}"
     );
 }
 
@@ -332,6 +365,7 @@ fn the_published_schema_compiles_and_every_type_resolves() {
 
     reports_what_conversion_accepts(&schema);
     reports_values_the_standard_does_not_allow(&schema);
+    every_pattern_is_checkable(&schema);
 
     let (deepest, depth) = deepest_message(&schema);
     assert!(
@@ -343,12 +377,24 @@ fn the_published_schema_compiles_and_every_type_resolves() {
 
     eprintln!("deepest message: {deepest} at {depth} levels (limit {MAX_DEPTH})");
     eprintln!(
-        "compiled {} documents ({:.1} MiB) in {:?}: {} messages, {} complexTypes, {} simpleTypes",
+        "compiled {} documents ({:.1} MiB) in {:?}: {} messages, {} complexTypes, \
+         {} simpleTypes carrying {} enumerated values and {} patterns",
         documents.len(),
         bytes as f64 / (1024.0 * 1024.0),
         elapsed,
         schema.global_elements.len(),
         schema.complex_types.len(),
         schema.simple_types.len(),
+        facets(&schema, |f| f.enumeration.len()),
+        facets(&schema, |f| f.patterns.len()),
     );
+}
+
+/// Sum something over every simple type's facets.
+fn facets(schema: &Schema, of: impl Fn(&Facets) -> usize) -> usize {
+    schema
+        .simple_types
+        .values()
+        .map(|simple| of(&simple.facets))
+        .sum()
 }

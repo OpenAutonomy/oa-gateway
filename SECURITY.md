@@ -62,11 +62,14 @@ are capped before they are decoded, and conversion refuses nesting deeper than
   now *reported* — `uci.validate` checks each payload against the compiled schema
   and defaults to `warn` where a schema is loaded — but warning is not refusing:
   a non-conforming payload still crosses unless the mode is `reject`.
-- **A valid instance is not a checked instance.** Validation reads what the
-  compiler captures: declarations, occurrence ranges, alternations, abstract
-  types. Facets are not compiled yet, so an enumeration with a value outside its
-  list, a string past its `maxLength`, or a UUID that does not match its pattern
-  passes both conversion and validation.
+- **A valid instance is not a fully checked instance.** Validation reads
+  declarations, occurrence ranges, alternations, abstract types, and the facets a
+  type declares — enumerations, lengths, numeric bounds, and patterns. What it
+  does not read is the lexical space of the primitives underneath: a value typed
+  `xs:dateTime` is not checked for being a date, and an `xs:int` is not checked
+  against the range of an int, so `not-a-timestamp` and 99999999999999 both pass.
+  Patterns from the corners of XSD's regex language that this build cannot
+  translate are reported at startup rather than enforced.
 - **Conversion is best-effort in one direction that still matters.** A payload
   the engine carries in XML is converted for a JSON subscriber or the delivery is
   dropped and the client told, so nothing arrives in an unannounced format. What
