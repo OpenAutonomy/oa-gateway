@@ -17,7 +17,7 @@ Message types come from the UCI 2.5 catalog (Universal Command and Control Inter
 Goals:
 
 - Compliance with the OMS, UCI, and A-GRA standards.
-- Topic-level routing, so systems address message types rather than each other.
+- Topic- and destination-level routing, so traffic is addressed by name rather than by peer.
 - Ease of extensibility, so supporting a new protocol is a new adapter.
 
 Current scope is a prototype: a hand-built slice of UCI 2.5 rather than the full XSD catalog, and no TLS or authentication.
