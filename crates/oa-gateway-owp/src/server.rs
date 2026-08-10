@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use futures_util::{SinkExt, StreamExt};
 use oa_gateway_adapter::AdapterError;
-use oa_gateway_agra::{unwrap as unwrap_ma, wrapper_kind};
+use oa_gateway_agra::{unwrap as unwrap_ma, wrapper_kind, xml_root_local_name};
 use oa_gateway_core::{
     AdapterId, ContentType, Delivery, Engine, Envelope, RouteKey, SubId, DEFAULT_CHANNEL_CAPACITY,
 };
@@ -580,14 +580,13 @@ async fn publish_owp(
         outgoing.push(peeled.inner);
     } else {
         let hint = if oa_gateway_uci::looks_like_xml(payload.as_bytes()) {
-            // Without a schema the element name cannot be read reliably, so the
-            // topic stands in — the same fallback used when conversion fails.
-            session
-                .schema
-                .as_deref()
-                .and_then(|schema| oa_gateway_uci::Message::from_xml(&payload, schema).ok())
-                .map(|m| m.name)
-                .unwrap_or_else(|| topic.clone())
+            // The name is in the document, so no schema is needed to read it,
+            // and this is how the STOMP edge names an XML payload too. The topic
+            // used to stand in when the schema could not parse the payload,
+            // which routed the message under a key no subscriber of that type
+            // would match and reported +OK regardless.
+            xml_root_local_name(&payload)
+                .ok_or_else(|| "XML payload has no element to take a type from".to_string())?
         } else {
             type_hint_from_json(&payload).map_err(|e| e.to_string())?
         };

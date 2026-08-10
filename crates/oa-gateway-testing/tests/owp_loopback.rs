@@ -251,3 +251,64 @@ async fn engine_xml_becomes_owp_json() {
 
     shutdown.cancel();
 }
+
+/// An XML publish is named by its root element, not by the topic it arrived on.
+///
+/// The two differ deliberately here: a subscriber keyed on the message type is
+/// the normal case, and naming the payload after the topic would route past it
+/// while the publisher was still told +OK.
+#[tokio::test]
+async fn xml_publish_takes_its_type_from_the_document() {
+    let engine = Arc::new(Engine::new());
+    let loopback = Loopback::new(engine.clone(), "loop-xml");
+    let mut rx = loopback
+        .subscribe(RouteKey::typed("demo", "PositionReport"))
+        .await
+        .unwrap();
+
+    let (url, shutdown) = start_owp(engine, false).await;
+    let mut ws = connect(&url).await;
+    handshake(&mut ws).await;
+
+    let xml = r#"<PositionReport xmlns="https://www.vdl.afrl.af.mil/programs/oam"><MessageData/></PositionReport>"#;
+    send_text(&mut ws, &format!("PUB demo {xml}")).await;
+    match parse_server(&recv_text(&mut ws).await).unwrap() {
+        ServerOp::Ok => {}
+        other => panic!("expected +OK after PUB, got {other}"),
+    }
+
+    let got = timeout(Duration::from_secs(2), rx.recv())
+        .await
+        .expect("timeout")
+        .expect("closed");
+    assert_eq!(got.route.type_hint.as_deref(), Some("PositionReport"));
+    assert_eq!(got.route.topic, "demo");
+    assert_eq!(got.content_type, ContentType::xml());
+
+    shutdown.cancel();
+}
+
+#[tokio::test]
+async fn xml_with_no_element_is_refused_rather_than_named_after_the_topic() {
+    let engine = Arc::new(Engine::new());
+    let (url, shutdown) = start_owp(engine, false).await;
+    let mut ws = connect(&url).await;
+    handshake(&mut ws).await;
+
+    // Opens like XML and declares nothing, so there is no name to route by.
+    send_text(&mut ws, r#"PUB demo <?xml version="1.0"?>"#).await;
+    match parse_server(&recv_text(&mut ws).await).unwrap() {
+        ServerOp::Err { details, .. } => {
+            assert!(
+                details
+                    .as_deref()
+                    .unwrap_or_default()
+                    .contains("no element"),
+                "unhelpful details: {details:?}"
+            );
+        }
+        other => panic!("expected ERR for a payload with no element, got {other}"),
+    }
+
+    shutdown.cancel();
+}
