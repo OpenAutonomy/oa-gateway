@@ -36,6 +36,10 @@ Reference clones under `repos/` are not compiled into this workspace.
 
 ## Getting started
 
+The toolchain is pinned in `rust-toolchain.toml`, so any `cargo` command picks up the right compiler and there is nothing else to install. Start with the default configuration: it brings up a WebSocket listener on `127.0.0.1:9000` and routes entirely in memory, which is enough to publish a message and watch it reach a second connection. Everything past that is opt-in — bridging ActiveMQ needs a running broker, and converting between OMS JSON and UCI XML needs a local copy of the UCI schema.
+
+<!--
+
 ```bash
 cargo test --workspace --locked
 cargo run -p oa-gateway -- --help
@@ -130,6 +134,8 @@ python3 scripts/stomp_xml_smoke.py send
 `scripts/stomp_xml_smoke.py recv` watches the topic directly (ActiveMQ fan-out, not oa-gateway). Outbound XML (loopback → broker) is what the ignored test asserts. Fixture XML lives in `crates/oa-gateway-testing/fixtures/`.
 
 No TLS. Console: <http://127.0.0.1:8161> (`admin` / `admin`).
+
+-->
 
 ## Documentation
 
