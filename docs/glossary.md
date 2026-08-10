@@ -19,7 +19,7 @@ The gateway's own vocabulary, then the domain terms it borrows. Expansions below
 | Term | Meaning |
 |---|---|
 | **OMS** | Open Mission Systems. The standards family this gateway interoperates with; `repos/oms_standard`. |
-| **UCI** | Universal Command and Control Interface. Supplies the message schema — message types such as `PositionReport` and `SubsystemStatus`; `repos/uci_standard`. `oa-gateway-uci` implements a hand-built slice of the 2.5 catalog, not the full XSD. |
+| **UCI** | Universal Command and Control Interface. Supplies the message schema — message types such as `PositionReport` and `SubsystemStatus`; `repos/uci_standard`. `oa-gateway-uci` compiles the published XSD, so conversion covers whatever catalog the operator loads through `uci.schema`. |
 | **CAL** | Critical Abstraction Layer. The OMS component boundary a participant implements. Java CALs speak OpenWire; `uci-cal-jms` and `sk-cal` are CAL implementations this gateway is meant to sit alongside. |
 | **OWP** | OMS WebSocket Protocol. The text-frame protocol `oa-gateway-owp` serves, with `INIT`/`SUB`/`PUB`/`MSG`/`OK`/`ERR` operations. Its grammar comes from OMSC-SPC-013, the language-agnostic CAL specification. |
 | **MT** | Message type. Used in this repo for the UCI type name carried in `type_hint`, as in "the wrapper MT and the inner MT". |
