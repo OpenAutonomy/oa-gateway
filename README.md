@@ -46,6 +46,28 @@ cargo build --release
 
 That leaves the host binary at `target/release/oa-gateway`.
 
+### Launching with a config
+
+Adapters are turned on by configuration, so launching means naming a config file:
+
+```bash
+./target/release/oa-gateway config/default.toml
+```
+
+```
+INFO oa_gateway: config loaded path=config/default.toml
+INFO oa_gateway: starting loopback adapter id=loopback
+INFO oa_gateway: starting owp adapter id=owp bind=127.0.0.1:9000
+INFO oa_gateway: oa-gateway running — Ctrl-C to stop
+INFO oa_gateway_owp::server: owp listening local=127.0.0.1:9000 adapter=owp
+```
+
+`config/default.toml` enables the two adapters that need nothing external: an in-process loopback, and OWP over WebSocket on `127.0.0.1:9000`. The STOMP client is defined but disabled, so no broker has to be running. `config/asb.toml` points that client at a local ActiveMQ broker and converts to UCI XML on the way, so it needs both a running broker and the UCI schema on disk.
+
+With no argument at all, oa-gateway looks for `config/default.toml` in the current directory and its two parents, then falls back to built-in defaults. A path you name explicitly has to exist. Unknown keys are rejected rather than ignored, so a misspelled setting fails at startup instead of silently doing nothing. Set `RUST_LOG` to change log filtering.
+
+There is **no TLS and no authentication** — bind to loopback only.
+
 <!--
 
 ```bash
