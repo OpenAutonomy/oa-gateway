@@ -39,7 +39,7 @@ Reference clones under `repos/` are not compiled into this workspace.
 To get started, download and build the project. The toolchain is pinned in `rust-toolchain.toml`, so `cargo` picks up the right compiler and there is nothing else to install.
 
 ```bash
-git clone https://gitlab.com/jburns314/oa-gateway.git
+git clone https://github.com/jburns3141/oa-gateway.git
 cd oa-gateway
 cargo build --release
 ```
