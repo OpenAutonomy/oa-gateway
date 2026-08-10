@@ -1,0 +1,46 @@
+# Dependency policy, enforced by cargo-deny in .github/workflows/audit.yml.
+#
+# Roughly 110 packages arrive transitively for a gateway that terminates
+# untrusted connections, so the tree needs a stated policy rather than a habit.
+
+[advisories]
+# RustSec advisories fail the check. Anything tolerated belongs here with a
+# reason and the condition for removing it again, not as a silenced category.
+ignore = []
+yanked = "deny"
+# Only report unmaintained crates we chose ourselves. Transitive ones are not
+# ours to swap, and failing on them turns an upstream decision into our outage.
+unmaintained = "workspace"
+
+[licenses]
+# Deliberately minimal: each entry is here because something in the tree needs
+# it. A new license class fails the check, which is the point — it forces a
+# decision instead of arriving unnoticed in a lock file bump.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-3-Clause",
+    "Unicode-3.0",
+]
+# No copyleft license is listed, and none is needed. The crates that offer one
+# offer a permissive alternative too — r-efi is MIT or Apache-2.0 or
+# LGPL-2.1-or-later, memchr is MIT or Unlicense — and an allowed choice from an
+# OR expression satisfies the check.
+
+[bans]
+# Duplicate versions are unavoidable in a tree this size: getrandom, syn, and
+# the wasi crates all appear twice because different dependencies moved at
+# different times. Worth seeing, not worth blocking a build over.
+multiple-versions = "warn"
+# A wildcard version requirement lets an unreviewed major version arrive on its
+# own. Path dependencies are exempt because the crates in this workspace refer
+# to each other that way and are not published.
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+# crates.io only. A git dependency is how an unreviewed fork of something on the
+# connection path would enter without showing up in a version bump.
+unknown-registry = "deny"
+unknown-git = "deny"

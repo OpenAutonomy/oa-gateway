@@ -21,6 +21,12 @@ RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked
 
 That is what CI runs on every push and pull/merge request (GitHub Actions and GitLab CI).
 
+Touching dependencies also runs `cargo deny check` against the policy in
+`deny.toml` — advisories, licenses, and sources. Install it with
+`cargo install --locked cargo-deny` (or `brew install cargo-deny`) to see a
+failure before pushing. Adding a dependency under a license the policy does not
+list is meant to fail: say in the PR why the license is acceptable, and add it.
+
 The gate needs no UCI schema: conversion tests use a small fixture schema. To exercise the compiler against the real 722-message catalog, fetch the standard once and the ignored test finds it:
 
 ```bash

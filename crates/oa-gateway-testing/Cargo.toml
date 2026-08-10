@@ -3,7 +3,7 @@ name = "oa-gateway-testing"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-publish = false
+publish.workspace = true
 description = "Shared fixtures and test harness for oa-gateway (not a runtime crate)"
 
 [features]

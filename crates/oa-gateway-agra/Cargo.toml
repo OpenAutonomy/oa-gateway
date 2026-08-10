@@ -3,6 +3,7 @@ name = "oa-gateway-agra"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish.workspace = true
 description = "A-GRA MA_RxDataPayload / MA_TxDataPayloadCommand wrap and unwrap"
 
 [dependencies]

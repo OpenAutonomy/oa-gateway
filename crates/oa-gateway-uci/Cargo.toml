@@ -3,6 +3,7 @@ name = "oa-gateway-uci"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish.workspace = true
 description = "Schema-aware UCI XML ↔ OMS JSON codec, driven by the published XSD"
 
 [dependencies]

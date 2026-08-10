@@ -78,6 +78,12 @@ without notice.
 
 ## Dependencies
 
-Roughly 110 packages come in transitively, and there is no automated advisory
-scanning yet. Until there is, a dependency advisory is worth reporting through
-the channel above like any other finding.
+Roughly 110 packages come in transitively. `cargo-deny` enforces the policy in
+`deny.toml` — RustSec advisories, yanked releases, a minimal license allow list,
+and crates.io as the only source — and it runs weekly rather than only on push,
+because advisories are published against code that has not changed. Dependabot
+proposes the updates.
+
+That covers what is known to the advisory database. A vulnerability you have
+found in a dependency, and which is not published yet, still belongs in the
+channel above.

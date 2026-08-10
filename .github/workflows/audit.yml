@@ -1,0 +1,39 @@
+name: audit
+
+# Separate from ci.yml because this has a different trigger, not a different
+# gate: a new advisory is published against code that has not changed, so a
+# push-only check would report a clean tree indefinitely.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**/Cargo.toml"
+      - Cargo.lock
+      - deny.toml
+      - .github/workflows/audit.yml
+  pull_request:
+    paths:
+      - "**/Cargo.toml"
+      - Cargo.lock
+      - deny.toml
+      - .github/workflows/audit.yml
+  schedule:
+    # Weekly, off the hour: scheduled jobs on the hour queue behind everyone
+    # else's. GitHub disables schedules after 60 days without repository
+    # activity, so a quiet fork stops being watched — re-enable it by hand.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cargo-deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          # Named individually so a new check added upstream cannot start
+          # failing this workflow without the policy in deny.toml being read.
+          command: check advisories bans licenses sources

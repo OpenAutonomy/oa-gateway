@@ -3,6 +3,7 @@ name = "oa-gateway-stomp"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish.workspace = true
 description = "ActiveMQ STOMP adapter (client) for the multi-protocol gateway"
 
 [dependencies]

@@ -16,6 +16,10 @@ resolver = "2"
 edition = "2021"
 license = "MIT"
 version = "0.1.0"
+# Nothing here is on crates.io. Saying so keeps the wildcard check in deny.toml
+# meaningful: the crates in this workspace refer to each other by path, which is
+# only a defensible `*` requirement while they are unpublished.
+publish = false
 
 [workspace.dependencies]
 async-trait = "0.1"
