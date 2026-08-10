@@ -73,6 +73,53 @@ fn round_trips_a_message_the_fixture_never_had(schema: &Schema) {
     );
 }
 
+/// Validation against the real schema, on the message the conversion test uses.
+///
+/// It converts cleanly in both directions and it is not a valid instance of the
+/// standard: four elements UCI requires are absent. That gap is the whole reason
+/// validation is separate from conversion, and it is worth pinning to a real
+/// message rather than a fixture built to fail.
+fn reports_what_conversion_accepts(schema: &Schema) {
+    let src = r#"{
+        "SubsystemStatus": {
+            "MessageHeader": {
+                "Timestamp": "2026-01-22T00:00:00Z",
+                "SchemaVersion": "002.5.0",
+                "Mode": "SIMULATION"
+            },
+            "MessageData": { "SubsystemState": "OPERATE" }
+        }
+    }"#;
+    let message = Message::from_json(src, schema).expect("it converts; that is the point");
+    let reported: Vec<String> = message
+        .violations(schema)
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+
+    for expected in [
+        "SubsystemStatus: 'SecurityInformation' is required and absent",
+        "SubsystemStatus.MessageHeader: 'SystemID' is required and absent",
+        "SubsystemStatus.MessageData: 'SubsystemID' is required and absent",
+    ] {
+        assert!(
+            reported.iter().any(|v| v == expected),
+            "expected to be told {expected:?}, got {reported:?}"
+        );
+    }
+
+    // The same message as XML has to report the same list: validation reads the
+    // schema, not the serialization it arrived in.
+    let xml = message.to_xml(schema).expect("emits XML");
+    let from_xml = Message::from_xml(&xml, schema).expect("reads its own XML");
+    let reported_from_xml: Vec<String> = from_xml
+        .violations(schema)
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    assert_eq!(reported, reported_from_xml);
+}
+
 /// The deepest message the catalog can express, and how deep it is.
 ///
 /// `MAX_DEPTH` has to sit above anything the standard declares, or the limit
@@ -212,6 +259,8 @@ fn the_published_schema_compiles_and_every_type_resolves() {
     );
 
     round_trips_a_message_the_fixture_never_had(&schema);
+
+    reports_what_conversion_accepts(&schema);
 
     let (deepest, depth) = deepest_message(&schema);
     assert!(

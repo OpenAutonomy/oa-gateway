@@ -13,6 +13,9 @@ The gateway's own vocabulary, then the domain terms it borrows. Expansions below
 | **Adapter** | A protocol plugin owning its own I/O loop. Talks only to the engine, never to another adapter. |
 | **Engine** | The router. Protocol-agnostic, payload-blind, in-process. |
 | **wildcard subscription** | A subscription with `type_hint: None`, matching every type on its topic. |
+| **conversion** | Mapping a payload between OMS JSON and UCI XML. Deliberately forgiving: an element the schema does not declare is carried rather than refused. |
+| **validation** | Checking a payload against what the compiled schema states — declarations, occurrence ranges, alternations, abstract types. Separate from conversion, because a message can convert cleanly in both directions and still not be a valid instance of the standard. Controlled by `uci.validate`. |
+| **violation** | One way a payload departs from the schema, with a dotted path to the element. A message is reported in full rather than at the first fault. |
 
 ## Domain terms
 

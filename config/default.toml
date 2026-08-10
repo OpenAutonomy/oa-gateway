@@ -1,11 +1,18 @@
 # Prototype host config. No TLS and no authentication — bind loopback only.
 
 # No UCI schema is needed here, because xml_baseline is off and payloads cross
-# the engine untouched. To convert, run scripts/fetch-uci-schema.sh and uncomment
-# the block below; see config/asb.toml for the XML-toward-ActiveMQ setup.
+# the engine untouched. To convert, or to have payloads checked against the
+# standard, run scripts/fetch-uci-schema.sh and uncomment the block below; see
+# config/asb.toml for the XML-toward-ActiveMQ setup.
+#
+# validate decides what happens to a payload the schema does not permit: "warn"
+# reports it and carries it anyway, "reject" refuses it and tells the peer, "off"
+# skips the check. It does nothing without a schema, since there is nothing to
+# check against.
 # [uci]
 # schema = ["schema/uci/UCI_MessageDefinitions_v2_5_0.xsd",
 #           "schema/uci/UCI_SecurityMarkings_v2_5_0.xsd"]
+# validate = "warn"
 
 [loopback]
 enabled = true

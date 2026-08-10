@@ -16,6 +16,14 @@ schema = [
   "schema/uci/UCI_MessageDefinitions_v2_5_0.xsd",
   "schema/uci/UCI_SecurityMarkings_v2_5_0.xsd",
 ]
+# What to do about a payload the schema does not permit — an element no type
+# declares, a required one absent, an occurrence range or an alternation broken.
+# "warn" reports it and carries the message anyway, which is what you want while
+# bringing a producer up. "reject" refuses it and tells the peer what was wrong.
+# "off" skips the check, and the parse it costs. Conversion succeeding says
+# nothing about this: a message can convert cleanly and still not be a valid
+# instance of the standard.
+validate = "warn"
 
 [loopback]
 enabled = true

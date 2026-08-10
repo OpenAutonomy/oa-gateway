@@ -56,11 +56,17 @@ Both edges now cap what a peer can hand them: `stomp.max_frame_size` and
 are capped before they are decoded, and conversion refuses nesting deeper than
 96 elements. What remains is about correctness rather than resources:
 
-- **`maxOccurs` and `choice` are not enforced during conversion.** `maxOccurs`
-  decides only whether a field becomes an array, never how many members it may
-  hold, and an alternation converts as a set of optional siblings. A document can
-  convert cleanly and still not be a valid instance of the standard: conversion
-  is not validation.
+- **Conversion still accepts what the standard does not.** `maxOccurs` decides
+  only whether a field becomes an array, an alternation converts as a set of
+  optional siblings, and an undeclared element is carried as a string. Those are
+  now *reported* — `uci.validate` checks each payload against the compiled schema
+  and defaults to `warn` where a schema is loaded — but warning is not refusing:
+  a non-conforming payload still crosses unless the mode is `reject`.
+- **A valid instance is not a checked instance.** Validation reads what the
+  compiler captures: declarations, occurrence ranges, alternations, abstract
+  types. Facets are not compiled yet, so an enumeration with a value outside its
+  list, a string past its `maxLength`, or a UUID that does not match its pattern
+  passes both conversion and validation.
 - **Conversion is best-effort in one direction that still matters.** A payload
   the engine carries in XML is converted for a JSON subscriber or the delivery is
   dropped and the client told, so nothing arrives in an unannounced format. What

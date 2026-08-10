@@ -13,6 +13,7 @@ mod instance;
 mod json;
 mod schema;
 pub mod slice;
+pub mod validate;
 mod xml;
 pub mod xsd;
 
@@ -33,9 +34,21 @@ pub const MAX_DEPTH: usize = 96;
 
 pub use error::UciError;
 pub use instance::{Complex, Field, Message, Node, Simple};
-pub use schema::{el, el_many, el_opt, ComplexContent, ComplexType, Element, MaxOccurs, Schema};
+pub use schema::{
+    choice, el, el_many, el_opt, sequence, ComplexContent, ComplexType, Element, Group, GroupKind,
+    MaxOccurs, Schema,
+};
+pub use validate::{validate, Mode as ValidateMode, Violation, ViolationKind};
 
 impl Message {
+    /// Every way this message departs from `schema`; empty when none.
+    ///
+    /// See [`mod@validate`] for what that does and does not cover.
+    #[must_use]
+    pub fn violations(&self, schema: &Schema) -> Vec<Violation> {
+        validate::validate(self, schema)
+    }
+
     pub fn from_json(text: &str, schema: &Schema) -> Result<Self, UciError> {
         json::from_json(text, schema)
     }

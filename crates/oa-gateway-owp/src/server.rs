@@ -11,6 +11,7 @@ use oa_gateway_agra::{unwrap as unwrap_ma, wrapper_kind, xml_root_local_name};
 use oa_gateway_core::{
     AdapterId, ContentType, Delivery, Engine, Envelope, RouteKey, SubId, DEFAULT_CHANNEL_CAPACITY,
 };
+use oa_gateway_uci::validate::{summarize, Mode as ValidateMode, Violation};
 use oa_gateway_uci::Schema;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, Semaphore};
@@ -64,6 +65,9 @@ pub struct OwpConfig {
     pub max_connections: usize,
     /// Subscriptions one connection may hold.
     pub max_subscriptions: usize,
+    /// What to do about a payload that does not follow the loaded schema.
+    /// Has no effect without one: there is nothing to check against.
+    pub validate: ValidateMode,
 }
 
 impl Default for OwpConfig {
@@ -79,6 +83,7 @@ impl Default for OwpConfig {
             max_frame_size: DEFAULT_MAX_FRAME_SIZE,
             max_connections: DEFAULT_MAX_CONNECTIONS,
             max_subscriptions: DEFAULT_MAX_SUBSCRIPTIONS,
+            validate: ValidateMode::default(),
         }
     }
 }
@@ -273,18 +278,20 @@ enum Report {
     Skip,
 }
 
-/// Routes this connection has been warned about publishing into thin air.
+/// Routes this connection has already been warned about.
 ///
-/// A client publishing where nothing is subscribed rarely does it once, so
-/// reporting every message would bury the log. Reporting also stops past
-/// [`Unroutable::CAP`] distinct routes, so a client cycling through topics
-/// cannot turn the warning into unbounded memory or log volume.
+/// A client that publishes into thin air, or sends a payload the schema does not
+/// permit, rarely does it once, so reporting every message would bury the log.
+/// Reporting also stops past [`SeenRoutes::CAP`] distinct routes, so a client
+/// cycling through topics cannot turn a warning into unbounded memory or log
+/// volume. One tracker per kind of warning, so a noisy route of one kind does not
+/// hide the other.
 #[derive(Default)]
-struct Unroutable {
+struct SeenRoutes {
     seen: HashSet<RouteKey>,
 }
 
-impl Unroutable {
+impl SeenRoutes {
     const CAP: usize = 64;
 
     fn report(&mut self, route: &RouteKey) -> Report {
@@ -304,7 +311,8 @@ async fn run_session(mut session: Session) -> Result<(), AdapterError> {
     let (out_tx, mut out_rx) = mpsc::channel::<ServerOp>(DEFAULT_CHANNEL_CAPACITY);
     let mut state = State::AwaitingInit;
     let mut subs: HashMap<String, LiveSub> = HashMap::new();
-    let mut unroutable = Unroutable::default();
+    let mut unroutable = SeenRoutes::default();
+    let mut invalid = SeenRoutes::default();
 
     loop {
         tokio::select! {
@@ -328,6 +336,7 @@ async fn run_session(mut session: Session) -> Result<(), AdapterError> {
                             &mut state,
                             &mut subs,
                             &mut unroutable,
+                            &mut invalid,
                             &out_tx,
                             text.as_str(),
                         )
@@ -371,7 +380,8 @@ async fn handle_text(
     session: &Session,
     state: &mut State,
     subs: &mut HashMap<String, LiveSub>,
-    unroutable: &mut Unroutable,
+    unroutable: &mut SeenRoutes,
+    invalid: &mut SeenRoutes,
     out_tx: &mpsc::Sender<ServerOp>,
     text: &str,
 ) -> Result<(), Fatal> {
@@ -430,7 +440,7 @@ async fn handle_text(
                 service_id,
             },
             ClientOp::Pub { topic, payload },
-        ) => match publish_owp(session, unroutable, service_id, topic, payload).await {
+        ) => match publish_owp(session, unroutable, invalid, service_id, topic, payload).await {
             Ok(()) => {
                 if *verbose {
                     send(out_tx, ServerOp::Ok).await;
@@ -503,16 +513,58 @@ async fn handle_text(
             let xml_baseline = session.config.xml_baseline;
             let schema = session.schema.clone();
             let adapter_id = session.adapter_id.clone();
+            let validate = session.config.validate;
             let forwarder = tokio::spawn(async move {
                 // The client is told about every dropped delivery, since each is
                 // a message it will not receive; the log is told once, since the
                 // cause is the same for every payload on this route.
                 let mut logged = false;
+                let mut logged_invalid = false;
                 while let Some(delivery) = rx.recv().await {
                     let Ok(raw) = String::from_utf8(delivery.envelope.payload.to_vec()) else {
                         warn!("dropping non-utf8 payload destined for OWP");
                         continue;
                     };
+
+                    // What arrived off the bus, before any conversion of ours,
+                    // so a violation is attributed to the producer.
+                    let violations = violations_of(raw.as_bytes(), schema.as_deref(), validate);
+                    if !violations.is_empty() {
+                        let summary = summarize(&violations);
+                        if validate == ValidateMode::Reject {
+                            if !logged_invalid {
+                                logged_invalid = true;
+                                warn!(
+                                    adapter = %adapter_id,
+                                    sid = %local_sid,
+                                    violations = %summary,
+                                    "dropping a delivery that does not follow the UCI schema; \
+                                     later ones on this subscription are not logged"
+                                );
+                            }
+                            let details = format!(
+                                "delivery on {local_sid} does not follow the UCI schema: {summary}"
+                            );
+                            if forward_tx
+                                .send(err_op(OwpError::InvalidMessage, Some(&details)))
+                                .await
+                                .is_err()
+                            {
+                                break;
+                            }
+                            continue;
+                        }
+                        if !logged_invalid {
+                            logged_invalid = true;
+                            warn!(
+                                adapter = %adapter_id,
+                                sid = %local_sid,
+                                violations = %summary,
+                                "delivered payload does not follow the UCI schema; forwarding it \
+                                 anyway, and later ones on this subscription are not logged"
+                            );
+                        }
+                    }
                     let payload = if xml_baseline {
                         match xml_to_oms_json(&raw, schema.as_deref()) {
                             Ok(json) => json,
@@ -593,7 +645,8 @@ async fn handle_text(
 
 async fn publish_owp(
     session: &Session,
-    unroutable: &mut Unroutable,
+    unroutable: &mut SeenRoutes,
+    invalid: &mut SeenRoutes,
     service_id: &str,
     topic: String,
     payload: String,
@@ -633,6 +686,10 @@ async fn publish_owp(
         );
     }
 
+    // Convert and check everything before publishing any of it: an A-GRA wrapper
+    // and the message inside it are one publish as far as the client is
+    // concerned, and half of one is worse than neither.
+    let mut ready = Vec::with_capacity(outgoing.len());
     for env in outgoing {
         let env = if session.config.xml_baseline {
             let schema = session.schema.as_deref().ok_or_else(|| {
@@ -642,7 +699,36 @@ async fn publish_owp(
         } else {
             env
         };
-        let env = stamp(env);
+
+        let violations = violations_of(
+            &env.payload,
+            session.schema.as_deref(),
+            session.config.validate,
+        );
+        if !violations.is_empty() {
+            let summary = summarize(&violations);
+            if session.config.validate == ValidateMode::Reject {
+                return Err(format!("payload does not follow the UCI schema: {summary}"));
+            }
+            match invalid.report(&env.route) {
+                Report::Skip => {}
+                report => {
+                    warn!(
+                        adapter = %session.adapter_id,
+                        service = %service_id,
+                        route = %env.route,
+                        violations = %summary,
+                        "published payload does not follow the UCI schema; carrying it anyway"
+                    );
+                    cap_notice(report, &session.adapter_id, service_id);
+                }
+            }
+        }
+
+        ready.push(stamp(env));
+    }
+
+    for env in ready {
         let route = env.route.clone();
         // A publish that matches nothing is legal pub/sub, but it is far more
         // often a topic the gateway was never configured to carry — a STOMP
@@ -658,19 +744,51 @@ async fn publish_owp(
                         route = %route,
                         "nothing is subscribed to this route, so the publish went nowhere"
                     );
-                    if matches!(report, Report::Final) {
-                        warn!(
-                            adapter = %session.adapter_id,
-                            service = %service_id,
-                            "reached the unroutable route limit; no more will be reported \
-                             on this connection"
-                        );
-                    }
+                    cap_notice(report, &session.adapter_id, service_id);
                 }
             }
         }
     }
     Ok(())
+}
+
+/// Say when a tracker has stopped naming routes, so a quiet log is not mistaken
+/// for a quiet client.
+fn cap_notice(report: Report, adapter: &AdapterId, service_id: &str) {
+    if matches!(report, Report::Final) {
+        warn!(
+            adapter = %adapter,
+            service = %service_id,
+            "reached the reporting limit for this connection; further routes of this \
+             kind will not be named"
+        );
+    }
+}
+
+/// Everything in `payload` that `schema` does not permit.
+///
+/// Parses on its own account rather than reusing the conversion's parse. The two
+/// run on different paths — conversion only when the XML baseline is on, this
+/// whenever a schema is loaded and validation is not off — and one obvious check
+/// is worth more than one saved parse. A payload that will not parse at all is a
+/// conversion failure, reported where conversion happens, so nothing is said
+/// about it twice.
+fn violations_of(payload: &[u8], schema: Option<&Schema>, mode: ValidateMode) -> Vec<Violation> {
+    if !mode.is_on() {
+        return Vec::new();
+    }
+    let Some(schema) = schema else {
+        return Vec::new();
+    };
+    let Ok(text) = std::str::from_utf8(payload) else {
+        return Vec::new();
+    };
+    let parsed = if oa_gateway_uci::looks_like_xml(payload) {
+        oa_gateway_uci::Message::from_xml(text, schema)
+    } else {
+        oa_gateway_uci::Message::from_json(text, schema)
+    };
+    parsed.map(|m| m.violations(schema)).unwrap_or_default()
 }
 
 fn toward_xml(mut env: Envelope, schema: &Schema) -> Result<Envelope, String> {
@@ -748,7 +866,7 @@ mod tests {
 
     #[test]
     fn a_route_is_reported_once() {
-        let mut unroutable = Unroutable::default();
+        let mut unroutable = SeenRoutes::default();
         let route = RouteKey::typed("SystemStatus", "SystemStatus");
 
         assert!(matches!(unroutable.report(&route), Report::New));
@@ -762,8 +880,8 @@ mod tests {
 
     #[test]
     fn reporting_stops_at_the_cap() {
-        let mut unroutable = Unroutable::default();
-        for i in 0..Unroutable::CAP - 1 {
+        let mut unroutable = SeenRoutes::default();
+        for i in 0..SeenRoutes::CAP - 1 {
             let route = RouteKey::typed(format!("topic-{i}"), "Ping");
             assert!(matches!(unroutable.report(&route), Report::New));
         }
@@ -776,6 +894,6 @@ mod tests {
             let route = RouteKey::typed(format!("flood-{i}"), "Ping");
             assert!(matches!(unroutable.report(&route), Report::Skip));
         }
-        assert_eq!(unroutable.seen.len(), Unroutable::CAP);
+        assert_eq!(unroutable.seen.len(), SeenRoutes::CAP);
     }
 }

@@ -35,10 +35,32 @@ pub struct ComplexType {
 
 #[derive(Debug, Clone)]
 pub enum ComplexContent {
-    Empty,
-    Sequence { elements: Vec<Element> },
-    Choice { elements: Vec<Element> },
-    Extension { base: String, extra: Vec<Element> },
+    /// The compositors declared directly on the type. A type with no content
+    /// model has none.
+    Groups(Vec<Group>),
+    Extension {
+        base: String,
+        extra: Vec<Group>,
+    },
+}
+
+/// A run of element declarations under one compositor.
+///
+/// Kept apart from the flat list of declarations because the compositor is the
+/// difference between siblings and alternatives, and only one of those can be
+/// checked by counting.
+#[derive(Debug, Clone)]
+pub struct Group {
+    pub kind: GroupKind,
+    pub elements: Vec<Element>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GroupKind {
+    /// Members stand on their own, each governed by its own occurrence range.
+    Sequence,
+    /// Members are alternatives to one another.
+    Choice,
 }
 
 #[derive(Debug, Clone)]
@@ -92,13 +114,18 @@ impl Schema {
     }
 
     pub fn complex(&mut self, name: impl Into<String>, elements: Vec<Element>) -> &mut Self {
+        self.complex_groups(name, vec![sequence(elements)])
+    }
+
+    /// Declare a type from explicit compositors, for a choice or a mix of both.
+    pub fn complex_groups(&mut self, name: impl Into<String>, groups: Vec<Group>) -> &mut Self {
         let name = name.into();
         self.complex_types.insert(
             name.clone(),
             ComplexType {
                 name,
                 abstract_: false,
-                content: ComplexContent::Sequence { elements },
+                content: ComplexContent::Groups(groups),
             },
         );
         self
@@ -115,7 +142,7 @@ impl Schema {
             ComplexType {
                 name,
                 abstract_: true,
-                content: ComplexContent::Sequence { elements },
+                content: ComplexContent::Groups(vec![sequence(elements)]),
             },
         );
         self
@@ -135,7 +162,7 @@ impl Schema {
                 abstract_: false,
                 content: ComplexContent::Extension {
                     base: base.into(),
-                    extra,
+                    extra: vec![sequence(extra)],
                 },
             },
         );
@@ -157,14 +184,27 @@ impl Schema {
     /// on itself would otherwise recurse until the stack ran out, at startup or
     /// on the first message that touched the type.
     pub fn flatten<'a>(&'a self, type_name: &str) -> Result<Vec<&'a Element>, super::UciError> {
-        self.flatten_chain(type_name, &mut Vec::new())
+        Ok(self
+            .groups(type_name)?
+            .into_iter()
+            .flat_map(|g| g.elements.iter())
+            .collect())
     }
 
-    fn flatten_chain<'a>(
+    /// The compositors a type is built from, base types first.
+    ///
+    /// [`Self::flatten`] answers which elements may appear; this also answers
+    /// under what compositor, which is what tells a set of optional siblings
+    /// apart from a set of alternatives.
+    pub fn groups<'a>(&'a self, type_name: &str) -> Result<Vec<&'a Group>, super::UciError> {
+        self.groups_chain(type_name, &mut Vec::new())
+    }
+
+    fn groups_chain<'a>(
         &'a self,
         type_name: &str,
         chain: &mut Vec<String>,
-    ) -> Result<Vec<&'a Element>, super::UciError> {
+    ) -> Result<Vec<&'a Group>, super::UciError> {
         if chain.iter().any(|seen| seen == type_name) {
             chain.push(type_name.to_owned());
             return Err(super::UciError::Xsd(format!(
@@ -177,13 +217,10 @@ impl Schema {
             .get(type_name)
             .ok_or_else(|| super::UciError::UnknownType(type_name.to_owned()))?;
         match &ct.content {
-            ComplexContent::Empty => Ok(Vec::new()),
-            ComplexContent::Sequence { elements } | ComplexContent::Choice { elements } => {
-                Ok(elements.iter().collect())
-            }
+            ComplexContent::Groups(groups) => Ok(groups.iter().collect()),
             ComplexContent::Extension { base, extra } => {
                 chain.push(type_name.to_owned());
-                let mut out = self.flatten_chain(base, chain)?;
+                let mut out = self.groups_chain(base, chain)?;
                 chain.pop();
                 out.extend(extra.iter());
                 Ok(out)
@@ -231,6 +268,24 @@ impl Schema {
 impl Default for Schema {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// One compositor whose members stand on their own.
+#[must_use]
+pub fn sequence(elements: Vec<Element>) -> Group {
+    Group {
+        kind: GroupKind::Sequence,
+        elements,
+    }
+}
+
+/// One compositor whose members are alternatives.
+#[must_use]
+pub fn choice(elements: Vec<Element>) -> Group {
+    Group {
+        kind: GroupKind::Choice,
+        elements,
     }
 }
 

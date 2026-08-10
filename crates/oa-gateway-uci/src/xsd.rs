@@ -12,7 +12,9 @@ use std::collections::BTreeSet;
 
 use roxmltree::{Document, Node};
 
-use crate::schema::{ComplexContent, ComplexType, Element, GlobalElement, MaxOccurs, Schema};
+use crate::schema::{
+    choice, sequence, ComplexContent, ComplexType, Element, GlobalElement, MaxOccurs, Schema,
+};
 use crate::UciError;
 
 /// The XML Schema namespace. Documents are free to bind it to any prefix.
@@ -158,7 +160,7 @@ fn complex_type(node: Node<'_, '_>) -> Result<ComplexType, UciError> {
     let name = required(node, "name")?.to_owned();
     let abstract_ = node.attribute("abstract") == Some("true");
 
-    let mut content = ComplexContent::Empty;
+    let mut content = ComplexContent::Groups(Vec::new());
     let mut defined = false;
     for child in definitions(node)? {
         if defined {
@@ -168,12 +170,8 @@ fn complex_type(node: Node<'_, '_>) -> Result<ComplexType, UciError> {
         }
         defined = true;
         content = match child.tag_name().name() {
-            "sequence" => ComplexContent::Sequence {
-                elements: compositor(child, &name)?,
-            },
-            "choice" => ComplexContent::Choice {
-                elements: compositor(child, &name)?,
-            },
+            "sequence" => ComplexContent::Groups(vec![sequence(compositor(child, &name)?)]),
+            "choice" => ComplexContent::Groups(vec![choice(compositor(child, &name)?)]),
             "complexContent" => complex_content(child, &name)?,
             other => {
                 return Err(UciError::Xsd(format!(
@@ -208,10 +206,8 @@ fn complex_content(node: Node<'_, '_>, owner: &str) -> Result<ComplexContent, Uc
     let mut extra = Vec::new();
     for inner in definitions(derivation)? {
         match inner.tag_name().name() {
-            // A choice inside an extension contributes its members as optional
-            // siblings; the alternation is not enforced, matching how
-            // Schema::flatten already treats a top-level choice.
-            "sequence" | "choice" => extra.extend(compositor(inner, owner)?),
+            "sequence" => extra.push(sequence(compositor(inner, owner)?)),
+            "choice" => extra.push(choice(compositor(inner, owner)?)),
             other => {
                 return Err(UciError::Xsd(format!(
                     "complexType '{owner}' extends its base with unsupported 'xs:{other}'"
@@ -362,19 +358,15 @@ fn check_references(schema: &Schema) -> Result<(), UciError> {
         note_missing(schema, &global.type_name, &mut missing);
     }
     for ct in schema.complex_types.values() {
-        match &ct.content {
-            ComplexContent::Empty => {}
-            ComplexContent::Sequence { elements } | ComplexContent::Choice { elements } => {
-                for el in elements {
-                    note_missing(schema, &el.type_name, &mut missing);
-                }
-            }
-            ComplexContent::Extension { base, extra } => {
-                note_missing(schema, base, &mut missing);
-                for el in extra {
-                    note_missing(schema, &el.type_name, &mut missing);
-                }
-            }
+        let (base, groups) = match &ct.content {
+            ComplexContent::Groups(groups) => (None, groups),
+            ComplexContent::Extension { base, extra } => (Some(base), extra),
+        };
+        if let Some(base) = base {
+            note_missing(schema, base, &mut missing);
+        }
+        for el in groups.iter().flat_map(|g| g.elements.iter()) {
+            note_missing(schema, &el.type_name, &mut missing);
         }
     }
     for base in schema.simple_types.values() {
@@ -545,14 +537,12 @@ mod tests {
         )
         .unwrap();
 
-        assert!(matches!(
-            schema.complex_types["Pick"].content,
-            ComplexContent::Choice { .. }
-        ));
-        assert!(matches!(
-            schema.complex_types["Nothing"].content,
-            ComplexContent::Empty
-        ));
+        assert_eq!(
+            schema.groups("Pick").unwrap()[0].kind,
+            crate::schema::GroupKind::Choice,
+            "an alternation must not compile to a sequence"
+        );
+        assert!(schema.groups("Nothing").unwrap().is_empty());
         assert!(schema.flatten("Nothing").unwrap().is_empty());
     }
 
