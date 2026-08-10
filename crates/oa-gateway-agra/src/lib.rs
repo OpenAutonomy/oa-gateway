@@ -393,17 +393,42 @@ fn json_str<'a>(data: &'a Value, field: &'static str) -> Result<&'a str, AgraErr
         .ok_or(AgraError::MissingField(field))
 }
 
-fn xml_root_local_name(xml: &str) -> Option<String> {
-    let start = xml.find('<')?;
-    let rest = &xml[start + 1..];
-    if rest.starts_with('?') || rest.starts_with('!') || rest.starts_with('/') {
-        return None;
+/// Local name of an XML document element, or `None` if there is no element.
+///
+/// A declaration, comment, or DOCTYPE ahead of the root is stepped over rather
+/// than treated as the element. Producers emit `<?xml …?>` as a matter of
+/// course, so stopping at the first `<` reports no element at all — which makes
+/// [`wrapper_kind`] answer "not a wrapper" for perfectly ordinary input and
+/// silently disables unwrapping.
+#[must_use]
+pub fn xml_root_local_name(xml: &str) -> Option<String> {
+    let mut i = 0;
+    while let Some(rel) = xml[i..].find('<') {
+        let start = i + rel;
+        let rest = &xml[start + 1..];
+        if rest.starts_with('?') {
+            let close = rest.find("?>")?;
+            i = start + 1 + close + 2;
+            continue;
+        }
+        if let Some(inner) = rest.strip_prefix("!--") {
+            let close = inner.find("-->")?;
+            i = start + 4 + close + 3;
+            continue;
+        }
+        if rest.starts_with('!') {
+            let close = rest.find('>')?;
+            i = start + 1 + close + 1;
+            continue;
+        }
+        if rest.starts_with('/') {
+            return None;
+        }
+        let name_end = rest.find(|c: char| c.is_whitespace() || c == '>' || c == '/')?;
+        let qname = &rest[..name_end];
+        return Some(qname.rsplit(':').next().unwrap_or(qname).to_owned());
     }
-    let name_end = rest
-        .find(|c: char| c.is_whitespace() || c == '>' || c == '/')
-        .unwrap_or(rest.len());
-    let qname = &rest[..name_end];
-    Some(qname.rsplit(':').next().unwrap_or(qname).to_owned())
+    None
 }
 
 fn xml_local_text<'a>(xml: &'a str, local: &str) -> Option<&'a str> {
@@ -569,5 +594,76 @@ mod tests {
     fn native_mt_is_not_a_wrapper() {
         assert!(wrapper_kind(inner_json().as_bytes()).is_none());
         assert!(unwrap("demo", inner_json().as_bytes()).is_err());
+    }
+
+    /// A wrapper as an actual producer emits it: an XML declaration ahead of the
+    /// root, and an inner payload carrying one of its own.
+    ///
+    /// Shaped after live `MA_TxDataPayloadCommand` traffic from an A-GRA MA. The
+    /// declarations are the point of the fixture — without them this passes even
+    /// when prolog handling is broken, which is how it stayed broken.
+    fn tx_wrapper_with_prolog() -> String {
+        let inner = concat!(
+            r#"<?xml version="1.0" encoding="utf-8"?>"#,
+            r#"<SystemStatus xmlns="https://www.vdl.afrl.af.mil/programs/oam">"#,
+            r#"<MessageHeader><SchemaVersion>005.0a</SchemaVersion></MessageHeader>"#,
+            r#"</SystemStatus>"#
+        );
+        format!(
+            concat!(
+                r#"<?xml version="1.0" encoding="utf-8"?>"#,
+                "\n",
+                r#"<MA_TxDataPayloadCommand xmlns="https://www.vdl.afrl.af.mil/programs/oam">"#,
+                r#"<MessageHeader><SchemaVersion>005.0a</SchemaVersion></MessageHeader>"#,
+                r#"<MessageData>"#,
+                r#"<CommandID><UUID>7ea053eadcc545baac26d5bc909417dc</UUID></CommandID>"#,
+                r#"<CommandState>NEW</CommandState>"#,
+                r#"<EncodedPayload>{hex}</EncodedPayload>"#,
+                r#"<MessageType>SYSTEM_STATUS</MessageType>"#,
+                r#"</MessageData></MA_TxDataPayloadCommand>"#
+            ),
+            hex = hex::encode(inner.as_bytes())
+        )
+    }
+
+    #[test]
+    fn xml_declaration_does_not_hide_the_wrapper() {
+        let xml = tx_wrapper_with_prolog();
+        assert_eq!(wrapper_kind(xml.as_bytes()), Some(WrapperKind::Tx));
+
+        let u = unwrap("MA_TxDataPayloadCommand", xml.as_bytes()).unwrap();
+        assert_eq!(u.meta.kind, WrapperKind::Tx);
+        // The element name, not the MessageType enum it falls back to.
+        assert_eq!(u.inner.route.type_hint.as_deref(), Some("SystemStatus"));
+        assert_eq!(u.wrapper.route.topic, "MA_TxDataPayloadCommand");
+        assert_eq!(u.inner.route.topic, "MA_TxDataPayloadCommand");
+    }
+
+    #[test]
+    fn root_name_skips_prolog_comments_and_doctype() {
+        assert_eq!(xml_root_local_name("<Ping/>").as_deref(), Some("Ping"));
+        assert_eq!(
+            xml_root_local_name(r#"<?xml version="1.0"?><Ping/>"#).as_deref(),
+            Some("Ping")
+        );
+        assert_eq!(
+            xml_root_local_name("<!-- note --><Ping/>").as_deref(),
+            Some("Ping")
+        );
+        assert_eq!(
+            xml_root_local_name("<!DOCTYPE Ping><Ping/>").as_deref(),
+            Some("Ping")
+        );
+        // Prefixed names reduce to the local part.
+        assert_eq!(
+            xml_root_local_name(r#"<uci:Ping xmlns:uci="x"/>"#).as_deref(),
+            Some("Ping")
+        );
+        assert_eq!(xml_root_local_name("not xml"), None);
+        assert_eq!(xml_root_local_name(r#"<?xml version="1.0"?>"#), None);
+        // Unterminated input must not spin or panic.
+        assert_eq!(xml_root_local_name("<?xml"), None);
+        assert_eq!(xml_root_local_name("<!-- open"), None);
+        assert_eq!(xml_root_local_name("<Ping"), None);
     }
 }

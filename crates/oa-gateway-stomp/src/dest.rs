@@ -3,6 +3,7 @@
 //! ActiveMQ Classic maps `/topic/Name` to JMS topic `Name`. Engine `topic` is that
 //! name. `type_hint` rides in `oag.type_hint` and/or is sniffed from the body.
 
+use oa_gateway_agra::xml_root_local_name;
 use oa_gateway_core::{ContentType, RouteKey};
 
 pub const HDR_ORIGIN: &str = "oag.origin_adapter";
@@ -90,36 +91,6 @@ pub fn sniff_content_type(payload: &[u8], header: Option<&str>) -> ContentType {
         Ok(t) if t.starts_with('<') => ContentType::xml(),
         _ => ContentType::octet_stream(),
     }
-}
-
-fn xml_root_local_name(xml: &str) -> Option<String> {
-    let mut i = 0;
-    while let Some(rel) = xml[i..].find('<') {
-        let start = i + rel;
-        let rest = &xml[start + 1..];
-        if rest.starts_with('?') {
-            let close = rest.find("?>")?;
-            i = start + 1 + close + 2;
-            continue;
-        }
-        if let Some(inner) = rest.strip_prefix("!--") {
-            let close = inner.find("-->")?;
-            i = start + 4 + close + 3;
-            continue;
-        }
-        if rest.starts_with('!') {
-            let close = rest.find('>')?;
-            i = start + 1 + close + 1;
-            continue;
-        }
-        if rest.starts_with('/') {
-            return None;
-        }
-        let name_end = rest.find(|c: char| c.is_whitespace() || c == '>' || c == '/')?;
-        let qname = &rest[..name_end];
-        return Some(qname.rsplit(':').next().unwrap_or(qname).to_owned());
-    }
-    None
 }
 
 #[cfg(test)]
