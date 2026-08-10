@@ -39,34 +39,20 @@ Reference clones under `repos/` are not compiled into this workspace.
 To get started, download and build the project. The toolchain is pinned in `rust-toolchain.toml`, so `cargo` picks up the right compiler and there is nothing else to install.
 
 ```bash
-git clone https://gitlab.com/open-arsenal/oa-gateway.git
+git clone https://gitlab.com/jburns314/oa-gateway.git
 cd oa-gateway
 cargo build --release
 ```
 
-That leaves the host binary at `target/release/oa-gateway`.
-
-### Launching with a config
-
-Adapters are turned on by configuration, so launching means naming a config file:
+Next, launch the service with your configuration file. This will create adapters for all of the configured connections.
 
 ```bash
 ./target/release/oa-gateway config/default.toml
 ```
 
-```
-INFO oa_gateway: config loaded path=config/default.toml
-INFO oa_gateway: starting loopback adapter id=loopback
-INFO oa_gateway: starting owp adapter id=owp bind=127.0.0.1:9000
-INFO oa_gateway: oa-gateway running — Ctrl-C to stop
-INFO oa_gateway_owp::server: owp listening local=127.0.0.1:9000 adapter=owp
-```
+A config is a short set of TOML sections: one per adapter, plus one naming the UCI schema. Each adapter section carries an `enabled` flag and an id, then whatever that protocol needs — an address to listen on or a broker to dial, which topics to bridge, and whether payloads are converted on the way through or passed along untouched. Settings you leave out fall back to built-in defaults, and settings the gateway does not recognize are rejected at startup rather than ignored.
 
-`config/default.toml` enables the two adapters that need nothing external: an in-process loopback, and OWP over WebSocket on `127.0.0.1:9000`. The STOMP client is defined but disabled, so no broker has to be running. `config/asb.toml` points that client at a local ActiveMQ broker and converts to UCI XML on the way, so it needs both a running broker and the UCI schema on disk.
-
-With no argument at all, oa-gateway looks for `config/default.toml` in the current directory and its two parents, then falls back to built-in defaults. A path you name explicitly has to exist. Unknown keys are rejected rather than ignored, so a misspelled setting fails at startup instead of silently doing nothing. Set `RUST_LOG` to change log filtering.
-
-There is **no TLS and no authentication** — bind to loopback only.
+The files in `config/` are worked examples. The gateway has no TLS or authentication of its own, so bind to loopback.
 
 <!--
 
@@ -206,7 +192,7 @@ Identity map, schema validation, OpenWire/JMS and DDS adapters, QoS, queue group
 
 ## Contributing
 
-CI (GitHub Actions + GitLab CI) runs `fmt`, `clippy -D warnings`, `cargo test --workspace --locked`, and `cargo doc` with warnings denied, then the ignored ActiveMQ XML round-trip. See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
