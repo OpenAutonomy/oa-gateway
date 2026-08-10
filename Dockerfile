@@ -34,9 +34,9 @@ WORKDIR /app
 
 COPY --from=builder /src/target/release/oa-gateway /usr/local/bin/oa-gateway
 COPY --from=builder /src/schema/uci /app/schema/uci
-COPY config/compose.toml /app/config/compose.toml
 
 USER oag
 EXPOSE 9000
 ENTRYPOINT ["oa-gateway"]
-CMD ["config/compose.toml"]
+# compose/gateway.yml mounts a config at /config/gateway.toml and overrides this.
+CMD ["/config/gateway.toml"]

@@ -2,8 +2,8 @@
 #   ./scripts/fetch-uci-schema.sh
 #   docker compose -f compose/activemq.yml up -d
 #
-# For the gateway and broker together in containers, use compose/gateway.yml
-# (config/compose.toml) instead.
+# compose/gateway.yml runs the gateway alone and mounts whatever config you
+# pass via OAG_CONFIG; it does not start this broker.
 #
 # Engine topic == JMS / STOMP dest suffix (UCI message type name).
 

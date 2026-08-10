@@ -4,21 +4,22 @@ The STOMP adapter dials your broker as a client and bridges a named list of topi
 
 ## Launch with Compose
 
-The shortest path to a broker and a gateway together:
+The gateway and the broker are separate Compose files. Start a broker when you need one:
+
+```bash
+docker compose -f compose/activemq.yml up -d
+```
+
+Console: <http://127.0.0.1:8161/> (`admin` / `admin`). STOMP: `127.0.0.1:61613`.
+
+The gateway Compose stack only runs `oa-gateway`, and takes the config you give it:
 
 ```bash
 docker compose -f compose/gateway.yml up --build
+OAG_CONFIG=/path/to/my.toml docker compose -f compose/gateway.yml up --build
 ```
 
-That builds the gateway image (UCI schema included), starts ActiveMQ Classic, and waits for the STOMP port before bringing the gateway up. From the host:
-
-| Endpoint | Address |
-|---|---|
-| OWP WebSocket | `ws://127.0.0.1:9000/` (`Sec-WebSocket-Protocol: owp`) |
-| ActiveMQ console | <http://127.0.0.1:8161/> (`admin` / `admin`) |
-| STOMP | `127.0.0.1:61613` |
-
-`config/compose.toml` is what the container runs: OWP binds `0.0.0.0:9000` so the published port can reach it, and `stomp.broker` is the compose service name `activemq:61613`. The host mapping for OWP is still loopback-only. For a broker alone (no gateway image), use `compose/activemq.yml` and run the binary against `config/asb.toml`.
+`config/compose.toml` is the default mount: OWP on `0.0.0.0:9000` inside the container, STOMP off. To bridge a broker from the container, enable `[stomp]` in a config of your own and set `broker` to a host the container can reach (for example `host.docker.internal:61613` when the broker is published on the Docker host). On the host itself, `config/asb.toml` and a local binary remain the simpler path.
 
 ## Configure the adapter
 

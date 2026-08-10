@@ -1,16 +1,11 @@
-# ActiveMQ Classic + OA-Gateway.
+# OA-Gateway only. Bring your own broker (and your own config).
 #
 #   docker compose -f compose/gateway.yml up --build
+#   OAG_CONFIG=/path/to/my.toml docker compose -f compose/gateway.yml up --build
 #
-# From the host:
-#   OWP WebSocket  ws://127.0.0.1:9000/  (Sec-WebSocket-Protocol: owp)
-#   ActiveMQ console  http://127.0.0.1:8161/  (admin / admin)
-#   STOMP  127.0.0.1:61613
+# OWP WebSocket on the host: ws://127.0.0.1:9000/  (Sec-WebSocket-Protocol: owp)
 #
-# Broker-only (no gateway image build): compose/activemq.yml
-
-include:
-  - path: activemq.yml
+# For a local ActiveMQ Classic without the gateway, see compose/activemq.yml.
 
 services:
   oa-gateway:
@@ -19,13 +14,13 @@ services:
       dockerfile: Dockerfile
     image: oa-gateway:local
     container_name: oa-gateway
-    depends_on:
-      activemq:
-        condition: service_healthy
     ports:
       # Publish on loopback only; the process listens on 0.0.0.0 inside the
-      # container so Docker can forward this mapping.
+      # container so Docker can forward this mapping (see the mounted config).
       - "127.0.0.1:9000:9000"
+    volumes:
+      - ${OAG_CONFIG:-../config/compose.toml}:/config/gateway.toml:ro
+    command: ["/config/gateway.toml"]
     environment:
       RUST_LOG: info
     restart: unless-stopped

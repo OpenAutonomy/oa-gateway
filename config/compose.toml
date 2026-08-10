@@ -1,15 +1,13 @@
-# Config for compose/gateway.yml. Differs from asb.toml only where the container
-# network requires it: OWP listens on all interfaces so the published host port
-# can reach it, and the STOMP broker is the compose service name rather than
-# loopback. Host-side publishing is still pinned to 127.0.0.1 in the compose
-# file — see SECURITY.md.
-
-[uci]
-schema = [
-  "schema/uci/UCI_MessageDefinitions_v2_5_0.xsd",
-  "schema/uci/UCI_SecurityMarkings_v2_5_0.xsd",
-]
-validate = "warn"
+# Default config for compose/gateway.yml. Same shape as default.toml, but OWP
+# listens on all interfaces so the published host port can reach it. Host-side
+# publishing is still pinned to 127.0.0.1 in the compose file — see SECURITY.md.
+#
+# Override the whole file when launching:
+#   OAG_CONFIG=/path/to/my.toml docker compose -f compose/gateway.yml up --build
+#
+# STOMP is off here. Point stomp.broker at a host the container can reach (for
+# example host.docker.internal:61613 on Docker Desktop) and enable the section
+# when bridging a broker you run separately.
 
 [loopback]
 enabled = true
@@ -20,19 +18,19 @@ enabled = true
 id = "owp"
 bind = "0.0.0.0:9000"
 server_id = "oa-gateway-0"
-system_label = "OA-Gateway ASB"
+system_label = "OA-Gateway Prototype"
 schema = "002.5.0"
 unwrap_ma_payloads = true
-xml_baseline = true
+xml_baseline = false
 
 [stomp]
-enabled = true
+enabled = false
 id = "stomp"
-broker = "activemq:61613"
+broker = "127.0.0.1:61613"
 host = "/"
 login = ""
 passcode = ""
 destination_prefix = "/topic/"
-topics = ["PositionReport"]
+topics = ["demo"]
 unwrap_ma_payloads = true
 reconnect = true
