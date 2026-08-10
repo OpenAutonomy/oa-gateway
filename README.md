@@ -16,10 +16,9 @@ Message types come from the UCI 2.5 catalog (Universal Command and Control Inter
 
 Goals:
 
-- One name for a message on every hop: UCI message type = engine topic = STOMP destination = JMS topic.
-- Confine protocol and schema knowledge to adapters, so a new transport is additive.
-- Translate serialization at the edges, so each side sees its native format.
-- Route on addressing alone, so message types the gateway has never seen pass through unchanged.
+- Compliance with the OMS, UCI, and A-GRA standards.
+- Topic-level routing, so systems address message types rather than each other.
+- Ease of extensibility, so supporting a new protocol is a new adapter.
 
 Current scope is a prototype: a hand-built slice of UCI 2.5 rather than the full XSD catalog, and no TLS or authentication.
 
