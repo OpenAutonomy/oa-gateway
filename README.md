@@ -55,7 +55,8 @@ Reference clones under `repos/` are not compiled into this workspace.
 ```bash
 cargo test --workspace --locked
 cargo run -p oa-gateway -- --help
-cargo run -p oa-gateway -- config/default.toml          # OWP only
+cargo run -p oa-gateway -- config/default.toml          # OWP only, no schema needed
+./scripts/fetch-uci-schema.sh                           # once, for JSON ↔ XML conversion
 cargo run -p oa-gateway -- config/asb.toml              # + ActiveMQ STOMP (compose up first)
 ```
 
@@ -65,13 +66,19 @@ OWP listens on `ws://127.0.0.1:9000/` with subprotocol `owp`. There is **no TLS 
 
 ### UCI schema
 
-Converting between OMS JSON and UCI XML needs the UCI schema. The standard is not redistributed here, so name your own copy:
+Converting between OMS JSON and UCI XML needs the UCI schema. The standard is public (Distribution Statement A) but is not redistributed here, so fetch it once:
+
+```bash
+./scripts/fetch-uci-schema.sh
+```
+
+That downloads the two documents into `schema/uci/` (gitignored) and checks them against the SHA-256 digests pinned in `scripts/uci-schema.sha256`, so you always know which revision you are running. If upstream publishes a new one the checksum fails and tells you how to re-pin. `config/asb.toml` already points at that location; any other config names the files itself:
 
 ```toml
 [uci]
 schema = [
-  "/path/to/UCI_MessageDefinitions_v2_5_0.xsd",
-  "/path/to/UCI_SecurityMarkings_v2_5_0.xsd",
+  "schema/uci/UCI_MessageDefinitions_v2_5_0.xsd",
+  "schema/uci/UCI_SecurityMarkings_v2_5_0.xsd",
 ]
 ```
 

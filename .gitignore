@@ -3,3 +3,5 @@
 .DS_Store
 .cargo/
 repos/
+# Standards fetched by scripts/fetch-uci-schema.sh, not redistributed here.
+/schema/

@@ -1,7 +1,13 @@
 //! Compiles the real UCI schema. Ignored unless a local copy is available.
 //!
-//! The standard is not vendored, so point `OAG_UCI_XSD` at the documents that
-//! make up the schema, separated the way `PATH` is on your platform:
+//! The standard is not vendored. Fetch it once with `scripts/fetch-uci-schema.sh`
+//! and this finds it on its own:
+//!
+//!   cargo test -p oa-gateway-uci -- --ignored
+//!
+//! To use a copy from somewhere else — a program-specific Message Set, say —
+//! point `OAG_UCI_XSD` at the documents, separated the way `PATH` is on your
+//! platform:
 //!
 //!   OAG_UCI_XSD=/path/UCI_MessageDefinitions_v2_5_0.xsd:/path/UCI_SecurityMarkings_v2_5_0.xsd \
 //!     cargo test -p oa-gateway-uci -- --ignored
@@ -67,20 +73,31 @@ fn round_trips_a_message_the_fixture_never_had(schema: &Schema) {
     );
 }
 
+/// Where `scripts/fetch-uci-schema.sh` leaves the schema, relative to this crate.
+const FETCHED: [&str; 2] = [
+    "../../schema/uci/UCI_MessageDefinitions_v2_5_0.xsd",
+    "../../schema/uci/UCI_SecurityMarkings_v2_5_0.xsd",
+];
+
 fn schema_documents() -> Vec<PathBuf> {
-    let raw = env::var_os("OAG_UCI_XSD").unwrap_or_else(|| {
-        panic!(
-            "set OAG_UCI_XSD to the UCI schema documents, separated like PATH \
-             (UCI_MessageDefinitions and UCI_SecurityMarkings are both required)"
-        )
-    });
-    let paths: Vec<PathBuf> = env::split_paths(&raw).collect();
-    assert!(!paths.is_empty(), "OAG_UCI_XSD is set but lists no paths");
-    paths
+    if let Some(raw) = env::var_os("OAG_UCI_XSD") {
+        let paths: Vec<PathBuf> = env::split_paths(&raw).collect();
+        assert!(!paths.is_empty(), "OAG_UCI_XSD is set but lists no paths");
+        return paths;
+    }
+
+    let fetched: Vec<PathBuf> = FETCHED.iter().map(PathBuf::from).collect();
+    assert!(
+        fetched.iter().all(|p| p.exists()),
+        "no UCI schema found. Run scripts/fetch-uci-schema.sh, or set OAG_UCI_XSD \
+         to the documents yourself, separated like PATH (UCI_MessageDefinitions \
+         and UCI_SecurityMarkings are both required)"
+    );
+    fetched
 }
 
 #[test]
-#[ignore = "requires a local copy of the UCI schema (set OAG_UCI_XSD)"]
+#[ignore = "requires a local copy of the UCI schema (scripts/fetch-uci-schema.sh)"]
 fn the_published_schema_compiles_and_every_type_resolves() {
     let paths = schema_documents();
     let texts: Vec<String> = paths
