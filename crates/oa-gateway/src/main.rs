@@ -18,12 +18,10 @@ const USAGE: &str = "\
 OA-Gateway — protocol-agnostic routing with pluggable adapters (prototype)
 
 Usage:
-  oa-gateway [CONFIG]
+  oa-gateway CONFIG
 
 Arguments:
-  CONFIG           Path to a TOML config file. When omitted, oa-gateway looks for
-                   config/default.toml in the current directory and its two
-                   parents, and falls back to built-in defaults.
+  CONFIG           Path to a TOML config file (required)
 
 Options:
   -h, --help       Print this help and exit
@@ -39,7 +37,7 @@ Set RUST_LOG to change log filtering (default: info).
 /// What the command line asked for.
 #[derive(Debug, PartialEq, Eq)]
 enum Cli {
-    Run(Option<PathBuf>),
+    Run(PathBuf),
     Help,
     Version,
 }
@@ -64,7 +62,10 @@ where
             }
         }
     }
-    Ok(Cli::Run(config))
+    match config {
+        Some(path) => Ok(Cli::Run(path)),
+        None => Err("missing CONFIG. Try `oa-gateway --help`.".into()),
+    }
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -287,11 +288,11 @@ async fn run() -> Result<(), String> {
             println!("oa-gateway {}", env!("CARGO_PKG_VERSION"));
             Ok(())
         }
-        Cli::Run(path) => serve(path.as_deref()).await,
+        Cli::Run(path) => serve(&path).await,
     }
 }
 
-async fn serve(config_path: Option<&Path>) -> Result<(), String> {
+async fn serve(config_path: &Path) -> Result<(), String> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -528,39 +529,18 @@ fn load_schema(config: &Config) -> Result<Option<Arc<Schema>>, String> {
     Ok(Some(Arc::new(schema)))
 }
 
-fn load_config(path: Option<&Path>) -> Result<Config, String> {
-    let path = match path {
-        // A file the user named explicitly is a mistake when missing, not a cue
-        // to quietly run some other configuration.
-        Some(named) if !named.exists() => {
-            return Err(format!("config file {} not found", named.display()))
-        }
-        Some(named) => named.to_path_buf(),
-        None => match find_default_config() {
-            Some(found) => found,
-            None => {
-                info!("no config/default.toml found, using built-in defaults");
-                return Ok(Config::default());
-            }
-        },
-    };
+fn load_config(path: &Path) -> Result<Config, String> {
+    // A path the user named is a mistake when missing, not a cue to quietly run
+    // some other configuration.
+    if !path.exists() {
+        return Err(format!("config file {} not found", path.display()));
+    }
 
-    let text = std::fs::read_to_string(&path)
+    let text = std::fs::read_to_string(path)
         .map_err(|err| format!("cannot read {}: {err}", path.display()))?;
     let config = toml::from_str(&text).map_err(|err| format!("in {}: {err}", path.display()))?;
     info!(path = %path.display(), "config loaded");
     Ok(config)
-}
-
-fn find_default_config() -> Option<PathBuf> {
-    [
-        "config/default.toml",
-        "../config/default.toml",
-        "../../config/default.toml",
-    ]
-    .into_iter()
-    .map(PathBuf::from)
-    .find(|candidate| candidate.exists())
 }
 
 #[cfg(test)]
@@ -580,11 +560,12 @@ mod tests {
     }
 
     #[test]
-    fn config_path_is_optional() {
-        assert_eq!(parse_args(args(&[])).unwrap(), Cli::Run(None));
+    fn config_path_is_required() {
+        let err = parse_args(args(&[])).unwrap_err();
+        assert!(err.contains("missing CONFIG"), "{err}");
         assert_eq!(
             parse_args(args(&["config/asb.toml"])).unwrap(),
-            Cli::Run(Some(PathBuf::from("config/asb.toml")))
+            Cli::Run(PathBuf::from("config/asb.toml"))
         );
     }
 
@@ -700,8 +681,8 @@ mod tests {
     }
 
     #[test]
-    fn explicitly_named_missing_config_is_an_error() {
-        let err = load_config(Some(Path::new("definitely/not/here.toml"))).unwrap_err();
+    fn a_missing_config_is_an_error() {
+        let err = load_config(Path::new("definitely/not/here.toml")).unwrap_err();
         assert!(err.contains("not found"), "{err}");
     }
 }

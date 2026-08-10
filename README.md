@@ -33,11 +33,10 @@ Next, launch the service with your configuration file. This will create adapters
 ./target/release/oa-gateway config/default.toml
 ```
 
-To run the gateway in Docker instead, with a config of your choosing:
+To run the gateway in Docker instead (config path required):
 
 ```bash
-docker compose -f compose/gateway.yml up --build
-# or: OAG_CONFIG=/path/to/my.toml docker compose -f compose/gateway.yml up --build
+OAG_CONFIG=$PWD/config/compose.toml docker compose -f compose/gateway.yml up --build
 ```
 
 That serves OWP at `ws://127.0.0.1:9000/`. A local ActiveMQ broker is separate — `compose/activemq.yml` — see [docs/connecting-active-mq.md](docs/connecting-active-mq.md).

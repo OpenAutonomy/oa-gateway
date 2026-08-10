@@ -12,14 +12,13 @@ docker compose -f compose/activemq.yml up -d
 
 Console: <http://127.0.0.1:8161/> (`admin` / `admin`). STOMP: `127.0.0.1:61613`.
 
-The gateway Compose stack only runs `oa-gateway`, and takes the config you give it:
+The gateway Compose stack only runs `oa-gateway`, and requires a config path:
 
 ```bash
-docker compose -f compose/gateway.yml up --build
-OAG_CONFIG=/path/to/my.toml docker compose -f compose/gateway.yml up --build
+OAG_CONFIG=$PWD/config/compose.toml docker compose -f compose/gateway.yml up --build
 ```
 
-`config/compose.toml` is the default mount: OWP on `0.0.0.0:9000` inside the container, STOMP off. To bridge a broker from the container, enable `[stomp]` in a config of your own and set `broker` to a host the container can reach (for example `host.docker.internal:61613` when the broker is published on the Docker host). On the host itself, `config/asb.toml` and a local binary remain the simpler path.
+`config/compose.toml` is a worked example for the container: OWP on `0.0.0.0:9000`, STOMP off. To bridge a broker from the container, enable `[stomp]` in a config of your own and set `broker` to a host the container can reach (for example `host.docker.internal:61613` when the broker is published on the Docker host). On the host itself, `config/asb.toml` and a local binary remain the simpler path.
 
 ## Configure the adapter
 

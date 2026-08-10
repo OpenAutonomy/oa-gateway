@@ -1,7 +1,6 @@
-# OA-Gateway only. Bring your own broker (and your own config).
+# OA-Gateway only. Config path is required — there is no default.
 #
-#   docker compose -f compose/gateway.yml up --build
-#   OAG_CONFIG=/path/to/my.toml docker compose -f compose/gateway.yml up --build
+#   OAG_CONFIG=$PWD/config/compose.toml docker compose -f compose/gateway.yml up --build
 #
 # OWP WebSocket on the host: ws://127.0.0.1:9000/  (Sec-WebSocket-Protocol: owp)
 #
@@ -19,7 +18,7 @@ services:
       # container so Docker can forward this mapping (see the mounted config).
       - "127.0.0.1:9000:9000"
     volumes:
-      - ${OAG_CONFIG:-../config/compose.toml}:/config/gateway.toml:ro
+      - ${OAG_CONFIG:?set OAG_CONFIG to a TOML config path}:/config/gateway.toml:ro
     command: ["/config/gateway.toml"]
     environment:
       RUST_LOG: info

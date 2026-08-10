@@ -1,9 +1,8 @@
-# Default config for compose/gateway.yml. Same shape as default.toml, but OWP
+# Worked example for compose/gateway.yml. Same shape as default.toml, but OWP
 # listens on all interfaces so the published host port can reach it. Host-side
 # publishing is still pinned to 127.0.0.1 in the compose file — see SECURITY.md.
 #
-# Override the whole file when launching:
-#   OAG_CONFIG=/path/to/my.toml docker compose -f compose/gateway.yml up --build
+#   OAG_CONFIG=$PWD/config/compose.toml docker compose -f compose/gateway.yml up --build
 #
 # STOMP is off here. Point stomp.broker at a host the container can reach (for
 # example host.docker.internal:61613 on Docker Desktop) and enable the section

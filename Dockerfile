@@ -38,5 +38,4 @@ COPY --from=builder /src/schema/uci /app/schema/uci
 USER oag
 EXPOSE 9000
 ENTRYPOINT ["oa-gateway"]
-# compose/gateway.yml mounts a config at /config/gateway.toml and overrides this.
-CMD ["/config/gateway.toml"]
+# Config path is required. compose/gateway.yml mounts one and passes it as argv.
