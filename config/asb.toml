@@ -2,6 +2,9 @@
 #   ./scripts/fetch-uci-schema.sh
 #   docker compose -f compose/activemq.yml up -d
 #
+# For the gateway and broker together in containers, use compose/gateway.yml
+# (config/compose.toml) instead.
+#
 # Engine topic == JMS / STOMP dest suffix (UCI message type name).
 
 # The UCI schema that drives JSON ↔ XML conversion. The standard is not

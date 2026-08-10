@@ -1,0 +1,31 @@
+# ActiveMQ Classic + OA-Gateway.
+#
+#   docker compose -f compose/gateway.yml up --build
+#
+# From the host:
+#   OWP WebSocket  ws://127.0.0.1:9000/  (Sec-WebSocket-Protocol: owp)
+#   ActiveMQ console  http://127.0.0.1:8161/  (admin / admin)
+#   STOMP  127.0.0.1:61613
+#
+# Broker-only (no gateway image build): compose/activemq.yml
+
+include:
+  - path: activemq.yml
+
+services:
+  oa-gateway:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: oa-gateway:local
+    container_name: oa-gateway
+    depends_on:
+      activemq:
+        condition: service_healthy
+    ports:
+      # Publish on loopback only; the process listens on 0.0.0.0 inside the
+      # container so Docker can forward this mapping.
+      - "127.0.0.1:9000:9000"
+    environment:
+      RUST_LOG: info
+    restart: unless-stopped

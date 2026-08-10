@@ -1,0 +1,38 @@
+# Config for compose/gateway.yml. Differs from asb.toml only where the container
+# network requires it: OWP listens on all interfaces so the published host port
+# can reach it, and the STOMP broker is the compose service name rather than
+# loopback. Host-side publishing is still pinned to 127.0.0.1 in the compose
+# file — see SECURITY.md.
+
+[uci]
+schema = [
+  "schema/uci/UCI_MessageDefinitions_v2_5_0.xsd",
+  "schema/uci/UCI_SecurityMarkings_v2_5_0.xsd",
+]
+validate = "warn"
+
+[loopback]
+enabled = true
+id = "loopback"
+
+[owp]
+enabled = true
+id = "owp"
+bind = "0.0.0.0:9000"
+server_id = "oa-gateway-0"
+system_label = "OA-Gateway ASB"
+schema = "002.5.0"
+unwrap_ma_payloads = true
+xml_baseline = true
+
+[stomp]
+enabled = true
+id = "stomp"
+broker = "activemq:61613"
+host = "/"
+login = ""
+passcode = ""
+destination_prefix = "/topic/"
+topics = ["PositionReport"]
+unwrap_ma_payloads = true
+reconnect = true

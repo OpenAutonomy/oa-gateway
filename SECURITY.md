@@ -20,8 +20,10 @@ encrypted in transit, and nothing verifies that the broker on the other end is
 the broker you meant.
 
 So run it on loopback, or on a segment you control end to end, and put
-authentication and TLS in front of it if you need them. `config/` binds to
-loopback for this reason.
+authentication and TLS in front of it if you need them. The host-oriented
+configs in `config/` bind to loopback for this reason. `config/compose.toml`
+listens on all interfaces inside the container so Docker can publish the port;
+`compose/gateway.yml` still maps that port to `127.0.0.1` on the host.
 
 That assumption is what makes the rest of this document coherent. A finding is
 interesting here if it lets a peer do something the posture above does *not*

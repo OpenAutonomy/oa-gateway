@@ -1,20 +1,28 @@
 # Connecting your ActiveMQ instance
 
-The STOMP adapter dials your broker as a client — the gateway never listens for one — and bridges a named list of topics in both directions. It speaks STOMP 1.2 over plain TCP, which ActiveMQ Classic serves on port 61613 alongside OpenWire on 61616, so a Java CAL and the gateway can sit on the same broker.
+The STOMP adapter dials your broker as a client and bridges a named list of topics in both directions. It speaks STOMP 1.2 over plain TCP (which ActiveMQ Classic serves on port 61613 by default). This allows applications using the Java CAL and this gateway to sit on the same broker.
 
-## A broker to try it against
+## Launch with Compose
 
-If you do not already have one, `compose/activemq.yml` starts ActiveMQ Classic with the ports the examples use:
+The shortest path to a broker and a gateway together:
 
 ```bash
-docker compose -f compose/activemq.yml up -d
+docker compose -f compose/gateway.yml up --build
 ```
 
-The web console is on <http://localhost:8161> with `admin` / `admin`, which is a quick way to publish a message by hand and watch it cross.
+That builds the gateway image (UCI schema included), starts ActiveMQ Classic, and waits for the STOMP port before bringing the gateway up. From the host:
+
+| Endpoint | Address |
+|---|---|
+| OWP WebSocket | `ws://127.0.0.1:9000/` (`Sec-WebSocket-Protocol: owp`) |
+| ActiveMQ console | <http://127.0.0.1:8161/> (`admin` / `admin`) |
+| STOMP | `127.0.0.1:61613` |
+
+`config/compose.toml` is what the container runs: OWP binds `0.0.0.0:9000` so the published port can reach it, and `stomp.broker` is the compose service name `activemq:61613`. The host mapping for OWP is still loopback-only. For a broker alone (no gateway image), use `compose/activemq.yml` and run the binary against `config/asb.toml`.
 
 ## Configure the adapter
 
-`config/asb.toml` is a worked example. The section is:
+`config/asb.toml` is a worked example for a gateway on the host. The section is:
 
 ```toml
 [stomp]
@@ -50,39 +58,6 @@ A topic you do not list is not bridged in either direction. Publishing one from 
 ```
 WARN nothing is subscribed to this route, so the publish went nowhere route=Foo adapter=owp
 ```
-
-## What a good start looks like
-
-```
-INFO oa_gateway: starting stomp adapter id=stomp broker=127.0.0.1:61613
-INFO oa_gateway_stomp::adapter: stomp connected adapter=stomp broker=127.0.0.1:61613 topics=["PositionReport"]
-```
-
-If the broker is not up yet, or goes away later, the adapter says so and retries every second, keeping its place in the config:
-
-```
-WARN oa_gateway_stomp::adapter: stomp session failed, retrying adapter=stomp error=...
-```
-
-Each new session clears the adapter's previous engine subscriptions before making new ones, so a reconnect does not leave stale routes behind. Set `reconnect = false` if you would rather a broker outage be fatal.
-
-## Checking it end to end
-
-With `config/asb.toml` running, send a UCI XML message to `/topic/PositionReport` — from the web console, or any STOMP client — and a WebSocket subscriber on the other side of the gateway receives it as OMS JSON, because `owp.xml_baseline` is on in that config:
-
-```
-<- MSG s1 {"PositionReport": {"MessageHeader": {"Mode": "SIMULATION", ...}}}
-```
-
-Validation runs on the way out, so a payload that converts but does not comply is reported once per subscription rather than per message:
-
-```
-WARN delivered payload does not follow the UCI schema; forwarding it anyway, and later
-     ones on this subscription are not logged adapter=owp sid=s1
-     violations=PositionReport: 'SecurityInformation' is required and absent; …
-```
-
-The same round trip runs as a test. `scripts/live-activemq.sh` brings the compose broker up, waits for the STOMP port, and runs the ignored live test against it; point it at a broker of your own with `OAG_ACTIVEMQ_STOMP=host:port`. For tests that should not need Docker at all, `oa-gateway-testing` has `start_mini_broker()`, an in-process STOMP broker on an ephemeral port — `crates/oa-gateway-testing/tests/stomp_bridge.rs` is the pattern to copy.
 
 ## Worth knowing
 

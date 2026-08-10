@@ -1,0 +1,12 @@
+.git
+.github
+target
+repos
+schema
+*.md
+!LICENSE
+compose
+docs
+.cursor
+agent-transcripts
+**/*.canvas.tsx

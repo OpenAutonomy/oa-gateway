@@ -618,7 +618,7 @@ mod tests {
     /// `deny_unknown_fields` would otherwise turn into a startup failure.
     #[test]
     fn shipped_configs_parse() {
-        for name in ["default.toml", "asb.toml"] {
+        for name in ["default.toml", "asb.toml", "compose.toml"] {
             let path = Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../../config")
                 .join(name);
