@@ -34,9 +34,12 @@ Reference clones under `repos/` are not compiled into this workspace.
 
 ```bash
 cargo test --workspace --locked
+cargo run -p mpg -- --help
 cargo run -p mpg -- config/default.toml          # OWP only
 cargo run -p mpg -- config/asb.toml              # + ActiveMQ STOMP (compose up first)
 ```
+
+With no argument mpg looks for `config/default.toml` in the current directory and its two parents, then falls back to built-in defaults. A config path you name explicitly must exist. Unknown keys are rejected rather than ignored, so a misspelled `topics` fails at startup instead of silently doing nothing. `owp.bind` and `stomp.broker` accept `host:port` as well as a literal address, preferring IPv4 when a name offers both.
 
 CI (GitHub Actions + GitLab CI) runs `fmt`, `clippy -D warnings`, `cargo test --workspace --locked`, then the ignored ActiveMQ XML round-trip. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
