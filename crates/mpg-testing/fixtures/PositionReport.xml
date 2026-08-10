@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PositionReport xmlns="https://www.vdl.afrl.af.mil/programs/oam">
+  <SecurityInformation>
+    <Classification>U</Classification>
+  </SecurityInformation>
+  <MessageHeader>
+    <SystemID>
+      <UUID>00000000-0000-4000-8000-000000000001</UUID>
+    </SystemID>
+    <Timestamp>2026-08-09T22:00:00Z</Timestamp>
+    <SchemaVersion>002.5.0</SchemaVersion>
+    <Mode>SIMULATION</Mode>
+  </MessageHeader>
+  <MessageData>
+    <n>1</n>
+  </MessageData>
+</PositionReport>

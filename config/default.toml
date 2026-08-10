@@ -1,0 +1,34 @@
+# Prototype host config. No TLS and no authentication — bind loopback only.
+
+[loopback]
+enabled = true
+id = "loopback"
+
+[owp]
+enabled = true
+id = "owp"
+bind = "127.0.0.1:9000"
+server_id = "mpg-0"
+system_label = "MPG Prototype"
+schema = "002.5.0"
+# Peel A-GRA MA_RxDataPayload / MA_TxDataPayloadCommand hex wrappers on PUB.
+# Engine sees both the wrapper MT and the inner UCI message.
+unwrap_ma_payloads = true
+# Local toy: leave JSON on the engine. Use config/asb.toml for XML toward ActiveMQ.
+xml_baseline = false
+
+# Client to an ActiveMQ (or other) STOMP broker. Off by default so `cargo run`
+# does not require a broker. Java CAL/OpenWire peers share these destinations.
+[stomp]
+enabled = false
+id = "stomp"
+broker = "127.0.0.1:61613"
+host = "/"
+login = ""
+passcode = ""
+destination_prefix = "/topic/"
+# Engine topic names == STOMP dest suffixes. For sk-cal / Ghost Detector, list
+# UCI message type names (PositionReport, SubsystemStatus, …).
+topics = ["demo"]
+unwrap_ma_payloads = true
+reconnect = true

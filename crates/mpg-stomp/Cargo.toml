@@ -1,0 +1,18 @@
+[package]
+name = "mpg-stomp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "ActiveMQ STOMP adapter (client) for the multi-protocol gateway"
+
+[dependencies]
+async-trait.workspace = true
+bytes.workspace = true
+mpg-adapter.workspace = true
+mpg-agra.workspace = true
+mpg-core.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true

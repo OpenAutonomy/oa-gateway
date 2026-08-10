@@ -1,0 +1,60 @@
+# Basic build/test gate. No image publish, no release.
+# rust-toolchain.toml pins 1.85.0; the image matches that channel.
+
+stages:
+  - check
+  - test
+
+variables:
+  CARGO_HOME: $CI_PROJECT_DIR/.cargo
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+default:
+  image: rust:1.85.0-bookworm
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - .cargo/
+      - target/
+
+fmt:
+  stage: check
+  script:
+    - rustup component add rustfmt
+    - cargo fmt --all --check
+
+clippy:
+  stage: check
+  script:
+    - rustup component add clippy
+    - cargo clippy --workspace --all-targets --locked -- -D warnings
+
+test:
+  stage: test
+  script:
+    - cargo test --workspace --locked
+
+live-activemq:
+  stage: test
+  needs: [test]
+  services:
+    - name: apache/activemq-classic:5.18.7
+      alias: activemq
+  variables:
+    MPG_ACTIVEMQ_STOMP: activemq:61613
+  script:
+    - |
+      echo "waiting for STOMP activemq:61613 …"
+      for _ in $(seq 1 40); do
+        if (echo >/dev/tcp/activemq/61613) >/dev/null 2>&1; then
+          break
+        fi
+        sleep 0.5
+      done
+      if ! (echo >/dev/tcp/activemq/61613) >/dev/null 2>&1; then
+        echo "ActiveMQ STOMP port never opened" >&2
+        exit 1
+      fi
+      sleep 1
+    - cargo test -p mpg-testing --test live_activemq --locked -- --ignored --nocapture --test-threads=1

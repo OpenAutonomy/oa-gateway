@@ -1,0 +1,25 @@
+# ActiveMQ Classic ASB stand-in. OpenWire :61616 (Java CAL) + STOMP :61613 (mpg).
+# Console :8161  admin / admin
+#
+#   docker compose -f compose/activemq.yml up -d
+#   cargo run -p mpg -- config/asb.toml
+
+services:
+  activemq:
+    image: apache/activemq-classic:5.18.7
+    container_name: mpg-activemq
+    ports:
+      - "8161:8161"
+      - "61613:61613"
+      - "61616:61616"
+    environment:
+      ACTIVEMQ_OPTS: >-
+        -Djetty.host=0.0.0.0
+        -Djava.util.logging.config.file=logging.properties
+        -Djava.security.auth.login.config=/opt/apache-activemq/conf/login.config
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/61613'"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 10s

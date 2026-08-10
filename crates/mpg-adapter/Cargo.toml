@@ -1,0 +1,12 @@
+[package]
+name = "mpg-adapter"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Adapter trait for multi-protocol gateway protocol plugins"
+
+[dependencies]
+async-trait.workspace = true
+mpg-core.workspace = true
+thiserror.workspace = true
+tokio-util.workspace = true
