@@ -8,29 +8,13 @@
 
 ## Introduction
 
-OA-Gateway connects systems that share a message vocabulary but not a transport. A browser client on a WebSocket and a Java CAL peer on OpenWire can exchange the same UCI message type without either knowing the other exists.
-
-The routing core is protocol-agnostic: it never parses a payload and never names a protocol. Adapters own framing, handshake, and any schema logic; only data messages cross the engine, and control frames stay with the adapter that owns them. Supporting a new protocol means adding an adapter, not changing the core.
-
-Message types come from the UCI 2.5 catalog (Universal Command and Control Interface), carried as OMS JSON or UCI XML. The WebSocket adapter implements OWP 1.0 as specified in OMSC-SPC-013 (Open Mission Systems). A-GRA `MA_RxDataPayload` and `MA_TxDataPayloadCommand` wrappers are peeled so platform subscribers see the inner message type. The STOMP 1.2 client bridges ActiveMQ Classic, where OpenWire CAL peers share the same JMS destinations. The gateway is built to sit alongside Open Arsenal projects such as A-GRA and sleet, and OMS Critical Abstraction Layer implementations such as sk-cal, uci-cal-jms, and Ghost Detector, rather than to replace any of them.
+OA-Gateway is a multi-protocol connector for software systems in the [Open Arsenal](https://gitlab.com/open-arsenal/) ecosystem. The project is implemented in Rust and currently supports WebSocket and STOMP (ActiveMQ) protocol adapters. The routing core is protocol-agnostic. Adapters own framing, handshake, and any schema logic. Supporting a new protocol means simply adding an adapter, not changing the core.
 
 Goals:
 
 - Compliance with the OMS, UCI, and A-GRA standards.
 - Topic- and destination-level routing, so traffic is addressed by name rather than by peer.
 - Ease of extensibility (i.e., adding new protocol adapters).
-
-Current scope is a prototype: conversion is driven by the published UCI 2.5 XSD, and there is no TLS or authentication.
-
-```
-loopback ──publish/subscribe──► Engine ◄──PUB/SUB── owp (WebSocket)
-                Envelope            ▲
-                                    │
-                         SEND/MESSAGE (STOMP)
-                                    │
-                              ActiveMQ :61613
-                         (Java CAL / OpenWire peers)
-```
 
 <!--
 ## Layout
