@@ -17,7 +17,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use oa_gateway_uci::{xsd, Message, Schema};
+use oa_gateway_uci::{xsd, Message, Schema, MAX_DEPTH};
 
 /// Convert a real message that the hand-written fixture never covered.
 ///
@@ -71,6 +71,58 @@ fn round_trips_a_message_the_fixture_never_had(schema: &Schema) {
             .and_then(serde_json::Value::as_str),
         Some("OPERATE")
     );
+}
+
+/// The deepest message the catalog can express, and how deep it is.
+///
+/// `MAX_DEPTH` has to sit above anything the standard declares, or the limit
+/// would refuse real traffic instead of hostile traffic. Measured rather than
+/// assumed, since nothing else would notice if a program-specific Message Set
+/// nested further than expected.
+///
+/// A type that reappears on the current path stops the walk: the type graph has
+/// cycles by reference — a type can contain a type that contains it again — while
+/// any one instance is finite. Depths recorded while a cycle was cut can only be
+/// under-estimates, which is why the assertion below leaves room rather than
+/// treating the number as exact.
+fn deepest_message(schema: &Schema) -> (String, usize) {
+    fn depth_of(
+        schema: &Schema,
+        type_name: &str,
+        on_path: &mut Vec<String>,
+        memo: &mut std::collections::HashMap<String, usize>,
+    ) -> usize {
+        if on_path.iter().any(|t| t == type_name) {
+            return 0;
+        }
+        if let Some(&known) = memo.get(type_name) {
+            return known;
+        }
+        if !schema.is_complex(type_name) {
+            return 1;
+        }
+        on_path.push(type_name.to_owned());
+        let children = schema.flatten(type_name).unwrap_or_default();
+        let deepest = children
+            .iter()
+            .map(|e| depth_of(schema, &e.type_name, on_path, memo))
+            .max()
+            .unwrap_or(0);
+        on_path.pop();
+        memo.insert(type_name.to_owned(), 1 + deepest);
+        1 + deepest
+    }
+
+    let mut memo = std::collections::HashMap::new();
+    schema
+        .global_elements
+        .iter()
+        .map(|(name, global)| {
+            let depth = depth_of(schema, &global.type_name, &mut Vec::new(), &mut memo);
+            (name.clone(), depth)
+        })
+        .max_by_key(|(_, depth)| *depth)
+        .expect("the catalog is not empty")
 }
 
 /// Where `scripts/fetch-uci-schema.sh` leaves the schema, relative to this crate.
@@ -161,6 +213,15 @@ fn the_published_schema_compiles_and_every_type_resolves() {
 
     round_trips_a_message_the_fixture_never_had(&schema);
 
+    let (deepest, depth) = deepest_message(&schema);
+    assert!(
+        depth * 2 < MAX_DEPTH,
+        "the conversion depth limit ({MAX_DEPTH}) leaves too little room above this \
+         schema: '{deepest}' already nests {depth} deep, and the measurement cuts \
+         cycles so the real figure can only be larger"
+    );
+
+    eprintln!("deepest message: {deepest} at {depth} levels (limit {MAX_DEPTH})");
     eprintln!(
         "compiled {} documents ({:.1} MiB) in {:?}: {} messages, {} complexTypes, {} simpleTypes",
         documents.len(),

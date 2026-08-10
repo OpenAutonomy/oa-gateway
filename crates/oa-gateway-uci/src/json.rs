@@ -2,7 +2,7 @@ use serde_json::{json, Map, Number, Value};
 
 use crate::instance::{Complex, Field, Message, Node, Simple};
 use crate::schema::Schema;
-use crate::UciError;
+use crate::{UciError, MAX_DEPTH};
 
 pub fn from_json(text: &str, schema: &Schema) -> Result<Message, UciError> {
     let value: Value = serde_json::from_str(text).map_err(|e| UciError::Json(e.to_string()))?;
@@ -18,7 +18,7 @@ pub fn from_json(text: &str, schema: &Schema) -> Result<Message, UciError> {
     let declared = schema
         .global_type(name)
         .ok_or_else(|| UciError::UnknownElement(name.clone()))?;
-    let node = read_node(body, schema, declared, name)?;
+    let node = read_node(body, schema, declared, name, 0)?;
     Ok(Message {
         name: name.clone(),
         body: node,
@@ -29,7 +29,7 @@ pub fn to_json(message: &Message, schema: &Schema) -> Result<String, UciError> {
     let declared = schema
         .global_type(&message.name)
         .unwrap_or(message.name.as_str());
-    let body = write_node(&message.body, schema, declared, &message.name)?;
+    let body = write_node(&message.body, schema, declared, &message.name, 0)?;
     serde_json::to_string(&json!({ &message.name: body }))
         .map_err(|e| UciError::Json(e.to_string()))
 }
@@ -39,7 +39,11 @@ fn read_node(
     schema: &Schema,
     type_name: &str,
     path: &str,
+    depth: usize,
 ) -> Result<Node, UciError> {
+    if depth > MAX_DEPTH {
+        return Err(UciError::too_deep(path));
+    }
     if schema.is_simple(type_name) || !schema.is_complex(type_name) {
         return Ok(Node::Simple(read_simple(
             value,
@@ -78,15 +82,29 @@ fn read_node(
                 Value::Array(arr) => arr
                     .iter()
                     .enumerate()
-                    .map(|(i, v)| read_node(v, schema, child_type, &format!("{child_path}[{i}]")))
+                    .map(|(i, v)| {
+                        read_node(
+                            v,
+                            schema,
+                            child_type,
+                            &format!("{child_path}[{i}]"),
+                            depth + 1,
+                        )
+                    })
                     .collect::<Result<Vec<_>, _>>()?,
-                other => vec![read_node(other, schema, child_type, &child_path)?],
+                other => vec![read_node(
+                    other,
+                    schema,
+                    child_type,
+                    &child_path,
+                    depth + 1,
+                )?],
             };
             fields.push((key.clone(), Field::Many(items)));
         } else {
             fields.push((
                 key.clone(),
-                Field::One(read_node(val, schema, child_type, &child_path)?),
+                Field::One(read_node(val, schema, child_type, &child_path, depth + 1)?),
             ));
         }
     }
@@ -146,7 +164,11 @@ fn write_node(
     schema: &Schema,
     type_name: &str,
     path: &str,
+    depth: usize,
 ) -> Result<Value, UciError> {
+    if depth > MAX_DEPTH {
+        return Err(UciError::too_deep(path));
+    }
     match node {
         Node::Simple(s) => Ok(write_simple(s)),
         Node::Complex(c) => {
@@ -165,13 +187,19 @@ fn write_node(
                 let child_type = decl.map(|e| e.type_name.as_str()).unwrap_or("xs:string");
                 let child_path = format!("{path}.{name}");
                 let value = match field {
-                    Field::One(n) => write_node(n, schema, child_type, &child_path)?,
+                    Field::One(n) => write_node(n, schema, child_type, &child_path, depth + 1)?,
                     Field::Many(items) => Value::Array(
                         items
                             .iter()
                             .enumerate()
                             .map(|(i, n)| {
-                                write_node(n, schema, child_type, &format!("{child_path}[{i}]"))
+                                write_node(
+                                    n,
+                                    schema,
+                                    child_type,
+                                    &format!("{child_path}[{i}]"),
+                                    depth + 1,
+                                )
                             })
                             .collect::<Result<Vec<_>, _>>()?,
                     ),

@@ -58,6 +58,16 @@ const MAX_REPORTED: usize = 10;
 pub fn compile(documents: &[&str]) -> Result<Schema, UciError> {
     let mut schema = Schema::new();
     for (index, text) in documents.iter().enumerate() {
+        // A schema is operator-supplied rather than peer-supplied, so this is
+        // about a truncated download or the wrong file, not an attacker. It
+        // still has to fail as an error: the parser would otherwise exhaust the
+        // stack, and a gateway that aborts at startup says nothing about why.
+        if crate::xml::nesting_exceeds(text, crate::MAX_DEPTH) {
+            return Err(UciError::Xsd(format!(
+                "document {index} nests deeper than {} elements",
+                crate::MAX_DEPTH
+            )));
+        }
         let doc = Document::parse(text)
             .map_err(|e| UciError::Xsd(format!("document {index} is not well-formed XML: {e}")))?;
         add_document(&doc, &mut schema)?;

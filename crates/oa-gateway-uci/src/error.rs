@@ -14,6 +14,8 @@ pub enum UciError {
     Xsd(String),
     #[error("at {path}: {message}")]
     At { path: String, message: String },
+    #[error("at {path}: nesting is deeper than {} elements", crate::MAX_DEPTH)]
+    TooDeep { path: String },
 }
 
 impl UciError {
@@ -22,5 +24,9 @@ impl UciError {
             path: path.into(),
             message: message.into(),
         }
+    }
+
+    pub(crate) fn too_deep(path: impl Into<String>) -> Self {
+        Self::TooDeep { path: path.into() }
     }
 }

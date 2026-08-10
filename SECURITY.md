@@ -51,12 +51,11 @@ rather than security reports. Listing them here so nobody spends time proving
 what is already written down.
 
 Both edges now cap what a peer can hand them: `stomp.max_frame_size` and
-`owp.max_frame_size` are 16 MiB by default, and `owp.max_connections` and
-`owp.max_subscriptions` bound how much state one caller can create. What remains
-unbounded is the work done *after* a frame is accepted:
+`owp.max_frame_size` are 16 MiB by default, `owp.max_connections` and
+`owp.max_subscriptions` bound how much state one caller can create, hex payloads
+are capped before they are decoded, and conversion refuses nesting deeper than
+96 elements. What remains is about correctness rather than resources:
 
-- **UCI XML and JSON conversion recurses without a depth limit**, so deep
-  nesting is bounded only by the stack.
 - **`maxOccurs` and `choice` are not enforced during conversion.** `maxOccurs`
   decides only whether a field becomes an array, never how many members it may
   hold, and an alternation converts as a set of optional siblings. A document can

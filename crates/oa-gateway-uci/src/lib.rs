@@ -16,6 +16,21 @@ pub mod slice;
 mod xml;
 pub mod xsd;
 
+/// Deepest element nesting accepted when converting a payload.
+///
+/// Conversion walks a document recursively, so nesting is a stack-depth
+/// question: unbounded, a document deep enough ends the process rather than the
+/// message.
+///
+/// The number is bracketed rather than chosen. `SystemReadiness`, the deepest
+/// message in the published catalog, declares 39 levels — so a limit anywhere
+/// near that would refuse real traffic, and the ignored `published_schema` test
+/// re-measures it against whatever schema you compile. serde_json refuses at
+/// 128 nested values on its own, so a limit above that would leave JSON and XML
+/// failing at two different depths for the same payload. This sits between the
+/// two, with room over the catalog and none borrowed from serde_json.
+pub const MAX_DEPTH: usize = 96;
+
 pub use error::UciError;
 pub use instance::{Complex, Field, Message, Node, Simple};
 pub use schema::{el, el_many, el_opt, ComplexContent, ComplexType, Element, MaxOccurs, Schema};
@@ -71,6 +86,109 @@ mod tests {
         let va: Value = serde_json::from_str(a).unwrap();
         let vb: Value = serde_json::from_str(b).unwrap();
         assert_eq!(va, vb);
+    }
+
+    /// A type that contains itself, so nesting can be declared without end.
+    ///
+    /// The published catalog has no such type, but a payload's depth is chosen
+    /// by whoever sends it, and a schema is an input too.
+    fn recursive_schema() -> Schema {
+        let mut s = Schema::new();
+        s.complex(
+            "NestType",
+            vec![el_opt("Nest", "NestType"), el_opt("leaf", "xs:string")],
+        )
+        .element("Nest", "NestType");
+        s
+    }
+
+    fn nested_json(levels: usize) -> String {
+        let mut out = String::from(r#"{"leaf":"x"}"#);
+        for _ in 0..levels {
+            out = format!(r#"{{"Nest":{out}}}"#);
+        }
+        format!(r#"{{"Nest":{out}}}"#)
+    }
+
+    fn nested_xml(levels: usize) -> String {
+        let mut out = String::from("<leaf>x</leaf>");
+        for _ in 0..levels {
+            out = format!("<Nest>{out}</Nest>");
+        }
+        format!(r#"<Nest xmlns="https://www.vdl.afrl.af.mil/programs/oam">{out}</Nest>"#)
+    }
+
+    // The exact boundary is not a contract; that ordinary nesting converts and
+    // hostile nesting fails cleanly is.
+    #[test]
+    fn nesting_within_the_limit_converts() {
+        let schema = recursive_schema();
+        let levels = MAX_DEPTH / 2;
+
+        let json = nested_json(levels);
+        let from_json = Message::from_json(&json, &schema).expect("json within the limit");
+        assert_eq!(from_json.type_hint(), "Nest");
+        from_json.to_xml(&schema).expect("xml out within the limit");
+
+        let xml = nested_xml(levels);
+        let from_xml = Message::from_xml(&xml, &schema).expect("xml within the limit");
+        from_xml
+            .to_json(&schema)
+            .expect("json out within the limit");
+    }
+
+    #[test]
+    fn nesting_past_the_limit_is_refused() {
+        let schema = recursive_schema();
+        let levels = MAX_DEPTH + 2;
+
+        let err = Message::from_json(&nested_json(levels), &schema).unwrap_err();
+        assert!(matches!(err, UciError::TooDeep { .. }), "json: {err}");
+
+        let err = Message::from_xml(&nested_xml(levels), &schema).unwrap_err();
+        assert!(matches!(err, UciError::TooDeep { .. }), "xml: {err}");
+    }
+
+    /// The point of the limit: a document deep enough to exhaust the stack has to
+    /// come back as an error, from the parser or from us, and not as a crash.
+    #[test]
+    fn absurdly_deep_json_fails_instead_of_aborting() {
+        let schema = recursive_schema();
+        assert!(Message::from_json(&nested_json(50_000), &schema).is_err());
+    }
+
+    #[test]
+    fn absurdly_deep_xml_fails_instead_of_aborting() {
+        let schema = recursive_schema();
+        assert!(Message::from_xml(&nested_xml(50_000), &schema).is_err());
+    }
+
+    #[test]
+    fn a_cyclic_extension_chain_is_reported_not_followed() {
+        let schema = xsd::compile(&[r#"
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:complexType name="AType">
+                <xs:complexContent>
+                  <xs:extension base="BType"/>
+                </xs:complexContent>
+              </xs:complexType>
+              <xs:complexType name="BType">
+                <xs:complexContent>
+                  <xs:extension base="AType"/>
+                </xs:complexContent>
+              </xs:complexType>
+            </xs:schema>
+        "#])
+        .expect("both bases resolve, so compiling is not where this fails");
+
+        let err = schema.flatten("AType").unwrap_err();
+        match err {
+            UciError::Xsd(message) => assert!(
+                message.contains("cyclic extension chain"),
+                "unexpected message: {message}"
+            ),
+            other => panic!("expected an XSD error, got {other}"),
+        }
     }
 
     #[test]

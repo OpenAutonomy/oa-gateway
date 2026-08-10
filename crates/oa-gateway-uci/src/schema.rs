@@ -149,7 +149,29 @@ impl Schema {
             .map(|g| g.type_name.as_str())
     }
 
+    /// Every element declaration a type contributes, base types included.
+    ///
+    /// Errors on a cyclic extension chain rather than following it. Nothing in
+    /// the published schema is cyclic, but a schema is an input like any other:
+    /// it can come from a program-specific Message Set, and a chain that closes
+    /// on itself would otherwise recurse until the stack ran out, at startup or
+    /// on the first message that touched the type.
     pub fn flatten<'a>(&'a self, type_name: &str) -> Result<Vec<&'a Element>, super::UciError> {
+        self.flatten_chain(type_name, &mut Vec::new())
+    }
+
+    fn flatten_chain<'a>(
+        &'a self,
+        type_name: &str,
+        chain: &mut Vec<String>,
+    ) -> Result<Vec<&'a Element>, super::UciError> {
+        if chain.iter().any(|seen| seen == type_name) {
+            chain.push(type_name.to_owned());
+            return Err(super::UciError::Xsd(format!(
+                "cyclic extension chain: {}",
+                chain.join(" -> ")
+            )));
+        }
         let ct = self
             .complex_types
             .get(type_name)
@@ -160,7 +182,9 @@ impl Schema {
                 Ok(elements.iter().collect())
             }
             ComplexContent::Extension { base, extra } => {
-                let mut out = self.flatten(base)?;
+                chain.push(type_name.to_owned());
+                let mut out = self.flatten_chain(base, chain)?;
+                chain.pop();
                 out.extend(extra.iter());
                 Ok(out)
             }
