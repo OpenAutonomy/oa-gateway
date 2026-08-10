@@ -48,17 +48,16 @@ already permit.
 These are real, they are understood, and under the posture above they tell you
 only that an already-trusted peer can waste resources. They are hardening work
 rather than security reports. Listing them here so nobody spends time proving
-what is already written down:
+what is already written down.
 
-- **Inbound OWP frames are not capped by the application.** The WebSocket
-  library's defaults are the only ceiling, and a single large `PUB` allocates
-  accordingly. STOMP, by contrast, is bounded — `stomp.max_frame_size`,
-  16 MiB by default.
+Both edges now cap what a peer can hand them: `stomp.max_frame_size` and
+`owp.max_frame_size` are 16 MiB by default, and `owp.max_connections` and
+`owp.max_subscriptions` bound how much state one caller can create. What remains
+unbounded is the work done *after* a frame is accepted:
+
 - **A-GRA hex payloads are decoded without a length limit**, and decoding first
   makes a whitespace-stripped copy of the input. Reachable by default, since
   `unwrap_ma_payloads` is on.
-- **Subscriptions per connection are unbounded**, as is the number of
-  connections; each accepted socket spawns a session task.
 - **UCI XML and JSON conversion recurses without a depth limit**, so deep
   nesting is bounded only by the stack.
 - **`maxOccurs` and `choice` are not enforced during conversion.** `maxOccurs`

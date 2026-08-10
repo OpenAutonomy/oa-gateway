@@ -23,6 +23,15 @@ schema = "002.5.0"
 unwrap_ma_payloads = true
 # Local toy: leave JSON on the engine. Use config/asb.toml for XML toward ActiveMQ.
 xml_baseline = false
+# Resource limits, shown at their defaults. A client is not authenticated, so
+# these are what stands between one peer and the memory of every other.
+# A frame above max_frame_size ends that session; a connection over the limit is
+# closed on accept; a SUB past the limit is answered with Illegal-State and the
+# session continues. The subscription default sits above the size of the UCI
+# catalog, so subscribing to every message type in the standard still fits.
+max_frame_size = 16777216
+max_connections = 256
+max_subscriptions = 1024
 
 # Client to an ActiveMQ (or other) STOMP broker. Off by default so `cargo run`
 # does not require a broker. Java CAL/OpenWire peers share these destinations.

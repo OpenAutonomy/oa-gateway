@@ -130,6 +130,12 @@ struct OwpSection {
     unwrap_ma_payloads: bool,
     #[serde(default)]
     xml_baseline: bool,
+    #[serde(default = "default_owp_max_frame_size")]
+    max_frame_size: usize,
+    #[serde(default = "default_owp_max_connections")]
+    max_connections: usize,
+    #[serde(default = "default_owp_max_subscriptions")]
+    max_subscriptions: usize,
 }
 
 impl Default for OwpSection {
@@ -143,6 +149,9 @@ impl Default for OwpSection {
             schema: default_schema(),
             unwrap_ma_payloads: true,
             xml_baseline: false,
+            max_frame_size: default_owp_max_frame_size(),
+            max_connections: default_owp_max_connections(),
+            max_subscriptions: default_owp_max_subscriptions(),
         }
     }
 }
@@ -212,6 +221,15 @@ fn default_label() -> String {
 }
 fn default_schema() -> String {
     "002.5.0".into()
+}
+fn default_owp_max_frame_size() -> usize {
+    oa_gateway_owp::DEFAULT_MAX_FRAME_SIZE
+}
+fn default_owp_max_connections() -> usize {
+    oa_gateway_owp::DEFAULT_MAX_CONNECTIONS
+}
+fn default_owp_max_subscriptions() -> usize {
+    oa_gateway_owp::DEFAULT_MAX_SUBSCRIPTIONS
 }
 fn default_stomp_id() -> String {
     "stomp".into()
@@ -314,6 +332,9 @@ async fn serve(config_path: Option<&Path>) -> Result<(), String> {
                 system_uuid: uuid::Uuid::new_v4().to_string(),
                 unwrap_ma_payloads: config.owp.unwrap_ma_payloads,
                 xml_baseline: config.owp.xml_baseline,
+                max_frame_size: config.owp.max_frame_size,
+                max_connections: config.owp.max_connections,
+                max_subscriptions: config.owp.max_subscriptions,
             },
         );
         if let Some(schema) = &schema {

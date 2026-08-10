@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 
 use futures_util::{SinkExt, StreamExt};
@@ -13,12 +13,13 @@ use oa_gateway_core::{
 };
 use oa_gateway_uci::Schema;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Semaphore};
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::handshake::server::{ErrorResponse, Request, Response};
 use tokio_tungstenite::tungstenite::http::{HeaderValue, StatusCode};
+use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::{accept_hdr_async, WebSocketStream};
+use tokio_tungstenite::{accept_hdr_async_with_config, WebSocketStream};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
@@ -28,6 +29,22 @@ use crate::codec::{
 };
 
 const OWP_VERSION: &str = "1.0";
+
+/// Largest OWP frame accepted from a client, in bytes.
+///
+/// Matches the STOMP adapter's default so both edges of the gateway agree on
+/// what counts as too big, and replaces the WebSocket library's far larger
+/// default, which was the only ceiling before.
+pub const DEFAULT_MAX_FRAME_SIZE: usize = 16 * 1024 * 1024;
+
+/// Concurrent connections accepted before further ones are refused.
+pub const DEFAULT_MAX_CONNECTIONS: usize = 256;
+
+/// Subscriptions allowed on one connection.
+///
+/// Comfortably above the number of messages in the UCI catalog, so a client
+/// subscribing to every type in the standard still fits.
+pub const DEFAULT_MAX_SUBSCRIPTIONS: usize = 1024;
 
 #[derive(Debug, Clone)]
 pub struct OwpConfig {
@@ -41,6 +58,12 @@ pub struct OwpConfig {
     pub unwrap_ma_payloads: bool,
     /// Convert OMS JSON ↔ UCI XML at the socket. Engine / ASB see XML.
     pub xml_baseline: bool,
+    /// Largest frame accepted from a client. Oversized frames end the session.
+    pub max_frame_size: usize,
+    /// Connections served at once. Further ones are closed on accept.
+    pub max_connections: usize,
+    /// Subscriptions one connection may hold.
+    pub max_subscriptions: usize,
 }
 
 impl Default for OwpConfig {
@@ -53,6 +76,9 @@ impl Default for OwpConfig {
             system_uuid: uuid::Uuid::new_v4().to_string(),
             unwrap_ma_payloads: true,
             xml_baseline: false,
+            max_frame_size: DEFAULT_MAX_FRAME_SIZE,
+            max_connections: DEFAULT_MAX_CONNECTIONS,
+            max_subscriptions: DEFAULT_MAX_SUBSCRIPTIONS,
         }
     }
 }
@@ -62,16 +88,24 @@ pub struct OwpAdapter {
     config: OwpConfig,
     conn_seq: AtomicU64,
     schema: Option<Arc<Schema>>,
+    /// One permit per allowed connection, held for the life of the session.
+    connections: Arc<Semaphore>,
+    /// Set while connections are being refused, so saturation is logged on the
+    /// way in and on the way out instead of once per rejected connection.
+    at_capacity: AtomicBool,
 }
 
 impl OwpAdapter {
     #[must_use]
     pub fn new(id: impl Into<AdapterId>, config: OwpConfig) -> Self {
+        let connections = Arc::new(Semaphore::new(config.max_connections));
         Self {
             id: id.into(),
             config,
             conn_seq: AtomicU64::new(1),
             schema: None,
+            connections,
+            at_capacity: AtomicBool::new(false),
         }
     }
 
@@ -120,6 +154,23 @@ impl OwpAdapter {
                             continue;
                         }
                     };
+                    // Refuse rather than queue: a caller that cannot get a slot
+                    // learns immediately, and the accept loop keeps draining so
+                    // the backlog does not become the queue instead.
+                    let Ok(permit) = Arc::clone(&self.connections).try_acquire_owned() else {
+                        if !self.at_capacity.swap(true, Ordering::Relaxed) {
+                            warn!(
+                                adapter = %self.id,
+                                limit = self.config.max_connections,
+                                "at the connection limit, refusing new connections"
+                            );
+                        }
+                        drop(stream);
+                        continue;
+                    };
+                    if self.at_capacity.swap(false, Ordering::Relaxed) {
+                        info!(adapter = %self.id, "below the connection limit, accepting again");
+                    }
                     let conn_id = self.conn_seq.fetch_add(1, Ordering::Relaxed);
                     let this = Arc::clone(&self);
                     let engine = Arc::clone(&engine);
@@ -128,6 +179,7 @@ impl OwpAdapter {
                         if let Err(err) = this.handle_connection(stream, peer, conn_id, engine, shutdown).await {
                             debug!(%peer, conn_id, error = %err, "owp connection ended");
                         }
+                        drop(permit);
                     });
                 }
             }
@@ -142,13 +194,20 @@ impl OwpAdapter {
         engine: Arc<Engine>,
         shutdown: CancellationToken,
     ) -> Result<(), AdapterError> {
-        let ws = match accept_hdr_async(stream, check_subprotocol).await {
-            Ok(ws) => ws,
-            Err(err) => {
-                debug!(%peer, error = %err, "websocket handshake failed");
-                return Ok(());
-            }
-        };
+        // A frame over the cap is a protocol error the library reports on read,
+        // which ends the session — the same outcome as an unparseable STOMP
+        // frame, and it happens before the payload is fully buffered.
+        let ws_config = WebSocketConfig::default()
+            .max_message_size(Some(self.config.max_frame_size))
+            .max_frame_size(Some(self.config.max_frame_size));
+        let ws =
+            match accept_hdr_async_with_config(stream, check_subprotocol, Some(ws_config)).await {
+                Ok(ws) => ws,
+                Err(err) => {
+                    debug!(%peer, error = %err, "websocket handshake failed");
+                    return Ok(());
+                }
+            };
         run_session(Session {
             adapter_id: self.id.clone(),
             config: self.config.clone(),
@@ -397,6 +456,24 @@ async fn handle_text(
                 send(
                     out_tx,
                     err_op(OwpError::IllegalArgument, Some("duplicate sid")),
+                )
+                .await;
+                return Ok(());
+            }
+            if subs.len() >= session.config.max_subscriptions {
+                // Each subscription costs a channel, a task, and an engine index
+                // entry keyed by client-supplied strings, so the count is bounded
+                // per connection. The protocol has no resource-limit code, and
+                // Illegal-State is the closest of the ones it defines.
+                warn!(
+                    adapter = %session.adapter_id,
+                    conn_id = session.conn_id,
+                    limit = session.config.max_subscriptions,
+                    "subscription limit reached"
+                );
+                send(
+                    out_tx,
+                    err_op(OwpError::IllegalState, Some("subscription limit reached")),
                 )
                 .await;
                 return Ok(());

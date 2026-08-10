@@ -15,7 +15,10 @@ pub use codec::{
     is_identifier, parse_client, parse_server, type_hint_from_json, ClientOp, InfoPayload,
     InitPayload, OwpError, ServerOp,
 };
-pub use server::{OwpAdapter, OwpConfig};
+pub use server::{
+    OwpAdapter, OwpConfig, DEFAULT_MAX_CONNECTIONS, DEFAULT_MAX_FRAME_SIZE,
+    DEFAULT_MAX_SUBSCRIPTIONS,
+};
 
 #[async_trait]
 impl Adapter for OwpAdapter {

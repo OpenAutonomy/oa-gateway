@@ -20,23 +20,34 @@ pub type OwpWs = WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::T
 /// types the fixtures use, so `xml_baseline` conversion works without requiring
 /// a local copy of the standard.
 pub async fn start_owp(engine: Arc<Engine>, xml_baseline: bool) -> (String, CancellationToken) {
+    start_owp_with(engine, |config| config.xml_baseline = xml_baseline).await
+}
+
+/// As [`start_owp`], with the config open for editing first.
+///
+/// Tests for the resource limits set them far below their defaults, so that
+/// reaching one costs a few frames instead of megabytes.
+pub async fn start_owp_with(
+    engine: Arc<Engine>,
+    edit: impl FnOnce(&mut OwpConfig),
+) -> (String, CancellationToken) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let shutdown = CancellationToken::new();
+
+    let mut config = OwpConfig {
+        bind: addr,
+        server_id: "oa-gateway-test".into(),
+        system_label: "test".into(),
+        schema: Some("002.5.0".into()),
+        system_uuid: "11111111-1111-4111-8111-111111111111".into(),
+        ..OwpConfig::default()
+    };
+    edit(&mut config);
+
     let adapter = Arc::new(
-        OwpAdapter::new(
-            "owp-test",
-            OwpConfig {
-                bind: addr,
-                server_id: "oa-gateway-test".into(),
-                system_label: "test".into(),
-                schema: Some("002.5.0".into()),
-                system_uuid: "11111111-1111-4111-8111-111111111111".into(),
-                unwrap_ma_payloads: true,
-                xml_baseline,
-            },
-        )
-        .with_schema(Arc::new(oa_gateway_uci::slice::v25().clone())),
+        OwpAdapter::new("owp-test", config)
+            .with_schema(Arc::new(oa_gateway_uci::slice::v25().clone())),
     );
     let token = shutdown.clone();
     tokio::spawn(async move {
