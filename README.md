@@ -16,24 +16,6 @@ Goals:
 - Topic- and destination-level routing, so traffic is addressed by name rather than by peer.
 - Ease of extensibility (i.e., adding new protocol adapters).
 
-<!--
-## Layout
-
-| Crate | Role |
-|---|---|
-| `crates/oa-gateway-core` | `Envelope`, `RouteKey`, `Engine` |
-| `crates/oa-gateway-adapter` | `Adapter` trait |
-| `crates/oa-gateway-agra` | A-GRA `MA_RxDataPayload` / `MA_TxDataPayloadCommand` wrap/unwrap |
-| `crates/oa-gateway-loopback` | In-process adapter |
-| `crates/oa-gateway-owp` | OWP 1.0 over WebSocket |
-| `crates/oa-gateway-stomp` | STOMP 1.2 client (ActiveMQ Classic) |
-| `crates/oa-gateway-uci` | Schema-aware UCI XML ↔ OMS JSON, compiled from the published XSD |
-| `crates/oa-gateway-testing` | Fixtures (always) + optional `harness` (OWP/STOMP helpers, mini broker). Cross-adapter tests live here. |
-| `crates/oa-gateway` | Host binary |
-
-Reference clones under `repos/` are not compiled into this workspace.
--->
-
 ## Getting started
 
 To get started, download and build the project. The toolchain is pinned in `rust-toolchain.toml`, so `cargo` picks up the right compiler and there is nothing else to install.

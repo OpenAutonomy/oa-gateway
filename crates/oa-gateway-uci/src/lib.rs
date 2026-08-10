@@ -35,8 +35,8 @@ pub const MAX_DEPTH: usize = 96;
 pub use error::UciError;
 pub use instance::{Complex, Field, Message, Node, Simple};
 pub use schema::{
-    choice, el, el_many, el_opt, sequence, ComplexContent, ComplexType, Element, Group, GroupKind,
-    MaxOccurs, Schema,
+    choice, el, el_many, el_opt, sequence, ComplexContent, ComplexType, Effective, Element, Facets,
+    Group, GroupKind, MaxOccurs, Schema, SimpleType,
 };
 pub use validate::{validate, Mode as ValidateMode, Violation, ViolationKind};
 

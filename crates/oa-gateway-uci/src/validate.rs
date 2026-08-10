@@ -135,6 +135,22 @@ pub enum ViolationKind {
     UnusableType { type_name: String, reason: String },
     /// Nesting past the depth conversion would have refused.
     TooDeep,
+    /// A value outside the enumeration its type declares.
+    ///
+    /// `allowed` is a sample, since some enumerations run to hundreds of values.
+    NotEnumerated {
+        value: String,
+        allowed: Vec<String>,
+        total: usize,
+    },
+    /// A value of the wrong length.
+    Length {
+        value: String,
+        len: usize,
+        requirement: String,
+    },
+    /// A number outside the bounds its type declares.
+    Range { value: String, requirement: String },
 }
 
 impl fmt::Display for Violation {
@@ -178,6 +194,29 @@ impl fmt::Display for ViolationKind {
                 write!(f, "declared type '{type_name}' cannot be used: {reason}")
             }
             Self::TooDeep => write!(f, "nests deeper than {MAX_DEPTH} elements"),
+            Self::NotEnumerated {
+                value,
+                allowed,
+                total,
+            } => {
+                let sample = quoted(allowed);
+                let more = if *total > allowed.len() { ", …" } else { "" };
+                write!(
+                    f,
+                    "'{value}' is not one of the {total} values this type allows: {sample}{more}"
+                )
+            }
+            Self::Length {
+                value,
+                len,
+                requirement,
+            } => write!(
+                f,
+                "'{value}' is {len} characters, and has to be {requirement}"
+            ),
+            Self::Range { value, requirement } => {
+                write!(f, "{value} is out of range: it has to be {requirement}")
+            }
         }
     }
 }
@@ -233,9 +272,10 @@ fn check(
         note(out, path, ViolationKind::TooDeep);
         return;
     }
-    // A leaf carries a value, and values are a matter of facets, which the
-    // compiler does not read yet.
     let Node::Complex(complex) = node else {
+        if let Node::Simple(value) = node {
+            check_value(&value.as_text(), schema, type_name, path, out);
+        }
         return;
     };
 
@@ -388,6 +428,105 @@ fn check(
     }
 }
 
+/// Check a leaf against the facets of the type it was declared as.
+///
+/// Length is counted in characters, which is what XSD means for the string types
+/// these facets appear on. It is not what `xs:hexBinary` means — there a length
+/// counts octets — so a length facet on binary content would be read too
+/// strictly. Nothing in the published catalog does that.
+fn check_value(text: &str, schema: &Schema, type_name: &str, path: &str, out: &mut Vec<Violation>) {
+    let facets = schema.effective_facets(type_name);
+    if facets.is_empty() {
+        return;
+    }
+
+    if let Some(allowed) = facets.enumeration {
+        if !allowed.iter().any(|value| value == text) {
+            const SAMPLE: usize = 4;
+            note(
+                out,
+                path,
+                ViolationKind::NotEnumerated {
+                    value: text.to_owned(),
+                    allowed: allowed.iter().take(SAMPLE).cloned().collect(),
+                    total: allowed.len(),
+                },
+            );
+        }
+    }
+
+    let len = text.chars().count();
+    let mut length = |requirement: String| {
+        note(
+            out,
+            path,
+            ViolationKind::Length {
+                value: text.to_owned(),
+                len,
+                requirement,
+            },
+        );
+    };
+    if let Some(exact) = facets.length {
+        if len != exact {
+            length(format!("exactly {exact}"));
+        }
+    }
+    if let Some(min) = facets.min_length {
+        if len < min {
+            length(format!("at least {min}"));
+        }
+    }
+    if let Some(max) = facets.max_length {
+        if len > max {
+            length(format!("at most {max}"));
+        }
+    }
+
+    // A bound only means something against a number. A value that will not parse
+    // as one is a conversion concern, and conversion has already had its say.
+    let bounded = facets.min_inclusive.is_some()
+        || facets.max_inclusive.is_some()
+        || facets.min_exclusive.is_some()
+        || facets.max_exclusive.is_some();
+    if !bounded {
+        return;
+    }
+    let Ok(number) = text.parse::<f64>() else {
+        return;
+    };
+    let mut range = |requirement: String| {
+        note(
+            out,
+            path,
+            ViolationKind::Range {
+                value: text.to_owned(),
+                requirement,
+            },
+        );
+    };
+    if let Some(min) = facets.min_inclusive {
+        if number < min {
+            range(format!("at least {min}"));
+        }
+    }
+    if let Some(max) = facets.max_inclusive {
+        if number > max {
+            range(format!("at most {max}"));
+        }
+    }
+    if let Some(min) = facets.min_exclusive {
+        if number <= min {
+            range(format!("greater than {min}"));
+        }
+    }
+    if let Some(max) = facets.max_exclusive {
+        if number >= max {
+            range(format!("less than {max}"));
+        }
+    }
+}
+
 fn check_max(max: MaxOccurs, element: &str, found: usize, path: &str, out: &mut Vec<Violation>) {
     if let MaxOccurs::Bounded(max) = max {
         if found > max as usize {
@@ -407,7 +546,7 @@ fn check_max(max: MaxOccurs, element: &str, found: usize, path: &str, out: &mut 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::schema::{choice, el, el_many, el_opt, sequence, Element, MaxOccurs};
+    use crate::schema::{choice, el, el_many, el_opt, sequence, Element, Facets, MaxOccurs};
     use crate::xsd;
 
     /// One required child, one optional, one repeating with a ceiling of two.
@@ -601,6 +740,159 @@ mod tests {
             violations(r#"{"Shape":{"$type":"SquareType","Sides":4}}"#, &s),
             Vec::<String>::new()
         );
+    }
+
+    /// A state enumeration, a fixed-length code, and a bounded percentage —
+    /// the three facet families the published catalog actually uses.
+    fn faceted() -> Schema {
+        let mut s = Schema::new();
+        s.simple_with(
+            "StateType",
+            "xs:string",
+            Facets {
+                enumeration: vec!["OPERATE".into(), "FAULT".into(), "OFF".into()],
+                ..Facets::default()
+            },
+        )
+        .simple_with(
+            "CodeType",
+            "xs:string",
+            Facets {
+                length: Some(4),
+                ..Facets::default()
+            },
+        )
+        .simple_with(
+            "PercentType",
+            "xs:double",
+            Facets {
+                min_inclusive: Some(0.0),
+                max_inclusive: Some(100.0),
+                ..Facets::default()
+            },
+        )
+        .complex(
+            "ReadingType",
+            vec![
+                el("State", "StateType"),
+                el_opt("Code", "CodeType"),
+                el_opt("Level", "PercentType"),
+            ],
+        )
+        .element("Reading", "ReadingType");
+        s
+    }
+
+    #[test]
+    fn values_within_their_facets_report_nothing() {
+        let schema = faceted();
+        let json = r#"{"Reading":{"State":"FAULT","Code":"AB12","Level":99.5}}"#;
+        assert_eq!(violations(json, &schema), Vec::<String>::new());
+    }
+
+    #[test]
+    fn a_value_outside_its_enumeration_is_reported() {
+        let schema = faceted();
+        let json = r#"{"Reading":{"State":"ONLINE"}}"#;
+        assert_eq!(
+            violations(json, &schema),
+            vec![
+                "Reading.State: 'ONLINE' is not one of the 3 values this type allows: \
+                 'OPERATE', 'FAULT', 'OFF'"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_value_of_the_wrong_length_is_reported() {
+        let schema = faceted();
+        assert_eq!(
+            violations(r#"{"Reading":{"State":"OFF","Code":"AB1"}}"#, &schema),
+            vec!["Reading.Code: 'AB1' is 3 characters, and has to be exactly 4"]
+        );
+    }
+
+    #[test]
+    fn a_number_outside_its_bounds_is_reported() {
+        let schema = faceted();
+        assert_eq!(
+            violations(r#"{"Reading":{"State":"OFF","Level":100.5}}"#, &schema),
+            vec!["Reading.Level: 100.5 is out of range: it has to be at most 100"]
+        );
+        assert_eq!(
+            violations(r#"{"Reading":{"State":"OFF","Level":-1}}"#, &schema),
+            vec!["Reading.Level: -1 is out of range: it has to be at least 0"]
+        );
+        // The bounds themselves are allowed: they are inclusive.
+        assert_eq!(
+            violations(r#"{"Reading":{"State":"OFF","Level":100}}"#, &schema),
+            Vec::<String>::new()
+        );
+    }
+
+    /// A chain spreads facets over several links, and every link still applies.
+    #[test]
+    fn facets_hold_all_the_way_down_a_restriction_chain() {
+        let schema = xsd::compile(&[r#"
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:element name="Label" type="LabelType"/>
+              <xs:complexType name="LabelType">
+                <xs:sequence>
+                  <xs:element name="Text" type="ShortTextType"/>
+                </xs:sequence>
+              </xs:complexType>
+              <xs:simpleType name="TextType">
+                <xs:restriction base="xs:string">
+                  <xs:minLength value="2"/>
+                  <xs:maxLength value="10"/>
+                </xs:restriction>
+              </xs:simpleType>
+              <xs:simpleType name="ShortTextType">
+                <xs:restriction base="TextType">
+                  <xs:maxLength value="4"/>
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:schema>
+        "#])
+        .expect("compiles");
+
+        // The derived maxLength is the tighter one and wins.
+        assert_eq!(
+            violations(r#"{"Label":{"Text":"abcdef"}}"#, &schema),
+            vec!["Label.Text: 'abcdef' is 6 characters, and has to be at most 4"]
+        );
+        // The base's minLength is inherited rather than dropped.
+        assert_eq!(
+            violations(r#"{"Label":{"Text":"a"}}"#, &schema),
+            vec!["Label.Text: 'a' is 1 characters, and has to be at least 2"]
+        );
+        assert_eq!(
+            violations(r#"{"Label":{"Text":"abc"}}"#, &schema),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn a_long_enumeration_is_sampled_rather_than_recited() {
+        let mut s = Schema::new();
+        s.simple_with(
+            "ManyType",
+            "xs:string",
+            Facets {
+                enumeration: (0..40).map(|i| format!("V{i}")).collect(),
+                ..Facets::default()
+            },
+        )
+        .complex("HoldsType", vec![el("Value", "ManyType")])
+        .element("Holds", "HoldsType");
+
+        let reported = violations(r#"{"Holds":{"Value":"nope"}}"#, &s);
+        assert_eq!(reported.len(), 1);
+        assert!(
+            reported[0].contains("not one of the 40 values"),
+            "{reported:?}"
+        );
+        assert!(reported[0].ends_with('…'), "{reported:?}");
     }
 
     #[test]

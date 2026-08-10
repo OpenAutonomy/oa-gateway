@@ -108,6 +108,14 @@ fn reports_what_conversion_accepts(schema: &Schema) {
         );
     }
 
+    // Real values satisfying real facets: SIMULATION is a MessageModeEnum member
+    // and 002.5.0 fits the schema-version constraints, so neither is reported.
+    // A facet check that fired on those would be worse than none.
+    assert!(
+        !reported.iter().any(|v| v.contains("SIMULATION")),
+        "a valid enumeration member must not be reported: {reported:?}"
+    );
+
     // The same message as XML has to report the same list: validation reads the
     // schema, not the serialization it arrived in.
     let xml = message.to_xml(schema).expect("emits XML");
@@ -118,6 +126,68 @@ fn reports_what_conversion_accepts(schema: &Schema) {
         .map(ToString::to_string)
         .collect();
     assert_eq!(reported, reported_from_xml);
+}
+
+/// Facet checks against the values the standard actually declares.
+///
+/// The UUID case is not hypothetical. UCI declares
+/// `UniversallyUniqueIdentifierType` as exactly 36 characters in the hyphenated
+/// RFC 4122 form, while A-GRA carries the same identifier as `hexBinary` — and
+/// the live traffic in `repos/open-ma` sends the unhyphenated 32-character form.
+/// A gateway between the two is exactly where that shows up, so it is worth a
+/// test that says so against the published schema rather than a fixture.
+fn reports_values_the_standard_does_not_allow(schema: &Schema) {
+    let with_mode = |mode: &str, uuid: &str| {
+        format!(
+            r#"{{"SubsystemStatus":{{
+                 "MessageHeader":{{
+                   "Timestamp":"2026-01-22T00:00:00Z",
+                   "SchemaVersion":"002.5.0",
+                   "Mode":"{mode}",
+                   "SystemID":{{"UUID":"{uuid}"}}
+                 }},
+                 "MessageData":{{"SubsystemState":"OPERATE"}}
+               }}}}"#
+        )
+    };
+    let hyphenated = "7ea053ea-dcc5-45ba-ac26-d5bc909417dc";
+    let unhyphenated = "7ea053eadcc545baac26d5bc909417dc";
+
+    let report = |json: &str| -> Vec<String> {
+        Message::from_json(json, schema)
+            .expect("all of these convert")
+            .violations(schema)
+            .iter()
+            .map(ToString::to_string)
+            .collect()
+    };
+
+    // A mode outside MessageModeEnum is named, and so are the values it could
+    // have been.
+    let reported = report(&with_mode("OFFLINE", hyphenated));
+    let mode = reported
+        .iter()
+        .find(|v| v.contains("MessageHeader.Mode"))
+        .unwrap_or_else(|| panic!("expected the mode to be reported: {reported:?}"));
+    assert!(mode.contains("'OFFLINE' is not one of"), "{mode}");
+    assert!(mode.contains("SIMULATION"), "{mode}");
+
+    // The A-GRA form of a UUID is not the UCI form, and the length facet is
+    // enough to say so.
+    let reported = report(&with_mode("SIMULATION", unhyphenated));
+    let uuid = reported
+        .iter()
+        .find(|v| v.contains("SystemID.UUID"))
+        .unwrap_or_else(|| panic!("expected the UUID to be reported: {reported:?}"));
+    assert!(uuid.contains("32 characters"), "{uuid}");
+    assert!(uuid.contains("exactly 36"), "{uuid}");
+
+    // The UCI form passes, so the check is about the form and not about UUIDs.
+    let reported = report(&with_mode("SIMULATION", hyphenated));
+    assert!(
+        !reported.iter().any(|v| v.contains("SystemID.UUID")),
+        "a well-formed UUID must not be reported: {reported:?}"
+    );
 }
 
 /// The deepest message the catalog can express, and how deep it is.
@@ -261,6 +331,7 @@ fn the_published_schema_compiles_and_every_type_resolves() {
     round_trips_a_message_the_fixture_never_had(&schema);
 
     reports_what_conversion_accepts(&schema);
+    reports_values_the_standard_does_not_allow(&schema);
 
     let (deepest, depth) = deepest_message(&schema);
     assert!(

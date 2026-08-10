@@ -13,7 +13,8 @@ use std::collections::BTreeSet;
 use roxmltree::{Document, Node};
 
 use crate::schema::{
-    choice, sequence, ComplexContent, ComplexType, Element, GlobalElement, MaxOccurs, Schema,
+    choice, sequence, ComplexContent, ComplexType, Element, Facets, GlobalElement, MaxOccurs,
+    Schema, SimpleType,
 };
 use crate::UciError;
 
@@ -107,9 +108,9 @@ fn add_document(doc: &Document<'_>, schema: &mut Schema) -> Result<(), UciError>
                 schema.complex_types.insert(ct.name.clone(), ct);
             }
             "simpleType" => {
-                let (name, base) = simple_type(child)?;
+                let (name, simple) = simple_type(child)?;
                 claim(schema, &name, Definition::Simple)?;
-                schema.simple_types.insert(name, base);
+                schema.simple_types.insert(name, simple);
             }
             // Resolved by the caller supplying every document, not by us
             // reading paths out of the schema text.
@@ -278,7 +279,7 @@ fn max_occurs(node: Node<'_, '_>, owner: &str) -> Result<MaxOccurs, UciError> {
     }
 }
 
-fn simple_type(node: Node<'_, '_>) -> Result<(String, String), UciError> {
+fn simple_type(node: Node<'_, '_>) -> Result<(String, SimpleType), UciError> {
     let name = required(node, "name")?.to_owned();
     let restriction = definitions(node)?
         .next()
@@ -291,10 +292,57 @@ fn simple_type(node: Node<'_, '_>) -> Result<(String, String), UciError> {
         )));
     }
 
-    // Facets are deliberately ignored: this compiler resolves types so the
-    // converter can tell a number from a string, and does not validate.
     let base = type_ref(restriction, required(restriction, "base")?);
-    Ok((name, base))
+    let mut facets = Facets::default();
+    for facet in definitions(restriction)? {
+        let tag = facet.tag_name().name();
+        if tag == "whiteSpace" {
+            // Normalization, not a constraint: there is no value that violates
+            // it, and conversion already trims what it reads.
+            continue;
+        }
+        let value = required(facet, "value").map_err(|_| {
+            UciError::Xsd(format!(
+                "simpleType '{name}' has an 'xs:{tag}' facet with no value="
+            ))
+        })?;
+        let count = |what: &str| -> Result<usize, UciError> {
+            value.parse::<usize>().map_err(|_| {
+                UciError::Xsd(format!(
+                    "simpleType '{name}' has {what} of '{value}', which is not a length"
+                ))
+            })
+        };
+        let number = |what: &str| -> Result<f64, UciError> {
+            value.parse::<f64>().map_err(|_| {
+                UciError::Xsd(format!(
+                    "simpleType '{name}' has {what} of '{value}', which is not a number"
+                ))
+            })
+        };
+        match tag {
+            "enumeration" => facets.enumeration.push(value.to_owned()),
+            "pattern" => facets.patterns.push(value.to_owned()),
+            "length" => facets.length = Some(count("a length")?),
+            "minLength" => facets.min_length = Some(count("a minLength")?),
+            "maxLength" => facets.max_length = Some(count("a maxLength")?),
+            "minInclusive" => facets.min_inclusive = Some(number("a minInclusive")?),
+            "maxInclusive" => facets.max_inclusive = Some(number("a maxInclusive")?),
+            "minExclusive" => facets.min_exclusive = Some(number("a minExclusive")?),
+            "maxExclusive" => facets.max_exclusive = Some(number("a maxExclusive")?),
+            other => {
+                // Refused rather than skipped, on the same grounds as the rest of
+                // this compiler: a constraint silently dropped is worse than one
+                // that stops the schema from loading, because nothing later can
+                // tell the difference between unconstrained and unread.
+                return Err(UciError::Xsd(format!(
+                    "simpleType '{name}' uses unsupported facet 'xs:{other}'"
+                )));
+            }
+        }
+    }
+
+    Ok((name, SimpleType { base, facets }))
 }
 
 /// Child elements that carry structure, with documentation skipped.
@@ -369,8 +417,8 @@ fn check_references(schema: &Schema) -> Result<(), UciError> {
             note_missing(schema, &el.type_name, &mut missing);
         }
     }
-    for base in schema.simple_types.values() {
-        note_missing(schema, base, &mut missing);
+    for simple in schema.simple_types.values() {
+        note_missing(schema, &simple.base, &mut missing);
     }
 
     if missing.is_empty() {

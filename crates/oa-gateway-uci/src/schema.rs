@@ -4,6 +4,7 @@
 //! Build one by hand with the builder methods below, or compile the published
 //! XSD into one with [`crate::xsd::compile`].
 
+use std::cmp::Ordering;
 use std::collections::HashMap;
 
 /// How many links of a named-simple-type chain [`Schema::primitive`] will follow
@@ -15,10 +16,74 @@ const MAX_SIMPLE_DEPTH: usize = 16;
 pub struct Schema {
     pub global_elements: HashMap<String, GlobalElement>,
     pub complex_types: HashMap<String, ComplexType>,
-    /// Named simple types, mapped to the type each one restricts. The target is
+    /// Named simple types: what each one restricts, and how. The target is
     /// usually an `xs:` primitive but may be another named simple type, so read
-    /// this through [`Schema::primitive`] rather than directly.
-    pub simple_types: HashMap<String, String>,
+    /// it through [`Schema::primitive`] rather than directly, and read the
+    /// constraints through [`Schema::effective_facets`].
+    pub simple_types: HashMap<String, SimpleType>,
+}
+
+/// A named simple type: the type it restricts, and the facets it adds.
+#[derive(Debug, Clone)]
+pub struct SimpleType {
+    pub base: String,
+    pub facets: Facets,
+}
+
+/// Constraints a simple type places on a value, as written.
+///
+/// Read [`Schema::effective_facets`] instead of a single type's facets: a
+/// restriction chain spreads them over several links.
+#[derive(Debug, Clone, Default)]
+pub struct Facets {
+    /// Permitted values. Empty means unconstrained rather than "nothing allowed".
+    pub enumeration: Vec<String>,
+    /// Patterns as the XSD wrote them. Several at one link are alternatives.
+    pub patterns: Vec<String>,
+    pub length: Option<usize>,
+    pub min_length: Option<usize>,
+    pub max_length: Option<usize>,
+    /// Numeric bounds, held as `f64`. Every bound in the published catalog is
+    /// small enough to be exact; a bound past 2^53 on an `xs:long` would not be,
+    /// and is worth revisiting if a program's message set carries one.
+    pub min_inclusive: Option<f64>,
+    pub max_inclusive: Option<f64>,
+    pub min_exclusive: Option<f64>,
+    pub max_exclusive: Option<f64>,
+}
+
+/// The facets in force for a type, gathered along its restriction chain.
+///
+/// A derived type's own enumeration is the operative one, since XSD requires it
+/// to be a subset of its base's. Patterns at different links all have to hold.
+/// For a length or a bound, the tightest wins.
+#[derive(Debug, Default)]
+pub struct Effective<'a> {
+    pub enumeration: Option<&'a [String]>,
+    pub patterns: Vec<&'a str>,
+    pub length: Option<usize>,
+    pub min_length: Option<usize>,
+    pub max_length: Option<usize>,
+    pub min_inclusive: Option<f64>,
+    pub max_inclusive: Option<f64>,
+    pub min_exclusive: Option<f64>,
+    pub max_exclusive: Option<f64>,
+}
+
+impl Effective<'_> {
+    /// Whether anything here can be violated.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.enumeration.is_none()
+            && self.patterns.is_empty()
+            && self.length.is_none()
+            && self.min_length.is_none()
+            && self.max_length.is_none()
+            && self.min_inclusive.is_none()
+            && self.max_inclusive.is_none()
+            && self.min_exclusive.is_none()
+            && self.max_exclusive.is_none()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -107,9 +172,25 @@ impl Schema {
         self
     }
 
-    /// Declare a named simple type that restricts `base`.
+    /// Declare a named simple type that restricts `base` without narrowing it.
     pub fn simple(&mut self, name: impl Into<String>, base: impl Into<String>) -> &mut Self {
-        self.simple_types.insert(name.into(), base.into());
+        self.simple_with(name, base, Facets::default())
+    }
+
+    /// Declare a named simple type that restricts `base` with `facets`.
+    pub fn simple_with(
+        &mut self,
+        name: impl Into<String>,
+        base: impl Into<String>,
+        facets: Facets,
+    ) -> &mut Self {
+        self.simple_types.insert(
+            name.into(),
+            SimpleType {
+                base: base.into(),
+                facets,
+            },
+        );
         self
     }
 
@@ -257,11 +338,57 @@ impl Schema {
                 return current;
             }
             match self.simple_types.get(current) {
-                Some(base) => current = base.as_str(),
+                Some(simple) => current = simple.base.as_str(),
                 None => return current,
             }
         }
         current
+    }
+
+    /// Every constraint a value of `type_name` has to satisfy.
+    ///
+    /// Walks the restriction chain, so a type that narrows another inherits what
+    /// the other already required. An `xs:` primitive, or a type the schema does
+    /// not define, constrains nothing.
+    #[must_use]
+    pub fn effective_facets<'a>(&'a self, type_name: &str) -> Effective<'a> {
+        let mut out = Effective::default();
+        let mut current = type_name;
+        for _ in 0..MAX_SIMPLE_DEPTH {
+            let Some(simple) = self.simple_types.get(current) else {
+                break;
+            };
+            let facets = &simple.facets;
+            if out.enumeration.is_none() && !facets.enumeration.is_empty() {
+                out.enumeration = Some(&facets.enumeration);
+            }
+            out.patterns
+                .extend(facets.patterns.iter().map(String::as_str));
+            out.length = out.length.or(facets.length);
+            out.min_length = stricter(out.min_length, facets.min_length, Ordering::Greater);
+            out.max_length = stricter(out.max_length, facets.max_length, Ordering::Less);
+            out.min_inclusive = stricter_f64(out.min_inclusive, facets.min_inclusive, f64::max);
+            out.max_inclusive = stricter_f64(out.max_inclusive, facets.max_inclusive, f64::min);
+            out.min_exclusive = stricter_f64(out.min_exclusive, facets.min_exclusive, f64::max);
+            out.max_exclusive = stricter_f64(out.max_exclusive, facets.max_exclusive, f64::min);
+            current = simple.base.as_str();
+        }
+        out
+    }
+}
+
+/// Keep whichever bound is harder to satisfy.
+fn stricter<T: Ord>(a: Option<T>, b: Option<T>, keep: Ordering) -> Option<T> {
+    match (a, b) {
+        (Some(a), Some(b)) => Some(if a.cmp(&b) == keep { a } else { b }),
+        (some, None) | (None, some) => some,
+    }
+}
+
+fn stricter_f64(a: Option<f64>, b: Option<f64>, keep: fn(f64, f64) -> f64) -> Option<f64> {
+    match (a, b) {
+        (Some(a), Some(b)) => Some(keep(a, b)),
+        (some, None) | (None, some) => some,
     }
 }
 
