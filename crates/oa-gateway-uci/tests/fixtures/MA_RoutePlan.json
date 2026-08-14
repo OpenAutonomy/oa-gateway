@@ -1,0 +1,102 @@
+{
+  "MA_RoutePlan": {
+    "SecurityInformation": {
+      "Classification": "U",
+      "OwnerProducer": [
+        {
+          "GovernmentIdentifier": "USA"
+        }
+      ]
+    },
+    "MessageHeader": {
+      "SystemID": {
+        "UUID": "c2000000000000000000000000000001",
+        "DescriptiveLabel": "C2"
+      },
+      "Timestamp": "2026-08-13T16:00:00Z",
+      "SchemaVersion": "005.0a",
+      "Mode": "SIMULATION"
+    },
+    "MessageData": {
+      "RoutePlanID": {
+        "UUID": "d1000000000000000000000000000001",
+        "DescriptiveLabel": "c2-path"
+      },
+      "Plan": {
+        "Applicability": {
+          "ApplicableToIDs": {
+            "SystemID": {
+              "UUID": "7ea053eadcc545baac26d5bc909417dc",
+              "DescriptiveLabel": "VI"
+            }
+          }
+        },
+        "Parts": {
+          "RouteType": ["PRIMARY"]
+        },
+        "Route": {
+          "Detailed": false,
+          "FirstInRoutePathID": {
+            "UUID": "a1000000000000000000000000000001"
+          },
+          "RouteProjection": "GREAT_CIRCLE",
+          "Path": [
+            {
+              "PathID": {
+                "UUID": "a1000000000000000000000000000001"
+              },
+              "PathType": "PRIMARY",
+              "FirstInPathSegmentID": {
+                "UUID": "b1000000000000000000000000000001"
+              },
+              "PathSegment": [
+                {
+                  "PathSegmentID": {
+                    "UUID": "b1000000000000000000000000000001"
+                  },
+                  "Source": "OPERATOR_DEFINED",
+                  "EndPoint": {
+                    "WayPoint": {
+                      "PointChoice": {
+                        "Point2D": {
+                          "Latitude": 0.678743509,
+                          "Longitude": -1.344541976,
+                          "Altitude": 100.0
+                        }
+                      },
+                      "WaypointType": "NAV_ONLY"
+                    }
+                  },
+                  "NextPathSegment": {
+                    "PathSegmentID": {
+                      "UUID": "b1000000000000000000000000000002"
+                    }
+                  }
+                },
+                {
+                  "PathSegmentID": {
+                    "UUID": "b1000000000000000000000000000002"
+                  },
+                  "Source": "OPERATOR_DEFINED",
+                  "EndPoint": {
+                    "WayPoint": {
+                      "PointChoice": {
+                        "Point2D": {
+                          "Latitude": 0.678886647,
+                          "Longitude": -1.344543721,
+                          "Altitude": 100.0
+                        }
+                      },
+                      "WaypointType": "NAV_ONLY"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "ForPlanningUseOnly": false
+    }
+  }
+}

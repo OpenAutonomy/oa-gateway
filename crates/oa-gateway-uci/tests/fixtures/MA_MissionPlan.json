@@ -1,0 +1,44 @@
+{
+  "MA_MissionPlan": {
+    "SecurityInformation": {
+      "Classification": "U",
+      "OwnerProducer": [
+        {
+          "GovernmentIdentifier": "USA"
+        }
+      ]
+    },
+    "MessageHeader": {
+      "SystemID": {
+        "UUID": "c2000000000000000000000000000001",
+        "DescriptiveLabel": "C2"
+      },
+      "Timestamp": "2026-08-13T16:00:00Z",
+      "SchemaVersion": "005.0a",
+      "Mode": "SIMULATION"
+    },
+    "MessageData": {
+      "MissionPlanID": {
+        "UUID": "d2000000000000000000000000000001",
+        "DescriptiveLabel": "c2-path"
+      },
+      "Applicability": {
+        "ApplicableToIDs": {
+          "SystemID": {
+            "UUID": "7ea053eadcc545baac26d5bc909417dc",
+            "DescriptiveLabel": "VI"
+          }
+        }
+      },
+      "SubPlans": {
+        "RoutePlanID": [
+          {
+            "UUID": "d1000000000000000000000000000001",
+            "DescriptiveLabel": "c2-path"
+          }
+        ]
+      },
+      "ForPlanningUseOnly": false
+    }
+  }
+}

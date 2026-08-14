@@ -145,9 +145,13 @@ pub enum ViolationKind {
         total: usize,
     },
     /// A value of the wrong length.
+    ///
+    /// `unit` is `"characters"` for the string types and `"octets"` for
+    /// `xs:hexBinary`, which is the unit XSD's length facet uses on each.
     Length {
         value: String,
         len: usize,
+        unit: &'static str,
         requirement: String,
     },
     /// A number outside the bounds its type declares.
@@ -223,10 +227,11 @@ impl fmt::Display for ViolationKind {
             Self::Length {
                 value,
                 len,
+                unit,
                 requirement,
             } => write!(
                 f,
-                "'{}' is {len} characters, and has to be {requirement}",
+                "'{}' is {len} {unit}, and has to be {requirement}",
                 abbreviated(value)
             ),
             Self::Range { value, requirement } => {
@@ -482,10 +487,9 @@ fn check(
 
 /// Check a leaf against the facets of the type it was declared as.
 ///
-/// Length is counted in characters, which is what XSD means for the string types
-/// these facets appear on. It is not what `xs:hexBinary` means — there a length
-/// counts octets — so a length facet on binary content would be read too
-/// strictly. Nothing in the published catalog does that.
+/// Length is counted in characters for the string types, which is what XSD
+/// means there. On `xs:hexBinary` a length counts octets — two hex digits each
+/// — so A-GRA's 32-character UUID is 16 octets, not a violation of `length="16"`.
 fn check_value(text: &str, schema: &Schema, type_name: &str, path: &str, out: &mut Vec<Violation>) {
     // What the value is comes before what it is narrowed to. A value that is not
     // a number at all has nothing to say to a bound, and reporting both would
@@ -524,7 +528,7 @@ fn check_value(text: &str, schema: &Schema, type_name: &str, path: &str, out: &m
         }
     }
 
-    let len = text.chars().count();
+    let (len, unit) = value_length(text, primitive);
     let mut length = |requirement: String| {
         note(
             out,
@@ -532,6 +536,7 @@ fn check_value(text: &str, schema: &Schema, type_name: &str, path: &str, out: &m
             ViolationKind::Length {
                 value: text.to_owned(),
                 len,
+                unit,
                 requirement,
             },
         );
@@ -609,6 +614,19 @@ fn check_value(text: &str, schema: &Schema, type_name: &str, path: &str, out: &m
         if number >= max {
             range(format!("less than {max}"));
         }
+    }
+}
+
+/// How long `text` is, in the unit its primitive's length facet uses.
+///
+/// Hex digits that remain after dropping whitespace are the value; two of them
+/// are one octet. Everything else is counted in characters.
+fn value_length(text: &str, primitive: &str) -> (usize, &'static str) {
+    if matches!(primitive::kind(primitive), primitive::Kind::HexBinary) {
+        let digits = text.bytes().filter(|b| b.is_ascii_hexdigit()).count();
+        (digits / 2, "octets")
+    } else {
+        (text.chars().count(), "characters")
     }
 }
 
@@ -894,6 +912,36 @@ mod tests {
         assert_eq!(
             violations(r#"{"Reading":{"State":"OFF","Code":"AB1"}}"#, &schema),
             vec!["Reading.Code: 'AB1' is 3 characters, and has to be exactly 4"]
+        );
+    }
+
+    /// A-GRA's UUID is `xs:hexBinary` with `length="16"` — sixteen octets, which
+    /// is thirty-two hex characters. Counting characters instead would reject
+    /// every well-formed identifier the schema was written to accept.
+    #[test]
+    fn hex_binary_length_is_counted_in_octets() {
+        let mut s = Schema::new();
+        s.simple_with(
+            "UuidType",
+            "xs:hexBinary",
+            Facets {
+                length: Some(16),
+                ..Facets::default()
+            },
+        )
+        .complex("HoldsType", vec![el("UUID", "UuidType")])
+        .element("Holds", "HoldsType");
+
+        let thirty_two = "7ea053eadcc545baac26d5bc909417dc";
+        assert_eq!(
+            violations(&format!(r#"{{"Holds":{{"UUID":"{thirty_two}"}}}}"#), &s),
+            Vec::<String>::new()
+        );
+
+        let sixteen = "7ea053eadcc545ba";
+        assert_eq!(
+            violations(&format!(r#"{{"Holds":{{"UUID":"{sixteen}"}}}}"#), &s),
+            vec!["Holds.UUID: '7ea053eadcc545ba' is 8 octets, and has to be exactly 16"]
         );
     }
 
