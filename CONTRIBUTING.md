@@ -1,8 +1,8 @@
 # Contributing
 
-Independent prototype, MIT licensed. PRs / MRs welcome.
+OA-Gateway is an independent prototype under the MIT License. Pull requests and merge requests are welcome.
 
-Start with [docs/glossary.md](docs/glossary.md) for the acronyms and [docs/writing-an-adapter.md](docs/writing-an-adapter.md) if you are adding a protocol.
+Start with [docs/glossary.md](docs/glossary.md) for the acronyms, [docs/architecture.md](docs/architecture.md) for the crate graph, and [docs/writing-an-adapter.md](docs/writing-an-adapter.md) if you are adding a protocol.
 
 Found a vulnerability? Do not open a PR for it first — [SECURITY.md](SECURITY.md)
 says how to report it, and lists the resource limits already known to be missing
@@ -35,7 +35,7 @@ The gate needs no UCI schema: conversion tests use a small fixture schema. To ex
 cargo test -p oa-gateway-uci -- --ignored
 ```
 
-Optional, needs Docker:
+The following script is optional and needs Docker:
 
 ```bash
 ./scripts/live-activemq.sh

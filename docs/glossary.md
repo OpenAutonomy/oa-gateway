@@ -1,17 +1,17 @@
 # Glossary
 
-The gateway's own vocabulary, then the domain terms it borrows. Expansions below are the ones confirmable in the standards under `repos/`; where a term's expansion is not established there, the entry describes the role it plays in this repo instead of guessing.
+This page defines OA-Gateway's own terms, then the domain terms it borrows. Expansions are those that can be confirmed in the standards under `repos/`. Where a standard does not establish an expansion, the entry describes the role the term plays in this repository.
 
 ## OA-Gateway's own terms
 
 | Term | Meaning |
 |---|---|
-| **Envelope** | The unit that crosses the engine: id, route, string headers, content-type label, opaque `Bytes` payload. The engine reads only the route. |
+| **Envelope** | The value that crosses the engine: id, route, string headers, content-type label, and an opaque `Bytes` payload. The engine reads only the route. |
 | **RouteKey** | An address: `topic` plus an optional `type_hint`. |
 | **topic** | The routing coordinate every envelope has. On the ActiveMQ path it equals the UCI message type name and the JMS/STOMP destination suffix. |
 | **type_hint** | An optional discriminator within a topic — an OWP message name, a UCI message type. The engine only compares it for equality. `None` on a subscription means "every type on this topic". |
-| **Adapter** | A protocol plugin owning its own I/O loop. Talks only to the engine, never to another adapter. |
-| **Engine** | The router. Protocol-agnostic, payload-blind, in-process. |
+| **Adapter** | A protocol plugin that owns its own I/O loop. It talks only to the engine, never to another adapter. |
+| **Engine** | The in-process router. It is protocol-agnostic and does not parse payloads. |
 | **wildcard subscription** | A subscription with `type_hint: None`, matching every type on its topic. |
 | **conversion** | Mapping a payload between OMS JSON and UCI XML. Deliberately forgiving: an element the schema does not declare is carried rather than refused, and a value that does not fit its declared type is carried as written rather than coerced into fitting. |
 | **validation** | Checking a payload against what the compiled schema states — declarations, occurrence ranges, alternations, abstract types, facets, and the primitive a value has to be. Separate from conversion, because a message can convert cleanly in both directions and still not be a valid instance of the standard. Controlled by `uci.validate`. |

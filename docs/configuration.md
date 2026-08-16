@@ -1,28 +1,28 @@
 # Configuration
 
-The host takes one TOML file as its only argument. Every section is optional in the file. Naming `[loopback]`, `[owp]`, or `[stomp]` turns that adapter on; omitting it leaves it off. `enabled = false` keeps the keys in the file without spawning. A key no section declares is a startup error, not a silent ignore. At least one adapter table must be present and on.
+The host takes one TOML file as its only argument. Every section in that file is optional. Naming `[loopback]`, `[owp]`, or `[stomp]` starts that adapter; omitting the table leaves it off. Set `enabled = false` to keep the keys in the file without starting the adapter. An unknown key is a startup error. At least one adapter table must be present and enabled.
 
 ```bash
 ./target/release/oa-gateway config/default.toml
 ```
 
-Paths in the file are relative to the process working directory, normally the repo root. Hostnames (`owp.bind`, `stomp.broker`) are resolved once at startup; a name that does not resolve fails then rather than in a retry loop.
+Paths in the file are relative to the process working directory, normally the repository root. Hostnames (`owp.bind`, `stomp.broker`) are resolved once at startup. A name that does not resolve fails then, not later in a retry loop.
 
-There is no TLS and no authentication of the gateway's own. Bind loopback, or keep both ends on a trusted segment. [SECURITY.md](../SECURITY.md) states the assumptions.
+The gateway does not terminate TLS and does not authenticate its own peers. Bind loopback, or keep both ends on a trusted segment. [SECURITY.md](../SECURITY.md) states the assumptions.
 
 ## Shipped files
 
 | File | Role |
 |---|---|
-| [`config/default.toml`](../config/default.toml) | Local toy: loopback and OWP on loopback, STOMP off, no schema. |
-| [`config/compose.toml`](../config/compose.toml) | Same shape for `compose/gateway.yml`: OWP on `0.0.0.0:9000`, STOMP off. |
-| [`config/asb.toml`](../config/asb.toml) | Host-side ActiveMQ bridge: schema, `xml_baseline`, STOMP on. Needs `scripts/fetch-uci-schema.sh` and a broker. |
+| [`config/default.toml`](../config/default.toml) | Local development: loopback and OWP on loopback, STOMP off, no schema. |
+| [`config/compose.toml`](../config/compose.toml) | Container example for `compose/gateway.yml`: OWP on `0.0.0.0:9000`, STOMP off. |
+| [`config/asb.toml`](../config/asb.toml) | Host-side ActiveMQ bridge with a schema, `xml_baseline`, and STOMP enabled. Requires `scripts/fetch-uci-schema.sh` and a broker. |
 
-`shipped_configs_parse` fails if one of those files names a key the structs do not know.
+`shipped_configs_parse` fails if one of those files names a key the structs do not declare.
 
 ## `[engine]`
 
-The engine itself has no config. This section only controls how the host talks about it. Omitting it uses a 30-second interval.
+The engine has no runtime settings of its own. This section controls how often the host logs engine counters. Omitting it uses a 30-second interval.
 
 | Key | Default | What it does |
 |---|---|---|
@@ -30,59 +30,59 @@ The engine itself has no config. This section only controls how the host talks a
 
 ## `[uci]`
 
-Schema documents and what a payload that is not one of them costs. Conversion and validation both need the files named explicitly; the standard is not redistributed here. See [using-custom-xsd.md](using-custom-xsd.md).
+This section names the schema documents and what to do when a payload is not an instance of them. Conversion and validation both need the files listed explicitly; the standard is not redistributed here. See [using-custom-xsd.md](using-custom-xsd.md).
 
 | Key | Default | What it does |
 |---|---|---|
-| `schema` | `[]` | XSD paths. Empty means no conversion and no validation. List every document the catalog spans — `xs:include` / `xs:import` are not followed. |
+| `schema` | `[]` | XSD paths. Empty means no conversion and no validation. List every document the catalog spans; `xs:include` and `xs:import` are not followed. |
 | `validate` | `"warn"` | `"warn"` reports a departure and carries the message; `"reject"` refuses it and tells the peer; `"off"` skips the check. Ignored when `schema` is empty. A typo is refused as `uci.validate: …`. |
 
-`owp.xml_baseline` cannot work without a schema; startup says so rather than failing per message.
+`owp.xml_baseline` requires a schema. Startup refuses that combination rather than failing on the first converted message.
 
 ## `[loopback]`
 
-In-process adapter with no socket. Off unless this table is in the file.
+Loopback is an in-process adapter with no socket. It is off unless this table is in the file.
 
 | Key | Default | What it does |
 |---|---|---|
-| `enabled` | on when the section is present | `false` keeps the keys without spawning. |
+| `enabled` | on when the section is present | `false` keeps the keys without starting the adapter. |
 | `id` | `"loopback"` | Engine adapter id. |
 
 ## `[owp]`
 
-OWP/WebSocket server. Off unless this table is in the file.
+OWP is the WebSocket server. It is off unless this table is in the file.
 
 | Key | Default | What it does |
 |---|---|---|
-| `enabled` | on when the section is present | `false` keeps the keys without spawning. |
-| `id` | `"owp"` | Engine adapter id. One id covers every WebSocket; do not treat it as a per-connection name. |
+| `enabled` | on when the section is present | `false` keeps the keys without starting the adapter. |
+| `id` | `"owp"` | Engine adapter id. One id covers every WebSocket; it is not a per-connection name. |
 | `bind` | `"127.0.0.1:9000"` | Listen address, `host:port`. |
 | `server_id` | `"oa-gateway-0"` | Identity sent on INIT. |
 | `system_label` | `"OA-Gateway Prototype"` | Human-readable label sent on INIT. |
 | `schema` | `"002.5.0"` | Protocol version string a client INIT must match exactly. This is not `[uci].schema`. Empty disables the check. |
-| `unwrap_ma_payloads` | `true` | Peel A-GRA Rx/Tx hex wrappers on PUB and fan out wrapper plus inner. |
-| `xml_baseline` | `false` | Convert OMS JSON ↔ UCI XML at the socket so the engine (and a broker) see XML. Requires `[uci].schema`. |
+| `unwrap_ma_payloads` | `true` | Peel A-GRA Rx/Tx hex wrappers on PUB and publish the wrapper and the inner message. |
+| `xml_baseline` | `false` | Convert OMS JSON ↔ UCI XML at the socket so the engine and a broker see XML. Requires `[uci].schema`. |
 | `max_frame_size` | `16777216` | Largest frame accepted from a client, in bytes. An oversized frame ends that session. |
-| `max_connections` | `256` | Connections served at once. Further ones are closed on accept. |
+| `max_connections` | `256` | Connections served at once. Further connections are closed on accept. |
 | `max_subscriptions` | `1024` | Subscriptions one connection may hold. A SUB past the limit is refused and the session continues. |
 
-A client is not authenticated, so the three limits are what stands between one peer and the memory of every other. The subscription default sits above the size of the UCI catalog, so subscribing to every message type in the standard still fits.
+A client is not authenticated, so these three limits isolate one peer from the memory of the others. The subscription default is larger than the UCI catalog, so a client can still subscribe to every message type in the standard.
 
 ## `[stomp]`
 
-STOMP client toward an ActiveMQ (or other) broker. Off unless this table is in the file, so a config that never names it does not need a broker. Worked examples and topic mapping are in [connecting-active-mq.md](connecting-active-mq.md).
+STOMP is a client toward an ActiveMQ or other broker. It is off unless this table is in the file, so a configuration that never names it does not need a broker. Worked examples and topic mapping are in [connecting-active-mq.md](connecting-active-mq.md).
 
 | Key | Default | What it does |
 |---|---|---|
-| `enabled` | on when the section is present | `false` keeps the keys without spawning. |
+| `enabled` | on when the section is present | `false` keeps the keys without starting the adapter. |
 | `id` | `"stomp"` | Engine adapter id. |
 | `broker` | `"127.0.0.1:61613"` | Broker address, `host:port`. |
 | `host` | `"/"` | STOMP `host` header. ActiveMQ Classic typically wants `"/"`. |
-| `login` | `""` | CONNECT login. Empty omits the header, rather than sending a blank. |
+| `login` | `""` | CONNECT login. Empty omits the header instead of sending a blank. |
 | `passcode` | `""` | CONNECT passcode. Empty omits the header. Sent only when `login` is set. |
 | `destination_prefix` | `"/topic/"` | Prepended to each topic to form a STOMP destination. |
 | `topics` | `["demo"]` | Engine topic names and STOMP destination suffixes, bridged both ways. A name you do not list is not bridged. |
-| `unwrap_ma_payloads` | `true` | Peel A-GRA Rx/Tx hex wrappers on inbound MESSAGE and fan out wrapper plus inner. |
+| `unwrap_ma_payloads` | `true` | Peel A-GRA Rx/Tx hex wrappers on inbound MESSAGE and publish the wrapper and the inner message. |
 | `reconnect` | `true` | Retry the broker after a dropped session. |
 | `reconnect_delay_secs` | `1` | Seconds to wait between reconnect attempts. |
 | `connect_timeout_secs` | `5` | Seconds for TCP connect and for the CONNECTED wait, each. |
@@ -90,8 +90,8 @@ STOMP client toward an ActiveMQ (or other) broker. Off unless this table is in t
 | `on_panic` | `"abort"` | `"abort"` ends the adapter when a session task panics; `"reconnect"` treats the panic as a failed session and then follows `reconnect`. A typo is refused as `stomp.on_panic: …`. |
 | `max_frame_size` | `16777216` | Largest frame accepted from the broker, in bytes. It bounds both the read buffer and the `content-length` a peer can claim. |
 
-`login` and `passcode` are the broker's, sent in the clear.
+`login` and `passcode` are the broker's credentials and are sent in the clear.
 
 ## Adding a section
 
-A new adapter needs a `#[derive(Deserialize)]` struct in `crates/oa-gateway/src/config/` with `#[serde(deny_unknown_fields)]` and a default on every field, then a block in `config/default.toml`. [Writing an adapter](writing-an-adapter.md) covers the rest of the wiring.
+A new adapter needs a `#[derive(Deserialize)]` struct in `crates/oa-gateway/src/config/` with `#[serde(deny_unknown_fields)]` and a default on every field, and a corresponding block in `config/default.toml`. [Writing an adapter](writing-an-adapter.md) covers the rest of the wiring.
