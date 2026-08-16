@@ -14,12 +14,18 @@ use std::sync::OnceLock;
 use crate::schema::{el, el_many, el_opt, Schema};
 
 /// The fixture schema, built once on first use.
+///
+/// Enough for Ping, the PositionReport fixtures, `$type` on
+/// PolySample, and the A-GRA wrap shells. Not a substitute for
+/// [`crate::xsd::compile`] on the published catalog.
 #[must_use]
 pub fn v25() -> &'static Schema {
     static SCHEMA: OnceLock<Schema> = OnceLock::new();
     SCHEMA.get_or_init(build_v25)
 }
 
+/// Hand-built UCI 2.5 sliver. Kept next to [`v25`] so the shape is
+/// visible without opening a fixture file.
 fn build_v25() -> Schema {
     let mut s = Schema::new();
 

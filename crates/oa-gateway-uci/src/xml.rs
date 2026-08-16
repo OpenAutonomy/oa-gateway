@@ -1,3 +1,10 @@
+//! UCI XML → instance tree → UCI XML.
+//!
+//! The root local name is the global element. `xsi:type` selects a
+//! concrete type. Nesting is counted on the text before the parser
+//! builds a tree, because roxmltree has no depth limit of its own.
+//! Text that does not fit a primitive is carried as written.
+
 use std::collections::BTreeMap;
 
 use roxmltree::{Document, Node as XmlNode};
@@ -11,6 +18,14 @@ use crate::{UciError, MAX_DEPTH};
 const NS: &str = "https://www.vdl.afrl.af.mil/programs/oam";
 const XSI: &str = "http://www.w3.org/2001/XMLSchema-instance";
 
+/// Parses UCI XML into a [`Message`].
+///
+/// # Errors
+///
+/// Returns [`UciError::TooDeep`] if the text nests past [`MAX_DEPTH`],
+/// [`UciError::Xml`] if it is not well-formed, [`UciError::UnknownElement`]
+/// if the root is not a global element, or [`UciError::Xsd`] if an
+/// extension chain is cyclic.
 pub fn from_xml(text: &str, schema: &Schema) -> Result<Message, UciError> {
     // Before the parser sees it: roxmltree descends recursively and offers no
     // depth limit of its own, so a document a few thousand elements deep ends
@@ -34,6 +49,12 @@ pub fn from_xml(text: &str, schema: &Schema) -> Result<Message, UciError> {
     Ok(Message { name, body })
 }
 
+/// Serializes `message` as UCI XML with the OAM namespace on the root.
+///
+/// # Errors
+///
+/// Returns [`UciError`] if flattening a type fails or nesting exceeds
+/// [`MAX_DEPTH`].
 pub fn to_xml(message: &Message, schema: &Schema) -> Result<String, UciError> {
     let declared = schema
         .global_type(&message.name)
@@ -144,6 +165,8 @@ fn scan_start_tag(rest: &[u8]) -> (usize, bool) {
     (rest.len(), false)
 }
 
+/// Walks one XML element as `type_name`. `xsi:type` overrides the
+/// declared type when it names a complex type.
 fn read_element(
     node: XmlNode<'_, '_>,
     schema: &Schema,
@@ -248,6 +271,8 @@ fn parse_text(type_name: &str, text: &str) -> Simple {
     }
 }
 
+/// Writes one element. The OAM namespace is on the root; `xsi:type` is
+/// written when [`Complex::type_name`] is set.
 fn write_element(
     out: &mut String,
     name: &str,
@@ -328,6 +353,8 @@ fn write_element(
     Ok(())
 }
 
+/// OAM default namespace, and `xmlns:xsi` when the root names a
+/// concrete type.
 fn write_root_ns(out: &mut String, need_xsi: bool) {
     out.push_str(" xmlns=\"");
     out.push_str(NS);
@@ -339,10 +366,12 @@ fn write_root_ns(out: &mut String, need_xsi: bool) {
     }
 }
 
+/// Local part of a QName (`uci:Ping` → `Ping`).
 fn local_name(qname: &str) -> &str {
     qname.rsplit(':').next().unwrap_or(qname)
 }
 
+/// Escapes `&`, `<`, and `>` in element text.
 fn escape(s: String) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")

@@ -6,23 +6,38 @@ use tokio::sync::{mpsc, RwLock};
 use crate::{AdapterId, Envelope, RouteKey, SubId};
 
 /// Capacity of each subscriber delivery channel.
+///
+/// [`Engine::publish`] uses `try_send`. A full channel drops that delivery
+/// rather than blocking the publisher. Adapters that can be slower than
+/// their traffic should read on a dedicated task and buffer on their own
+/// terms.
 pub const DEFAULT_CHANNEL_CAPACITY: usize = 64;
 
 /// Composite key for a subscription owned by one adapter.
+///
+/// Uniqueness is `(adapter_id, sub_id)`. The same `sub_id` on two adapters
+/// is fine; the same pair twice is [`EngineError::DuplicateSub`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SubscriberKey {
     pub adapter_id: AdapterId,
     pub sub_id: SubId,
 }
 
-/// Delivery wrapper so adapters know which of their subscriptions matched.
+/// One fan-out of an [`Envelope`] to one subscription.
+///
+/// `sub_id` is here because an adapter may hold many subscriptions and
+/// needs to know which one matched.
 #[derive(Debug, Clone)]
 pub struct Delivery {
     pub sub_id: SubId,
     pub envelope: Envelope,
 }
 
-/// Snapshot of engine counters.
+/// Running counters for publish fan-out.
+///
+/// Loads are relaxed. The three numbers are not a single snapshot: a
+/// publish can increment `published` before `delivered` or `dropped`.
+/// Nothing currently reports `dropped` to an operator.
 #[derive(Debug, Default)]
 pub struct EngineStats {
     pub published: AtomicU64,
@@ -31,55 +46,76 @@ pub struct EngineStats {
 }
 
 impl EngineStats {
+    /// Envelopes handed to [`Engine::publish`], once each, not per subscriber.
     #[must_use]
     pub fn published(&self) -> u64 {
         self.published.load(Ordering::Relaxed)
     }
 
+    /// Deliveries that `try_send` accepted.
     #[must_use]
     pub fn delivered(&self) -> u64 {
         self.delivered.load(Ordering::Relaxed)
     }
 
+    /// Deliveries that `try_send` rejected because the channel was full
+    /// or already closed.
     #[must_use]
     pub fn dropped(&self) -> u64 {
         self.dropped.load(Ordering::Relaxed)
     }
 }
 
-/// Result of a publish fan-out.
+/// Result of one [`Engine::publish`] fan-out.
+///
+/// `delivered + dropped` equals `matched`. Zero matched means no
+/// subscriber wanted this route; that is not an error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PublishOutcome {
+    /// Subscribers selected for this route, wildcard plus exact.
     pub matched: usize,
+    /// `try_send` succeeded.
     pub delivered: usize,
+    /// `try_send` failed (`Full` or `Closed`).
     pub dropped: usize,
 }
 
-/// Errors from subscribe / unsubscribe.
+/// Errors from [`Engine::subscribe`] and [`Engine::unsubscribe`].
+///
+/// Publish never returns these. A message with no subscribers is a
+/// [`PublishOutcome`] with `matched == 0`.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum EngineError {
+    /// This adapter already has a subscription with that [`SubId`].
     #[error("duplicate subscription {0}")]
     DuplicateSub(SubId),
+    /// [`Engine::unsubscribe`] named a pair that is not registered.
     #[error("unknown subscription {0}")]
     UnknownSub(SubId),
 }
 
+/// One registered subscriber: the route it matches and the channel it owns.
 struct Subscription {
     route: RouteKey,
     tx: mpsc::Sender<Delivery>,
 }
 
+/// Indexes used to find subscribers without scanning every key.
 #[derive(Default)]
 struct State {
     by_key: HashMap<SubscriberKey, Subscription>,
     by_adapter: HashMap<AdapterId, HashSet<SubId>>,
-    /// Exact (topic, type_hint) → subscribers.
+    /// Exact `(topic, type_hint)` → subscribers.
     exact: HashMap<String, HashMap<String, HashSet<SubscriberKey>>>,
-    /// Topic → wildcard subscribers (type_hint is None).
+    /// Topic → wildcard subscribers (`type_hint` is `None`).
     wildcards: HashMap<String, HashSet<SubscriberKey>>,
 }
 
 /// Shared, protocol-neutral pub/sub router.
+///
+/// The engine never parses a payload and never names a protocol. It
+/// matches [`RouteKey`] values and `try_send`s [`Delivery`]s. Adapters
+/// own their sockets, their channels, and any schema work.
 pub struct Engine {
     state: RwLock<State>,
     stats: EngineStats,
@@ -92,6 +128,7 @@ impl Default for Engine {
 }
 
 impl Engine {
+    /// Creates an empty engine with zero subscriptions and zero counters.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -100,12 +137,22 @@ impl Engine {
         }
     }
 
+    /// Process-lifetime counters. Survives [`Self::drop_adapter`].
     #[must_use]
     pub fn stats(&self) -> &EngineStats {
         &self.stats
     }
 
-    /// Register a subscriber. The adapter owns `tx` and reads [`Delivery`]s.
+    /// Registers a subscriber. The adapter owns `tx` and reads [`Delivery`]s.
+    ///
+    /// A [`RouteKey`] with `type_hint: None` is a wildcard: every type on
+    /// that topic. A typed key matches only that hint. The same `sub_id`
+    /// may be reused on a different adapter.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EngineError::DuplicateSub`] if this adapter already
+    /// registered `sub_id`.
     pub async fn subscribe(
         &self,
         adapter_id: impl Into<AdapterId>,
@@ -132,6 +179,12 @@ impl Engine {
         Ok(key)
     }
 
+    /// Removes one subscription. Further publishes will not reach it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EngineError::UnknownSub`] if this adapter has no
+    /// subscription with that `sub_id`.
     pub async fn unsubscribe(
         &self,
         adapter_id: impl Into<AdapterId>,
@@ -145,7 +198,11 @@ impl Engine {
         remove_subscription(&mut state, &key).map_err(|()| EngineError::UnknownSub(key.sub_id))
     }
 
-    /// Remove every subscription owned by `adapter_id`.
+    /// Removes every subscription owned by `adapter_id`.
+    ///
+    /// Returns how many were removed, or `0` if the adapter had none.
+    /// Call this on shutdown and when a session restarts, or stale
+    /// subscriptions keep matching and silently discarding messages.
     pub async fn drop_adapter(&self, adapter_id: impl Into<AdapterId>) -> usize {
         let adapter_id = adapter_id.into();
         let mut state = self.state.write().await;
@@ -165,7 +222,15 @@ impl Engine {
         removed
     }
 
-    /// Fan out `envelope` to matching subscribers. Never inspects the payload.
+    /// Fans out `envelope` to matching subscribers. Never inspects the payload.
+    ///
+    /// Matching is exact-plus-wildcard: a publish with
+    /// `type_hint: Some("Ping")` reaches both `typed(topic, "Ping")` and
+    /// `topic(topic)` subscribers. A publish with no type hint reaches
+    /// wildcards only.
+    ///
+    /// Each send is `try_send`. A full or closed channel counts as
+    /// dropped and does not block other subscribers.
     pub async fn publish(&self, envelope: Envelope) -> PublishOutcome {
         self.stats.published.fetch_add(1, Ordering::Relaxed);
 
@@ -202,12 +267,17 @@ impl Engine {
         }
     }
 
+    /// Number of registered subscriptions across every adapter.
+    ///
+    /// Used to wait until a newly spawned adapter has subscribed before
+    /// publishing test traffic. Not a readiness API for production.
     #[must_use]
     pub async fn subscription_count(&self) -> usize {
         self.state.read().await.by_key.len()
     }
 }
 
+/// Indexes `key` under exact or wildcard, according to `route.type_hint`.
 fn insert_index(state: &mut State, key: &SubscriberKey, route: &RouteKey) {
     if let Some(hint) = &route.type_hint {
         state
@@ -226,6 +296,7 @@ fn insert_index(state: &mut State, key: &SubscriberKey, route: &RouteKey) {
     }
 }
 
+/// Drops `key` from every index. `Err` if it was not registered.
 fn remove_subscription(state: &mut State, key: &SubscriberKey) -> Result<(), ()> {
     let Some(sub) = state.by_key.remove(key) else {
         return Err(());
@@ -260,6 +331,10 @@ fn remove_subscription(state: &mut State, key: &SubscriberKey) -> Result<(), ()>
     Ok(())
 }
 
+/// Subscribers that should see a publish on `route`.
+///
+/// Always includes wildcards on `route.topic`. Adds exact matches only
+/// when the publish carries a type hint.
 fn collect_targets(state: &State, route: &RouteKey) -> Vec<(mpsc::Sender<Delivery>, SubId)> {
     let mut keys: HashSet<SubscriberKey> = HashSet::new();
 

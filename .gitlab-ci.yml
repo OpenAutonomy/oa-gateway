@@ -4,6 +4,7 @@
 stages:
   - check
   - test
+  - deploy
 
 variables:
   CARGO_HOME: $CI_PROJECT_DIR/.cargo
@@ -36,12 +37,31 @@ test:
     - cargo test --workspace --locked
 
 # Keeps intra-doc links and the runnable adapter example in oa-gateway-adapter honest.
+# Private items are included so the host binary's modules appear in the HTML.
 docs:
   stage: check
   variables:
     RUSTDOCFLAGS: "-D warnings"
   script:
-    - cargo doc --workspace --no-deps --locked
+    - cargo doc --workspace --no-deps --locked --document-private-items
+    - ./scripts/write-rustdoc-index.sh target/doc
+  artifacts:
+    name: rustdoc
+    paths:
+      - target/doc
+    expire_in: 1 week
+
+# GitLab Pages serves the `public/` artifact of a job named `pages`.
+pages:
+  stage: deploy
+  needs: [docs]
+  script:
+    - mv target/doc public
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
 live-activemq:
   stage: test

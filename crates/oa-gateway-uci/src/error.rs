@@ -1,3 +1,8 @@
+/// Why a payload could not be converted, or a schema could not be compiled.
+///
+/// Conversion is forgiving about undeclared fields; those are not
+/// errors here. [`Self::TooDeep`] is the stack-safety bound, not a
+/// schema constraint. [`Self::Xsd`] is compile-time only.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum UciError {
     #[error("not valid UTF-8")]

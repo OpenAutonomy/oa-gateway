@@ -1,22 +1,25 @@
 //! Checking a converted message against the schema it claims to follow.
 //!
-//! Conversion and validation answer different questions. Conversion asks whether
-//! a payload can be mapped between OMS JSON and UCI XML, and it is deliberately
-//! forgiving: an element it cannot place is carried as a string, and an
-//! alternation is mapped as though its branches were siblings. That is what makes
-//! the gateway useful before a program's message set is fully understood, and it
-//! is also why a payload can convert cleanly and still not be a valid instance of
-//! the standard.
+//! Conversion and validation answer different questions. Conversion asks
+//! whether a payload can be mapped between OMS JSON and UCI XML, and it
+//! is deliberately forgiving: an element it cannot place is carried as a
+//! string, and an alternation is mapped as though its branches were
+//! siblings. That is what makes the gateway useful before a program's
+//! message set is fully understood, and it is also why a payload can
+//! convert cleanly and still not be a valid instance of the standard.
 //!
-//! What is checked here is what the compiled schema actually states: every
-//! element is declared, required elements are present, occurrence ranges hold,
-//! exactly one branch of an alternation is taken, and no abstract type is
-//! instantiated without naming a concrete one. Facets — enumerations, patterns,
-//! lengths, ranges — are not read by the compiler yet, so a value of the right
-//! shape but the wrong content still passes.
+//! What is checked here is what the compiled schema actually states:
+//! every element is declared, required elements are present, occurrence
+//! ranges hold, exactly one branch of an alternation is taken, no
+//! abstract type is instantiated without naming a concrete one, leaves
+//! fit their `xs:` primitive, and facets (enumerations, patterns,
+//! lengths, ranges) hold. A primitive this build does not check
+//! (`xs:base64Binary`, `xs:anyURI`, `xs:QName`) and a pattern that
+//! does not translate are reported on the schema, not on each message.
 //!
-//! Every violation is reported rather than the first, because an operator
-//! comparing a producer against the standard wants the list, not a bisection.
+//! Every violation is reported rather than the first, up to
+//! [`MAX_VIOLATIONS`], because an operator comparing a producer against
+//! the standard wants the list, not a bisection.
 
 use std::fmt;
 
@@ -43,6 +46,7 @@ pub enum Mode {
 }
 
 impl Mode {
+    /// Whether this mode will run [`validate`].
     #[must_use]
     pub fn is_on(self) -> bool {
         !matches!(self, Self::Off)
@@ -62,6 +66,11 @@ impl fmt::Display for Mode {
 impl std::str::FromStr for Mode {
     type Err = String;
 
+    /// `off`, `warn`, or `reject`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a message if `s` is none of those.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "off" => Ok(Self::Off),
@@ -108,6 +117,8 @@ pub struct Violation {
     pub kind: ViolationKind,
 }
 
+/// How a message departed from the schema. Display text is meant for a
+/// log line, not a parser.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ViolationKind {
     /// An element the type does not declare.
@@ -288,9 +299,11 @@ fn quoted(names: &[String]) -> String {
 
 /// Check `message` against `schema`, reporting everything that does not hold.
 ///
-/// An empty result means the message agrees with every constraint the compiled
-/// schema carries. It does not mean the message is correct: see the module
-/// documentation for what is not yet read from the XSD.
+/// An empty result means the message agrees with every constraint this
+/// crate reads from the schema. It does not mean the message is correct
+/// against a construct the compiler refused or a primitive left
+/// unchecked; see the module documentation. Stops at
+/// [`MAX_VIOLATIONS`].
 #[must_use]
 pub fn validate(message: &Message, schema: &Schema) -> Vec<Violation> {
     let mut out = Vec::new();
@@ -301,6 +314,7 @@ pub fn validate(message: &Message, schema: &Schema) -> Vec<Violation> {
     out
 }
 
+/// Pushes a violation unless the report is already at [`MAX_VIOLATIONS`].
 fn note(out: &mut Vec<Violation>, path: &str, kind: ViolationKind) {
     if out.len() < MAX_VIOLATIONS {
         out.push(Violation {
@@ -314,6 +328,8 @@ fn full(out: &[Violation]) -> bool {
     out.len() >= MAX_VIOLATIONS
 }
 
+/// Walks one node. Children are checked even when the parent already
+/// reported a violation, so a bad level does not hide the ones below.
 fn check(
     node: &Node,
     schema: &Schema,

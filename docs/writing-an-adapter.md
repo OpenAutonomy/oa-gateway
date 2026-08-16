@@ -2,7 +2,7 @@
 
 An adapter owns one side of the gateway: its socket, its framing, its handshake, and any schema translation. The engine owns routing and nothing else. Adding a protocol means adding an adapter; it should never mean changing `oa-gateway-core`.
 
-A runnable minimal adapter lives in the `oa-gateway-adapter` crate docs (`cargo doc -p oa-gateway-adapter --open`, or read `crates/oa-gateway-adapter/src/lib.rs`). It is a doc-test, so CI fails if it stops compiling or stops working.
+A minimal adapter lives in the `oa-gateway-adapter` crate docs (`cargo doc -p oa-gateway-adapter --open`, or read `crates/oa-gateway-adapter/src/lib.rs`). That example is a doc-test, so CI fails if it stops compiling. `crates/oa-gateway-adapter/tests/echo.rs` is the same adapter under traffic: a Ping on `demo` must produce a Pong.
 
 ## The contract
 
@@ -50,22 +50,22 @@ Headers are namespaced by owner. Keep to the convention so envelopes stay legibl
 | `stomp.` | STOMP adapter | `stomp.destination`, `stomp.message-id` |
 | `agra.` | A-GRA wrappers | `agra.wrapper`, `agra.command_id`, `agra.originator_uuid` |
 
-The `oag.*` constants currently live in `oa-gateway-stomp`'s `dest` module and are re-exported from that crate. They are gateway-wide by intent rather than by placement, so expect them to move to `oa-gateway-core` — import them rather than retyping the strings.
+The `oag.*` constants live in `oa-gateway-core` (`HDR_ORIGIN`, `HDR_TOPIC`, `HDR_TYPE_HINT`, `HDR_ID`). `oa-gateway-stomp` re-exports them. Use [`Envelope::with_origin`](../crates/oa-gateway-core/src/envelope.rs) and [`Envelope::is_echo_of`](../crates/oa-gateway-core/src/envelope.rs) rather than retyping the strings.
 
 ## Avoiding echo loops
 
 Any adapter bridging an external bus must not send back what it just received, or a message loops forever between the gateway and the broker. The convention is two-sided:
 
-- On the way in, stamp the envelope with `oag.origin_adapter = your id`.
-- On the way out, skip any delivery whose `oag.origin_adapter` already equals your id.
+- On the way in, stamp with `envelope.with_origin(&your_id)`.
+- On the way out, skip when `envelope.is_echo_of(&your_id)`.
 
-`crates/oa-gateway-stomp/src/adapter.rs` implements exactly this in `inbound_publish` and `forward_outbound`. Note that today only the STOMP adapter does — this is a convention a new bridging adapter must opt into, not something the engine enforces.
+The engine does **not** skip: one adapter id may cover many connections (OWP). STOMP does this in `inbound_publish` / `forward_outbound`, and `[stomp] suppress_echo` (default `true`) is the knob. A new bridging adapter must opt in the same way.
 
 ## Backpressure
 
 `Engine::publish` uses `try_send`, so a subscriber that is full loses the message rather than blocking the publisher. Channel capacity defaults to `DEFAULT_CHANNEL_CAPACITY` (64). If your adapter can be slower than the traffic it subscribes to, read the receiver in a dedicated task and buffer on your own terms.
 
-Drops are counted in `EngineStats` but nothing currently reports them, so a slow adapter loses traffic quietly. Treat that as a known gap rather than a guarantee of delivery.
+Drops are counted in `EngineStats`. The host logs those counters on `[engine] stats_interval_secs` (default 30; `0` disables) and warns when `dropped` increased. Publish sites that already inspect `PublishOutcome` also log a per-message drop.
 
 ## Lifecycle
 
@@ -73,12 +73,12 @@ Startup, teardown, and reconnect are all yours to sequence:
 
 - **Subscribe after your transport is up**, so you are not accumulating deliveries you cannot yet send.
 - **Select on `shutdown.cancelled()`** in the same loop that reads your transport, so cancellation is observed promptly.
-- **Put the retry loop outside the session.** `StompAdapter::serve_inner` loops over `session`, so one failed connection retries without losing the adapter. Note the current caveat: a panic inside the task destroys the retry loop with it, and the host does not restart adapters.
+- **Put the retry loop outside the session.** `StompAdapter::serve_inner` loops over a child task per `session`, so one failed connection retries without losing the adapter. `[stomp] on_panic` is `abort` (default: a panic ends `run`) or `reconnect` (treat as a failed session, then follow `reconnect`). The host does not restart a finished `run`.
 - **Call `drop_adapter` on the way out, and also when a session restarts.** The STOMP adapter calls it at session start too, which clears stale subscriptions left by a previous connection.
 
 ## Wiring into the host
 
-`crates/oa-gateway/src/main.rs` reads a TOML section per adapter, validates it, and spawns `run`. To add yours: define a `#[derive(Deserialize)]` section struct with `#[serde(deny_unknown_fields)]` and `#[serde(default = "...")]` on every field, resolve any addresses with `resolve_addr` before spawning anything, then push the spawned task onto `handles`. Add the section to `config/default.toml`; the `shipped_configs_parse` test will fail if the file and the struct disagree.
+The host crate (`crates/oa-gateway`) reads a TOML section per adapter (`src/config/`), validates it, and spawns `run` (`src/adapters/`). Naming the table turns the adapter on; `enabled` must default to `true` when the section is present and `false` in `Default` (the omitted-section path). To add yours: add a `#[derive(Deserialize)]` section struct in `src/config/` with `#[serde(deny_unknown_fields)]` and `#[serde(default = "...")]` on every field, resolve any addresses with `resolve_addr` before spawning anything, then start the adapter from `src/adapters/`. Add the section to `config/default.toml`; the `shipped_configs_parse` test will fail if the file and the struct disagree.
 
 ## Testing
 

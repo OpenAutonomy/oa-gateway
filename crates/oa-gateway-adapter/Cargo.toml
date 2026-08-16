@@ -13,5 +13,5 @@ thiserror.workspace = true
 tokio-util.workspace = true
 
 [dev-dependencies]
-# The crate docs carry a runnable minimal adapter.
+# tests/echo.rs runs the minimal adapter the crate docs only compile.
 tokio = { workspace = true, features = ["full"] }

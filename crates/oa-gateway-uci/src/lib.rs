@@ -1,12 +1,15 @@
 //! Schema-aware UCI XML ↔ OMS JSON.
 //!
 //! The engine stays on opaque bytes. Adapters call [`Message::from_json`] /
-//! [`Message::from_xml`] and emit the other serialization.
+//! [`Message::from_xml`] and emit the other serialization. Conversion
+//! is deliberately forgiving; [`Message::violations`] is what names a
+//! payload that converted and still does not follow the schema.
 //!
-//! A [`Schema`] tells the converter what it cannot infer from a single document:
-//! whether a field repeats, and whether a leaf is a number, a boolean, or a
-//! string. Compile one from the published XSD with [`xsd::compile`]. The
-//! [`mod@slice`] module holds a small hand-written schema for tests only.
+//! A [`Schema`] tells the converter what it cannot infer from a single
+//! document: whether a field repeats, and whether a leaf is a number, a
+//! boolean, or a string. Compile one from the published XSD with
+//! [`xsd::compile`]. The [`mod@slice`] module holds a small
+//! hand-written schema for tests only.
 
 mod error;
 mod instance;
@@ -50,29 +53,64 @@ impl Message {
         validate::validate(self, schema)
     }
 
+    /// Parses OMS JSON. The root is a single-key object whose key is a
+    /// global element. `$type` selects a concrete type. An undeclared
+    /// field is carried as `xs:string` rather than refused.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`UciError`] if the text is not a single-key object, the
+    /// element is unknown, a value cannot be mapped, or nesting exceeds
+    /// [`MAX_DEPTH`].
     pub fn from_json(text: &str, schema: &Schema) -> Result<Self, UciError> {
         json::from_json(text, schema)
     }
 
+    /// Parses UCI XML. The root local name is the global element.
+    /// `xsi:type` selects a concrete type. Nesting is counted on the
+    /// text before the tree is built.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`UciError`] if the document is not well-formed, the
+    /// element is unknown, an extension chain is cyclic, or nesting
+    /// exceeds [`MAX_DEPTH`].
     pub fn from_xml(text: &str, schema: &Schema) -> Result<Self, UciError> {
         xml::from_xml(text, schema)
     }
 
+    /// Serializes this message as OMS JSON.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`UciError`] if an extension chain is cyclic or nesting
+    /// exceeds [`MAX_DEPTH`].
     pub fn to_json(&self, schema: &Schema) -> Result<String, UciError> {
         json::to_json(self, schema)
     }
 
+    /// Serializes this message as UCI XML, with the OAM namespace on
+    /// the root.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`UciError`] if an extension chain is cyclic or nesting
+    /// exceeds [`MAX_DEPTH`].
     pub fn to_xml(&self, schema: &Schema) -> Result<String, UciError> {
         xml::to_xml(self, schema)
     }
 
+    /// The global element name. Same as the OMS JSON root key.
     #[must_use]
     pub fn type_hint(&self) -> &str {
         &self.name
     }
 }
 
-/// Detect XML vs OMS JSON without a schema.
+/// Whether `bytes` look like XML: UTF-8 whose first non-space is `<`.
+///
+/// Not a schema check. A document that starts with a BOM or a
+/// comment-only prologue is not recognized.
 #[must_use]
 pub fn looks_like_xml(bytes: &[u8]) -> bool {
     std::str::from_utf8(bytes)
@@ -80,6 +118,7 @@ pub fn looks_like_xml(bytes: &[u8]) -> bool {
         .is_some_and(|s| s.trim_start().starts_with('<'))
 }
 
+/// Whether `bytes` look like OMS JSON: UTF-8 whose first non-space is `{`.
 #[must_use]
 pub fn looks_like_json(bytes: &[u8]) -> bool {
     std::str::from_utf8(bytes)

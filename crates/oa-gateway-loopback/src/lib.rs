@@ -1,7 +1,9 @@
 //! In-process adapter: publish and subscribe without sockets.
 //!
-//! Multiple [`Loopback`] instances can share one [`Engine`]. They never talk to
-//! each other — traffic only crosses through the engine.
+//! Multiple [`Loopback`] instances can share one [`Engine`]. They never
+//! talk to each other — traffic only crosses through the engine. Used
+//! by the host when `[loopback]` is enabled, and by tests that need a
+//! peer without OWP or a broker.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -16,6 +18,11 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 /// In-process handle onto the engine.
+///
+/// Holds its own [`Engine`] so tests can [`Self::subscribe`] and
+/// [`Self::publish`] without going through [`Adapter::run`]. Two
+/// handles must not share an [`AdapterId`]: [`Self::shutdown`] drops
+/// every subscription under that id.
 pub struct Loopback {
     id: AdapterId,
     engine: Arc<Engine>,
@@ -23,6 +30,11 @@ pub struct Loopback {
 }
 
 impl Loopback {
+    /// Binds this handle to `engine` under `id`.
+    ///
+    /// Does not subscribe and does not start [`Adapter::run`]. The
+    /// engine is stored here; `run` ignores the engine the host passes
+    /// in.
     #[must_use]
     pub fn new(engine: Arc<Engine>, id: impl Into<AdapterId>) -> Self {
         Self {
@@ -32,12 +44,23 @@ impl Loopback {
         }
     }
 
+    /// The engine this handle was built with.
     #[must_use]
     pub fn engine(&self) -> &Arc<Engine> {
         &self.engine
     }
 
-    /// Subscribe and return a receiver of matching envelopes.
+    /// Subscribes and returns a receiver of matching [`Envelope`]s.
+    ///
+    /// [`Delivery::sub_id`] is stripped; this handle assigns `lb-N`
+    /// ids internally. Dropping the receiver stops the forwarder, but
+    /// the engine subscription stays until [`Self::shutdown`]. Further
+    /// publishes then count as dropped.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EngineError::DuplicateSub`] if an internal id collides,
+    /// which does not happen on a single handle.
     pub async fn subscribe(
         &self,
         route: RouteKey,
@@ -62,10 +85,16 @@ impl Loopback {
         Ok(out_rx)
     }
 
+    /// Publishes through the shared engine. Same fan-out and drop rules
+    /// as [`Engine::publish`].
     pub async fn publish(&self, envelope: Envelope) -> PublishOutcome {
         self.engine.publish(envelope).await
     }
 
+    /// Drops every subscription this handle owns.
+    ///
+    /// Returns how many were removed. Does not cancel [`Adapter::run`];
+    /// the host's cancellation token does that.
     pub async fn shutdown(&self) -> usize {
         self.engine.drop_adapter(self.id.clone()).await
     }
@@ -77,6 +106,14 @@ impl Adapter for Loopback {
         &self.id
     }
 
+    /// Waits for `shutdown`, then drops this handle's subscriptions.
+    ///
+    /// There is no socket. Tests that only call [`Loopback::subscribe`]
+    /// and [`Loopback::publish`] never need this.
+    ///
+    /// # Errors
+    ///
+    /// Does not fail. [`Ok`] after the token fires.
     async fn run(
         self: Arc<Self>,
         _engine: Arc<Engine>,

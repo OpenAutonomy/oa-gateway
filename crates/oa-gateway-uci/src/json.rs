@@ -1,9 +1,25 @@
+//! OMS JSON → instance tree → OMS JSON.
+//!
+//! The root is a single-key object whose key is a global element.
+//! `$type` selects a concrete type. An undeclared field is carried as
+//! `xs:string` rather than refused — validation is where that is named.
+//! `null` is refused. Nesting past [`crate::MAX_DEPTH`] is
+//! [`crate::UciError::TooDeep`].
+
 use serde_json::{json, Map, Number, Value};
 
 use crate::instance::{Complex, Field, Message, Node, Simple};
 use crate::schema::Schema;
 use crate::{UciError, MAX_DEPTH};
 
+/// Parses OMS JSON into a [`Message`].
+///
+/// # Errors
+///
+/// Returns [`UciError::Json`] if the text is not a single-key object,
+/// [`UciError::UnknownElement`] if the key is not a global element,
+/// [`UciError::UnknownType`] if `$type` names nothing, or
+/// [`UciError::TooDeep`] / [`UciError::At`] while walking the tree.
 pub fn from_json(text: &str, schema: &Schema) -> Result<Message, UciError> {
     let value: Value = serde_json::from_str(text).map_err(|e| UciError::Json(e.to_string()))?;
     let obj = value
@@ -25,6 +41,15 @@ pub fn from_json(text: &str, schema: &Schema) -> Result<Message, UciError> {
     })
 }
 
+/// Serializes `message` as a single-key OMS JSON object.
+///
+/// A missing global element still uses [`Message::name`] as the type
+/// name, so a hand-built tree can be written.
+///
+/// # Errors
+///
+/// Returns [`UciError`] if flattening a type fails or nesting exceeds
+/// [`MAX_DEPTH`].
 pub fn to_json(message: &Message, schema: &Schema) -> Result<String, UciError> {
     let declared = schema
         .global_type(&message.name)
@@ -34,6 +59,8 @@ pub fn to_json(message: &Message, schema: &Schema) -> Result<String, UciError> {
         .map_err(|e| UciError::Json(e.to_string()))
 }
 
+/// Walks one JSON value as `type_name`. `$type` overrides the declared
+/// type. An undeclared key is treated as `xs:string`.
 fn read_node(
     value: &Value,
     schema: &Schema,
@@ -117,6 +144,8 @@ fn read_node(
     Ok(Node::Complex(Complex { type_name, fields }))
 }
 
+/// Maps a JSON scalar onto [`Simple`]. `null` is refused. A numeric
+/// string is parsed when the declared primitive is numeric.
 fn read_simple(value: &Value, type_name: &str, path: &str) -> Result<Simple, UciError> {
     match (type_name, value) {
         ("xs:boolean", Value::Bool(b)) => Ok(Simple::Bool(*b)),
@@ -135,6 +164,7 @@ fn read_simple(value: &Value, type_name: &str, path: &str) -> Result<Simple, Uci
     }
 }
 
+/// Parses `s` as a number when `type_name` is an XSD numeric primitive.
 fn parse_numeric_string(type_name: &str, s: &str) -> Result<Simple, UciError> {
     if matches!(
         type_name,
@@ -159,6 +189,8 @@ fn parse_numeric_string(type_name: &str, s: &str) -> Result<Simple, UciError> {
     Err(UciError::Json("not numeric".into()))
 }
 
+/// Writes one node. `$type` is emitted when [`Complex::type_name`] is
+/// set. [`Field::Many`] becomes a JSON array.
 fn write_node(
     node: &Node,
     schema: &Schema,

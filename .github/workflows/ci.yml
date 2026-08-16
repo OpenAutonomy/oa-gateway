@@ -5,6 +5,9 @@ on:
     branches: [main, master]
   pull_request:
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
@@ -26,9 +29,42 @@ jobs:
       - name: test
         run: cargo test --workspace --locked
       - name: docs
-        run: cargo doc --workspace --no-deps --locked
+        run: cargo doc --workspace --no-deps --locked --document-private-items
         env:
           RUSTDOCFLAGS: "-D warnings"
+      - name: rustdoc landing page
+        run: ./scripts/write-rustdoc-index.sh target/doc
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rustdoc
+          path: target/doc
+          retention-days: 14
+
+  pages:
+    # HTML is already built in `test`. This job only publishes it. Fork PRs
+    # and feature branches keep the artifact; they do not write the site.
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: rustdoc
+          path: doc
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: doc
+      - id: deployment
+        uses: actions/deploy-pages@v4
 
   live-activemq:
     runs-on: ubuntu-latest

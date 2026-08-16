@@ -1,6 +1,6 @@
 # Contributing
 
-MIT prototype. PRs / MRs welcome.
+Independent prototype, MIT licensed. PRs / MRs welcome.
 
 Start with [docs/glossary.md](docs/glossary.md) for the acronyms and [docs/writing-an-adapter.md](docs/writing-an-adapter.md) if you are adding a protocol.
 
@@ -16,10 +16,11 @@ Pinned toolchain is in `rust-toolchain.toml` (`1.85.0`, plus `rustfmt` and `clip
 cargo fmt --all
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
-RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked --document-private-items
+./scripts/write-rustdoc-index.sh target/doc
 ```
 
-That is what CI runs on every push and pull/merge request (GitHub Actions and GitLab CI).
+That is what CI runs on every push and pull/merge request (GitHub Actions and GitLab CI). The rustdoc HTML is uploaded as a `rustdoc` artifact. Pushes to the default branch also publish it: GitHub Pages (set the source to GitHub Actions on first use) and GitLab Pages.
 
 Touching dependencies also runs `cargo deny check` against the policy in
 `deny.toml` — advisories, licenses, and sources. Install it with

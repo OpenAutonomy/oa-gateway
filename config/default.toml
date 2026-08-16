@@ -1,5 +1,9 @@
 # Prototype host config. No TLS and no authentication — bind loopback only.
 
+# How often the host logs engine published/delivered/dropped. 0 disables.
+# [engine]
+# stats_interval_secs = 30
+
 # No UCI schema is needed here, because xml_baseline is off and payloads cross
 # the engine untouched. To convert, or to have payloads checked against the
 # standard, run scripts/fetch-uci-schema.sh and uncomment the block below; see
@@ -15,11 +19,9 @@
 # validate = "warn"
 
 [loopback]
-enabled = true
 id = "loopback"
 
 [owp]
-enabled = true
 id = "owp"
 bind = "127.0.0.1:9000"
 server_id = "oa-gateway-0"
@@ -40,8 +42,9 @@ max_frame_size = 16777216
 max_connections = 256
 max_subscriptions = 1024
 
-# Client to an ActiveMQ (or other) STOMP broker. Off by default so `cargo run`
-# does not require a broker. Java CAL/OpenWire peers share these destinations.
+# Client to an ActiveMQ (or other) STOMP broker. Naming the table turns
+# it on; enabled = false keeps these keys without connecting. Java
+# CAL/OpenWire peers share these destinations.
 [stomp]
 enabled = false
 id = "stomp"
@@ -55,3 +58,7 @@ destination_prefix = "/topic/"
 topics = ["demo"]
 unwrap_ma_payloads = true
 reconnect = true
+# reconnect_delay_secs = 1
+# connect_timeout_secs = 5
+# suppress_echo = true
+# on_panic = "abort"   # or "reconnect"

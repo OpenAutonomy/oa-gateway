@@ -1,4 +1,7 @@
 //! STOMP 1.2 frames. Text commands and headers; opaque body bytes.
+//!
+//! A frame is `COMMAND\nheaders\n\nbody\0`. Headers may be LF or CRLF.
+//! Leading `\n`, `\r`, and NUL are heartbeats and are discarded.
 
 use std::fmt;
 
@@ -10,6 +13,10 @@ use std::fmt;
 pub const DEFAULT_MAX_FRAME_SIZE: usize = 16 * 1024 * 1024;
 
 /// One STOMP frame (command + headers + body).
+///
+/// Headers are a list, not a map: duplicates are kept, and
+/// [`Self::header`] returns the first match. The body is not UTF-8
+/// checked.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Frame {
     pub command: String,
@@ -18,6 +25,7 @@ pub struct Frame {
 }
 
 impl Frame {
+    /// An empty frame with this command and no headers or body.
     #[must_use]
     pub fn new(command: impl Into<String>) -> Self {
         Self {
@@ -27,18 +35,22 @@ impl Frame {
         }
     }
 
+    /// Appends a header. Does not replace an existing name.
     #[must_use]
     pub fn with_header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         self.headers.push((name.into(), value.into()));
         self
     }
 
+    /// Replaces the body. Does not set `content-length`; [`Self::encode`]
+    /// adds that if the headers do not already name it.
     #[must_use]
     pub fn with_body(mut self, body: impl Into<Vec<u8>>) -> Self {
         self.body = body.into();
         self
     }
 
+    /// First header value whose name equals `name`. Case-sensitive.
     #[must_use]
     pub fn header(&self, name: &str) -> Option<&str> {
         self.headers
@@ -47,7 +59,12 @@ impl Frame {
             .map(|(_, v)| v.as_str())
     }
 
-    /// Encode command, headers, optional `content-length`, body, and trailing NUL.
+    /// Encodes command, headers, optional `content-length`, body, and a
+    /// trailing NUL.
+    ///
+    /// Header names and values are escaped (`\\`, `\\c`, `\\n`, `\\r`).
+    /// `content-length` is added only when the headers do not already
+    /// include it, so a caller can lie about the length if it wants to.
     #[must_use]
     pub fn encode(&self) -> Vec<u8> {
         let mut out =
@@ -76,6 +93,10 @@ impl Frame {
     }
 }
 
+/// Why a frame could not be decoded, or why a write failed.
+///
+/// [`Self::Io`] also covers handshake failures (timeout, unexpected
+/// command), not only `std::io::Error`.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum CodecError {
     #[error("STOMP frame is not valid UTF-8 in command or headers")]
@@ -88,6 +109,8 @@ pub enum CodecError {
     BadEscape,
     #[error("STOMP content-length is not a number")]
     BadContentLength,
+    /// A NUL in the header block would be valid UTF-8 and would make
+    /// the body offset ambiguous.
     #[error("STOMP header block contains a NUL byte")]
     NulInHeaders,
     #[error("STOMP frame exceeds the {max} byte limit")]
@@ -104,19 +127,35 @@ impl From<std::io::Error> for CodecError {
     }
 }
 
-/// Pull one complete frame from `buf`, rejecting frames larger than
-/// [`DEFAULT_MAX_FRAME_SIZE`]. See [`decode_one_with_limit`].
+/// Pulls one complete frame from `buf`, rejecting frames larger than
+/// [`DEFAULT_MAX_FRAME_SIZE`].
+///
+/// # Errors
+///
+/// Same as [`decode_one_with_limit`].
 pub fn decode_one(buf: &mut Vec<u8>) -> Result<Option<Frame>, CodecError> {
     decode_one_with_limit(buf, DEFAULT_MAX_FRAME_SIZE)
 }
 
-/// Pull one complete frame from `buf`. Incomplete data returns `Ok(None)` and leaves `buf` intact
-/// aside from leading heartbeat bytes (`\n` / `\r` / NUL).
+/// Pulls one complete frame from `buf`.
 ///
-/// Everything here is peer-controlled input. `content-length` is bounded by `max_frame_size`
-/// and added to the body offset with checked arithmetic, so it can neither wrap into a bogus
-/// offset nor address memory past the frame. An unterminated header block or body is refused
-/// once it passes the limit rather than buffered forever.
+/// Incomplete data returns `Ok(None)` and leaves `buf` intact aside from
+/// leading heartbeat bytes (`\n` / `\r` / NUL). A complete frame is
+/// drained from the front so two frames in one buffer can be read in
+/// two calls.
+///
+/// Everything here is peer-controlled. `content-length` is bounded by
+/// `max_frame_size` and added with checked arithmetic, so it can
+/// neither wrap into a bogus offset nor address memory past the frame.
+/// An unterminated header block or body is refused once it passes the
+/// limit rather than buffered forever.
+///
+/// # Errors
+///
+/// Returns [`CodecError`] if the command or headers are not UTF-8, a
+/// header is malformed, a NUL appears in the header block,
+/// `content-length` is unusable, the NUL terminator is missing, or the
+/// frame exceeds `max_frame_size`.
 pub fn decode_one_with_limit(
     buf: &mut Vec<u8>,
     max_frame_size: usize,
@@ -213,6 +252,8 @@ pub fn decode_one_with_limit(
     }))
 }
 
+/// Byte offset after the blank line that ends the header block (`\n\n`
+/// or `\r\n\r\n`).
 fn find_header_end(buf: &[u8]) -> Option<usize> {
     let mut i = 0;
     while i + 1 < buf.len() {
@@ -232,6 +273,7 @@ fn find_header_end(buf: &[u8]) -> Option<usize> {
     None
 }
 
+/// STOMP 1.2 header escapes: `\\`, `\\c` (`:`), `\\n`, `\\r`.
 fn escape_header(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
@@ -246,6 +288,12 @@ fn escape_header(s: &str) -> String {
     out
 }
 
+/// Inverse of [`escape_header`].
+///
+/// # Errors
+///
+/// Returns [`CodecError::BadEscape`] if a `\\` is not followed by
+/// `\\`, `c`, `n`, or `r`.
 fn unescape_header(s: &str) -> Result<String, CodecError> {
     let mut out = String::with_capacity(s.len());
     let mut chars = s.chars();
@@ -265,6 +313,7 @@ fn unescape_header(s: &str) -> Result<String, CodecError> {
     Ok(out)
 }
 
+/// The command only. Use [`Frame::encode`] for the wire form.
 impl fmt::Display for Frame {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.command)

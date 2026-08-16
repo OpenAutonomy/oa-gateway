@@ -2,6 +2,8 @@
 
 Nothing about a message set is compiled into the binary. The gateway reads XSD at startup and builds its schema from whatever you point it at, so a program-specific Message Set, a later UCI revision, or a trimmed subset all work the same way — `scripts/fetch-uci-schema.sh` is only a convenience for the published UCI 2.5 documents.
 
+`[uci]` keys and defaults are also listed in [configuration.md](configuration.md).
+
 ## Point a config at it
 
 ```toml

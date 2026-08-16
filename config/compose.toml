@@ -9,11 +9,9 @@
 # when bridging a broker you run separately.
 
 [loopback]
-enabled = true
 id = "loopback"
 
 [owp]
-enabled = true
 id = "owp"
 bind = "0.0.0.0:9000"
 server_id = "oa-gateway-0"

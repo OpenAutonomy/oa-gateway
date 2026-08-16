@@ -79,6 +79,8 @@ pub fn compile(documents: &[&str]) -> Result<Schema, UciError> {
     Ok(schema)
 }
 
+/// Merges one `<xs:schema>` into `schema`. `include` / `import` are
+/// ignored; the caller must pass those documents separately.
 fn add_document(doc: &Document<'_>, schema: &mut Schema) -> Result<(), UciError> {
     let root = doc.root_element();
     if !is_xs(root) || root.tag_name().name() != "schema" {
@@ -157,6 +159,7 @@ fn claim(schema: &Schema, name: &str, kind: Definition) -> Result<(), UciError> 
     Ok(())
 }
 
+/// One named `complexType`: a sequence, a choice, or an extension.
 fn complex_type(node: Node<'_, '_>) -> Result<ComplexType, UciError> {
     let name = required(node, "name")?.to_owned();
     let abstract_ = node.attribute("abstract") == Some("true");
@@ -189,6 +192,7 @@ fn complex_type(node: Node<'_, '_>) -> Result<ComplexType, UciError> {
     })
 }
 
+/// `xs:complexContent`. Only `xs:extension` is accepted.
 fn complex_content(node: Node<'_, '_>, owner: &str) -> Result<ComplexContent, UciError> {
     let derivation = definitions(node)?.next().ok_or_else(|| {
         UciError::Xsd(format!(
@@ -219,6 +223,8 @@ fn complex_content(node: Node<'_, '_>, owner: &str) -> Result<ComplexContent, Uc
     Ok(ComplexContent::Extension { base, extra })
 }
 
+/// Children of a sequence or choice. Nested compositors and compositor
+/// occurrence ranges are refused.
 fn compositor(node: Node<'_, '_>, owner: &str) -> Result<Vec<Element>, UciError> {
     if node.attribute("minOccurs").is_some() || node.attribute("maxOccurs").is_some() {
         return Err(UciError::Xsd(format!(
@@ -239,6 +245,7 @@ fn compositor(node: Node<'_, '_>, owner: &str) -> Result<Vec<Element>, UciError>
     Ok(out)
 }
 
+/// A local element declaration. Anonymous inline types are refused.
 fn local_element(node: Node<'_, '_>, owner: &str) -> Result<Element, UciError> {
     let name = required(node, "name")
         .map_err(|_| UciError::Xsd(format!("an element of '{owner}' has no name=")))?
@@ -259,6 +266,7 @@ fn local_element(node: Node<'_, '_>, owner: &str) -> Result<Element, UciError> {
     })
 }
 
+/// `minOccurs`, defaulting to 1.
 fn min_occurs(node: Node<'_, '_>, owner: &str) -> Result<u32, UciError> {
     match node.attribute("minOccurs") {
         None => Ok(1),
@@ -268,6 +276,8 @@ fn min_occurs(node: Node<'_, '_>, owner: &str) -> Result<u32, UciError> {
     }
 }
 
+/// `maxOccurs`, defaulting to 1. `unbounded` is the only non-numeric
+/// value accepted.
 fn max_occurs(node: Node<'_, '_>, owner: &str) -> Result<MaxOccurs, UciError> {
     match node.attribute("maxOccurs") {
         None => Ok(MaxOccurs::Bounded(1)),
@@ -279,6 +289,9 @@ fn max_occurs(node: Node<'_, '_>, owner: &str) -> Result<MaxOccurs, UciError> {
     }
 }
 
+/// A named `simpleType` that restricts a base. `whiteSpace` is ignored
+/// (normalization, not a constraint). An unsupported facet fails the
+/// compile rather than being dropped.
 fn simple_type(node: Node<'_, '_>) -> Result<(String, SimpleType), UciError> {
     let name = required(node, "name")?.to_owned();
     let restriction = definitions(node)?
@@ -363,10 +376,12 @@ fn definitions<'a, 'i>(node: Node<'a, 'i>) -> Result<impl Iterator<Item = Node<'
         .filter(|c| c.is_element() && c.tag_name().name() != "annotation"))
 }
 
+/// Whether `node` is in the XML Schema namespace.
 fn is_xs(node: Node<'_, '_>) -> bool {
     node.tag_name().namespace() == Some(XS)
 }
 
+/// Required attribute, or an XSD error naming the element.
 fn required<'a>(node: Node<'a, '_>, attr: &str) -> Result<&'a str, UciError> {
     node.attribute(attr).ok_or_else(|| {
         UciError::Xsd(format!(
@@ -442,6 +457,8 @@ fn check_references(schema: &Schema) -> Result<(), UciError> {
     )))
 }
 
+/// Records `type_name` if it is neither an `xs:` primitive nor a type
+/// this schema defines.
 fn note_missing(schema: &Schema, type_name: &str, missing: &mut BTreeSet<String>) {
     let known = type_name.starts_with("xs:")
         || schema.complex_types.contains_key(type_name)

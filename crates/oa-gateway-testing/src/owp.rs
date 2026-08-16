@@ -1,3 +1,11 @@
+//! In-process OWP server and a WebSocket client for it.
+//!
+//! [`start_owp`] binds an ephemeral port and serves
+//! [`oa_gateway_owp::OwpAdapter`] with the UCI fixture schema
+//! ([`oa_gateway_uci::slice::v25`]), not a compiled XSD. That is
+//! enough for the messages in [`crate::fixtures`]. Helpers panic on
+//! timeout or a surprising frame; they are not a public client API.
+
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -11,22 +19,30 @@ use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::WebSocketStream;
 use tokio_util::sync::CancellationToken;
 
+/// Client WebSocket after the `owp` subprotocol handshake.
 pub type OwpWs = WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
-/// Start an OWP adapter on an ephemeral port, wired to the fixture schema.
+/// Starts an OWP adapter on an ephemeral port, wired to the fixture
+/// schema.
 ///
-/// The fixture schema stands in for a real UCI schema, which the gateway
-/// otherwise loads from the published XSD at startup. It covers the message
-/// types the fixtures use, so `xml_baseline` conversion works without requiring
-/// a local copy of the standard.
+/// The fixture schema stands in for a real UCI schema, which the
+/// gateway otherwise loads from the published XSD at startup. It
+/// covers the message types the fixtures use, so `xml_baseline`
+/// conversion works without a local copy of the standard. INIT
+/// `schema` is `002.5.0` so [`handshake`] matches.
+///
+/// Returns a `ws://127.0.0.1:{port}/` URL and a token that stops the
+/// accept loop. Panics if the port cannot be bound.
 pub async fn start_owp(engine: Arc<Engine>, xml_baseline: bool) -> (String, CancellationToken) {
     start_owp_with(engine, |config| config.xml_baseline = xml_baseline).await
 }
 
 /// As [`start_owp`], with the config open for editing first.
 ///
-/// Tests for the resource limits set them far below their defaults, so that
-/// reaching one costs a few frames instead of megabytes.
+/// Tests for the resource limits set them far below their defaults, so
+/// that reaching one costs a few frames instead of megabytes. The
+/// listener is already bound; `edit` must not change
+/// [`OwpConfig::bind`] to a different address.
 pub async fn start_owp_with(
     engine: Arc<Engine>,
     edit: impl FnOnce(&mut OwpConfig),
@@ -56,6 +72,10 @@ pub async fn start_owp_with(
     (format!("ws://{addr}/"), shutdown)
 }
 
+/// Opens a WebSocket to `url` with `Sec-WebSocket-Protocol: owp`.
+///
+/// Panics if the handshake fails. The adapter refuses a socket that
+/// omits this subprotocol.
 pub async fn connect(url: &str) -> OwpWs {
     let mut req = url.into_client_request().unwrap();
     req.headers_mut()
@@ -64,12 +84,17 @@ pub async fn connect(url: &str) -> OwpWs {
     ws
 }
 
+/// Sends one OWP text frame. Panics if the socket is closed.
 pub async fn send_text(ws: &mut OwpWs, frame: &str) {
     ws.send(Message::Text(frame.to_owned().into()))
         .await
         .unwrap();
 }
 
+/// Next text frame, answering WebSocket pings.
+///
+/// Waits up to two seconds. Panics on timeout, a close, or any frame
+/// that is not text or ping.
 pub async fn recv_text(ws: &mut OwpWs) -> String {
     loop {
         let msg = timeout(Duration::from_secs(2), ws.next())
@@ -87,6 +112,11 @@ pub async fn recv_text(ws: &mut OwpWs) -> String {
     }
 }
 
+/// INIT 1.0 / schema `002.5.0` / `verbose`, then expects `+OK` and
+/// `INFO`.
+///
+/// Matches [`start_owp`]'s configured schema. Panics if either reply
+/// is missing or the wrong opcode.
 pub async fn handshake(ws: &mut OwpWs) {
     send_text(
         ws,

@@ -1,4 +1,7 @@
 //! TCP STOMP session: handshake, framed read/write.
+//!
+//! Heartbeats are advertised as `0,0` (none). This crate does not send
+//! or expect them. `ack:auto` means the broker does not wait for ACK.
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
@@ -8,11 +11,17 @@ use tokio::time::timeout;
 use crate::codec::{decode_one_with_limit, CodecError, Frame};
 use crate::config::StompConfig;
 
+/// Write half of a connected STOMP socket.
 pub struct FrameWriter {
     write: OwnedWriteHalf,
 }
 
 impl FrameWriter {
+    /// Encodes `frame` and flushes it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CodecError::Io`] if the write or flush fails.
     pub async fn send(&mut self, frame: &Frame) -> Result<(), CodecError> {
         self.write.write_all(&frame.encode()).await?;
         self.write.flush().await?;
@@ -20,6 +29,11 @@ impl FrameWriter {
     }
 }
 
+/// Read half of a connected STOMP socket.
+///
+/// Bytes accumulate in an internal buffer until
+/// [`decode_one_with_limit`] can take one frame. The cap is
+/// [`StompConfig::max_frame_size`].
 pub struct FrameReader {
     read: OwnedReadHalf,
     buf: Vec<u8>,
@@ -27,7 +41,12 @@ pub struct FrameReader {
 }
 
 impl FrameReader {
-    /// Next frame, or `None` on EOF.
+    /// Next complete frame, or `None` if the broker closed the socket.
+    ///
+    /// # Errors
+    ///
+    /// Returns a codec error if the buffer exceeds the size cap or a
+    /// frame is malformed.
     pub async fn recv(&mut self) -> Result<Option<Frame>, CodecError> {
         loop {
             if let Some(frame) = decode_one_with_limit(&mut self.buf, self.max_frame_size)? {
@@ -43,6 +62,16 @@ impl FrameReader {
     }
 }
 
+/// Opens TCP, sends CONNECT, and waits for CONNECTED.
+///
+/// TCP and CONNECTED each use [`StompConfig::connect_timeout`]. `login`
+/// is omitted when unset; `passcode` is sent only when `login` is set.
+/// Nagle is disabled when the socket allows it.
+///
+/// # Errors
+///
+/// Returns [`CodecError::Io`] on timeout, a refused connect, a broker
+/// ERROR, a close before CONNECTED, or any other first frame.
 pub async fn connect(config: &StompConfig) -> Result<(FrameReader, FrameWriter), CodecError> {
     let stream = timeout(config.connect_timeout, TcpStream::connect(config.broker))
         .await
@@ -89,6 +118,7 @@ pub async fn connect(config: &StompConfig) -> Result<(FrameReader, FrameWriter),
     }
 }
 
+/// SUBSCRIBE with `ack:auto`. The broker will not wait for ACK.
 pub fn subscribe_frame(id: &str, destination: &str) -> Frame {
     Frame::new("SUBSCRIBE")
         .with_header("id", id)
@@ -96,6 +126,7 @@ pub fn subscribe_frame(id: &str, destination: &str) -> Frame {
         .with_header("ack", "auto")
 }
 
+/// SEND to `destination`. Extra `headers` are appended as-is.
 pub fn send_frame(destination: &str, headers: Vec<(String, String)>, body: Vec<u8>) -> Frame {
     let mut frame = Frame::new("SEND").with_header("destination", destination);
     frame.headers.extend(headers);
@@ -103,6 +134,7 @@ pub fn send_frame(destination: &str, headers: Vec<(String, String)>, body: Vec<u
     frame
 }
 
+/// DISCONNECT with no `receipt`. The writer does not wait for a reply.
 pub fn disconnect_frame() -> Frame {
     Frame::new("DISCONNECT")
 }

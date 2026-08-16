@@ -2,6 +2,7 @@
 
 - [Introduction](#introduction)
 - [Getting started](#getting-started)
+- [Config](#config)
 - [Documentation](#documentation)
 - [FAQs](#faqs)
 - [Contributing](#contributing)
@@ -9,7 +10,9 @@
 
 ## Introduction
 
-OA-Gateway is a multi-protocol connector for software systems in the [Open Arsenal](https://gitlab.com/open-arsenal/) ecosystem. The project is implemented in Rust and currently supports WebSocket and STOMP (ActiveMQ) protocol adapters. The routing core is protocol-agnostic. Adapters own framing, handshake, and any schema logic. Supporting a new protocol means simply adding an adapter, not changing the core.
+OA-Gateway is an independent prototype: a multi-protocol connector implemented in Rust. It is open source and free to use under the MIT License. It is not an [Open Arsenal](https://gitlab.com/open-arsenal/) project; it speaks OMS, UCI, and A-GRA so it can sit next to those systems.
+
+It currently supports WebSocket (OWP) and STOMP (ActiveMQ) adapters. The routing core is protocol-agnostic. Adapters own framing, handshake, and any schema logic. Supporting a new protocol means adding an adapter, not changing the core.
 
 Goals:
 
@@ -19,7 +22,7 @@ Goals:
 
 ## Getting started
 
-To get started, download and build the project. The toolchain is pinned in `rust-toolchain.toml`, so `cargo` picks up the right compiler and there is nothing else to install.
+To get started, download and build the project.
 
 ```bash
 git clone https://github.com/jburns3141/oa-gateway.git
@@ -41,24 +44,23 @@ OAG_CONFIG=$PWD/config/compose.toml docker compose -f compose/gateway.yml up --b
 
 That serves OWP at `ws://127.0.0.1:9000/`. A local ActiveMQ broker is separate — `compose/activemq.yml` — see [docs/connecting-active-mq.md](docs/connecting-active-mq.md).
 
-A config is a short set of TOML sections: one per adapter, plus one naming the UCI schema. Each adapter section carries an `enabled` flag and an id, then whatever that protocol needs — an address to listen on or a broker to dial, which topics to bridge, and whether payloads are converted on the way through or passed along untouched. Settings you leave out fall back to built-in defaults, and settings the gateway does not recognize are rejected at startup rather than ignored.
+## Config
 
-Where a schema is named, payloads are also checked against it, and the same section decides what a departure from the standard costs: reported and carried anyway, refused and explained to the peer, or not checked at all. Converting is not the same as complying — a message can convert cleanly in both directions and still be missing elements the standard requires — so the check is worth having even where conversion already succeeds.
-
-The files in `config/` are worked examples. The gateway has no TLS or authentication of its own, so bind to loopback — see [SECURITY.md](SECURITY.md) for what that means and what it assumes about the network around it.
+A config is a TOML file passed as the only argument: one section per adapter, plus `[uci]` for the schema and `[engine]` for host reporting. Naming an adapter table turns it on; omitting it leaves it off. Settings you leave out fall back to built-in defaults; settings the gateway does not recognize are rejected at startup. The full key list, defaults, and shipped examples are in [docs/configuration.md](docs/configuration.md).
 
 ## Documentation
 
 - [docs/glossary.md](docs/glossary.md) — the acronyms, and OA-Gateway's own vocabulary
+- [docs/configuration.md](docs/configuration.md) — TOML sections, keys, and defaults
 - [docs/writing-an-adapter.md](docs/writing-an-adapter.md) — adding a protocol
 - [docs/using-custom-xsd.md](docs/using-custom-xsd.md) — running against your own message set
 - [docs/connecting-active-mq.md](docs/connecting-active-mq.md) — bridging an ActiveMQ broker
-- [SECURITY.md](SECURITY.md) — deployment assumptions, reporting, known limitations
-- `cargo doc --workspace --no-deps --open` — the crate APIs. `oa-gateway-adapter` carries a runnable minimal adapter.
+- rustdoc — crate APIs, including the host binary's modules. Locally: `cargo doc --workspace --no-deps --document-private-items --open`. CI builds the same tree on every run (download the `rustdoc` artifact) and publishes it from the default branch (GitHub Pages / GitLab Pages). `oa-gateway-adapter` carries a runnable minimal adapter.
 
 ## FAQs
 
 1. [STOMP, UCI, ASB? What do all these terms mean?](docs/glossary.md)
+1. [How do I configure the gateway?](docs/configuration.md)
 1. [How can I add a new protocol?](docs/writing-an-adapter.md)
 1. [How can I use my own XSD?](docs/using-custom-xsd.md)
 1. [How can I connect my ActiveMQ instance?](docs/connecting-active-mq.md)
@@ -69,4 +71,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-Licensed under the [MIT License](LICENSE) (copyright John Henry Burns). Compatible with Open Arsenal A-GRA / sleet (Apache-2.0) and MIT projects such as Ghost Detector.
+Licensed under the [MIT License](LICENSE) (copyright John Henry Burns). Open source and free to use.

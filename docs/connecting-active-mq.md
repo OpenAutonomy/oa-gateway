@@ -22,11 +22,10 @@ OAG_CONFIG=$PWD/config/compose.toml docker compose -f compose/gateway.yml up --b
 
 ## Configure the adapter
 
-`config/asb.toml` is a worked example for a gateway on the host. The section is:
+`config/asb.toml` is a worked example for a gateway on the host. Every STOMP key and its default is in [configuration.md](configuration.md). The section is:
 
 ```toml
 [stomp]
-enabled = true
 id = "stomp"
 broker = "127.0.0.1:61613"
 host = "/"
@@ -63,5 +62,5 @@ WARN nothing is subscribed to this route, so the publish went nowhere route=Foo 
 
 - **No TLS and no authentication of the gateway's own.** `login` and `passcode` are the broker's, sent in the clear. Keep both ends on loopback or a trusted segment; [SECURITY.md](../SECURITY.md) states the assumptions.
 - **Heartbeats are off.** The gateway negotiates `heart-beat: 0,0`, so a dead TCP connection is noticed when a write fails rather than on a timer. A broker configured to require heartbeats will need that changed in `crates/oa-gateway-stomp/src/client.rs`.
-- **Connecting takes at most five seconds.** The connect timeout is not configurable.
-- **Echo is suppressed by convention.** Messages the adapter published are stamped `oag.origin_adapter`, and it skips deliveries carrying its own id, which is what keeps a message from looping between the gateway and the broker.
+- **Connecting takes `connect_timeout_secs` (default 5) for TCP and for CONNECTED, each.**
+- **Echo is suppressed when `suppress_echo` is true (the default).** Inbound MESSAGE is stamped `oag.origin_adapter`; outbound SEND skips that id so a message does not loop between the gateway and the broker.

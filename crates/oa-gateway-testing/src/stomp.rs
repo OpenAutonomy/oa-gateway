@@ -1,4 +1,10 @@
-//! Mini STOMP broker + peer client + adapter starter.
+//! Mini STOMP broker, a peer client, and an adapter starter.
+//!
+//! [`start_mini_broker`] is an in-process stand-in for ActiveMQ
+//! Classic: exact-destination fan-out, no auth, no persistence, no
+//! heartbeats. Most tests need no Docker. [`start_stomp_adapter`]
+//! turns reconnect off so a failed session fails the test instead of
+//! looping. Helpers panic on timeout or a surprising frame.
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -14,11 +20,20 @@ use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 
+/// In-process STOMP 1.2 broker on an ephemeral port.
+///
+/// Speaks CONNECT/STOMP, SUBSCRIBE, UNSUBSCRIBE, SEND, and DISCONNECT.
+/// SEND fans out to subscribers of that exact destination. There is no
+/// queue, no durable sub, and no login check. Call [`Self::shutdown`]
+/// when the test is done so the accept loop stops.
 pub struct MiniBroker {
     pub addr: SocketAddr,
     shutdown: CancellationToken,
 }
 
+/// Binds `127.0.0.1:0` and serves until [`MiniBroker::shutdown`].
+///
+/// Panics if the port cannot be bound.
 pub async fn start_mini_broker() -> MiniBroker {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -31,11 +46,14 @@ pub async fn start_mini_broker() -> MiniBroker {
 }
 
 impl MiniBroker {
+    /// Stops the accept loop. Open connections close on the next read.
     pub fn shutdown(&self) {
         self.shutdown.cancel();
     }
 }
 
+/// One SUBSCRIBE: which connection, which `id`, and where to write
+/// MESSAGE frames.
 #[derive(Clone)]
 struct Sub {
     conn_id: u64,
@@ -43,11 +61,13 @@ struct Sub {
     tx: mpsc::Sender<Frame>,
 }
 
+/// Destinations → subscribers, plus a process-wide `message-id`.
 struct BrokerState {
     subs: HashMap<String, Vec<Sub>>,
     next_msg: AtomicU64,
 }
 
+/// Accepts connections until `shutdown`. Each socket is its own task.
 async fn run_broker(listener: TcpListener, shutdown: CancellationToken) {
     let state = Arc::new(Mutex::new(BrokerState {
         subs: HashMap::new(),
@@ -71,6 +91,8 @@ async fn run_broker(listener: TcpListener, shutdown: CancellationToken) {
     }
 }
 
+/// Reads frames until the peer closes or `shutdown` fires, then drops
+/// this connection's subscriptions.
 async fn handle_conn(
     stream: TcpStream,
     conn_id: u64,
@@ -118,6 +140,8 @@ async fn handle_conn(
     Ok(())
 }
 
+/// Handles one client frame. Unknown commands get an ERROR. SEND
+/// copies headers except `destination` and assigns `message-id`.
 async fn dispatch(
     conn_id: u64,
     state: &Mutex<BrokerState>,
@@ -183,12 +207,21 @@ async fn dispatch(
     Ok(())
 }
 
+/// Raw STOMP client for tests: CONNECT, SUBSCRIBE, SEND, recv.
+///
+/// Not the gateway adapter. Use this as the "other side" of
+/// [`start_mini_broker`] or a live ActiveMQ.
 pub struct StompPeer {
     stream: TcpStream,
     buf: Vec<u8>,
 }
 
 impl StompPeer {
+    /// CONNECT 1.2 / `host` `/` / no heartbeats, then wait for
+    /// CONNECTED.
+    ///
+    /// Panics if the socket cannot be opened or the first frame is not
+    /// CONNECTED.
     pub async fn connect(addr: SocketAddr) -> Self {
         let mut stream = TcpStream::connect(addr).await.unwrap();
         stream.set_nodelay(true).ok();
@@ -206,6 +239,7 @@ impl StompPeer {
         peer
     }
 
+    /// SUBSCRIBE with `ack:auto`. Does not wait for a receipt.
     pub async fn subscribe(&mut self, id: &str, dest: &str) {
         let frame = Frame::new("SUBSCRIBE")
             .with_header("id", id)
@@ -214,6 +248,7 @@ impl StompPeer {
         self.stream.write_all(&frame.encode()).await.unwrap();
     }
 
+    /// SEND `body` to `dest`, then any `extra` headers.
     pub async fn send(&mut self, dest: &str, body: &[u8], extra: &[(&str, &str)]) {
         let mut frame = Frame::new("SEND")
             .with_header("destination", dest)
@@ -224,6 +259,9 @@ impl StompPeer {
         self.stream.write_all(&frame.encode()).await.unwrap();
     }
 
+    /// Next complete frame. Waits up to two seconds.
+    ///
+    /// Panics on timeout or a clean close.
     pub async fn recv(&mut self) -> Frame {
         let mut tmp = [0u8; 8192];
         loop {
@@ -240,6 +278,15 @@ impl StompPeer {
     }
 }
 
+/// Starts [`StompAdapter`] toward `broker` and waits until it is
+/// subscribed.
+///
+/// Reconnect is off so a dropped session fails the test. A-GRA unwrap
+/// is on. `settle` is an extra sleep after `serve_ready` — live
+/// ActiveMQ needs a few hundred milliseconds for SUBSCRIBE to land;
+/// the mini broker can use [`Duration::ZERO`].
+///
+/// Panics if the adapter is not ready within five seconds.
 pub async fn start_stomp_adapter(
     engine: Arc<Engine>,
     id: impl Into<String>,
@@ -252,15 +299,9 @@ pub async fn start_stomp_adapter(
         id.into(),
         StompConfig {
             broker,
-            host: "/".into(),
-            login: None,
-            passcode: None,
-            destination_prefix: "/topic/".into(),
             topics,
-            unwrap_ma_payloads: true,
             reconnect: false,
-            connect_timeout: Duration::from_secs(5),
-            max_frame_size: oa_gateway_stomp::DEFAULT_MAX_FRAME_SIZE,
+            ..StompConfig::default()
         },
     ));
     let (ready_tx, ready_rx) = oneshot::channel();

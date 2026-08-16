@@ -16,6 +16,10 @@ use crate::primitive;
 /// exists so a cyclic hand-built schema cannot hang the caller.
 const MAX_SIMPLE_DEPTH: usize = 16;
 
+/// Enough of a UCI schema to convert and validate OMS JSON.
+///
+/// Not a full XSD infoset. Build one with the methods below, or compile
+/// the published catalog with [`crate::xsd::compile`].
 #[derive(Debug, Clone)]
 pub struct Schema {
     pub global_elements: HashMap<String, GlobalElement>,
@@ -40,6 +44,9 @@ pub struct Pattern {
 }
 
 impl Pattern {
+    /// Compiles `source` as an XSD pattern. An untranslatable pattern
+    /// is kept and reported by [`Schema::unchecked_patterns`] rather
+    /// than failing the load.
     #[must_use]
     pub fn new(source: impl Into<String>) -> Self {
         let source = source.into();
@@ -191,11 +198,13 @@ impl Effective<'_> {
     }
 }
 
+/// A top-level element and the type it is declared as.
 #[derive(Debug, Clone)]
 pub struct GlobalElement {
     pub type_name: String,
 }
 
+/// A named complex type: whether it is abstract, and how it is built.
 #[derive(Debug, Clone)]
 pub struct ComplexType {
     pub name: String,
@@ -233,6 +242,7 @@ pub enum GroupKind {
     Choice,
 }
 
+/// One element declaration: name, type, and occurrence range.
 #[derive(Debug, Clone)]
 pub struct Element {
     pub name: String,
@@ -241,6 +251,8 @@ pub struct Element {
     pub max_occurs: MaxOccurs,
 }
 
+/// Upper bound of an element declaration. [`Self::is_array`] is what
+/// conversion uses to decide a JSON array.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MaxOccurs {
     Bounded(u32),
@@ -248,6 +260,8 @@ pub enum MaxOccurs {
 }
 
 impl MaxOccurs {
+    /// Whether JSON should carry this field as an array (`maxOccurs`
+    /// greater than one, or unbounded).
     #[must_use]
     pub fn is_array(self) -> bool {
         match self {
@@ -258,6 +272,8 @@ impl MaxOccurs {
 }
 
 impl Schema {
+    /// An empty schema. Add types with the builder methods, or use
+    /// [`crate::xsd::compile`].
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -267,6 +283,7 @@ impl Schema {
         }
     }
 
+    /// Registers a global element named `name` of type `type_name`.
     pub fn element(&mut self, name: impl Into<String>, type_name: impl Into<String>) -> &mut Self {
         self.global_elements.insert(
             name.into(),
@@ -299,6 +316,8 @@ impl Schema {
         self
     }
 
+    /// Declares a concrete type whose content is one sequence of
+    /// `elements`.
     pub fn complex(&mut self, name: impl Into<String>, elements: Vec<Element>) -> &mut Self {
         self.complex_groups(name, vec![sequence(elements)])
     }
@@ -317,6 +336,8 @@ impl Schema {
         self
     }
 
+    /// Declares an abstract type. Instantiating it without `$type` /
+    /// `xsi:type` is a validation error.
     pub fn complex_abstract(
         &mut self,
         name: impl Into<String>,
@@ -334,6 +355,7 @@ impl Schema {
         self
     }
 
+    /// Declares `name` as an extension of `base` with `extra` fields.
     pub fn extend(
         &mut self,
         name: impl Into<String>,
@@ -355,6 +377,7 @@ impl Schema {
         self
     }
 
+    /// Declared type of the global element `element`, if any.
     #[must_use]
     pub fn global_type(&self, element: &str) -> Option<&str> {
         self.global_elements
@@ -369,6 +392,12 @@ impl Schema {
     /// it can come from a program-specific Message Set, and a chain that closes
     /// on itself would otherwise recurse until the stack ran out, at startup or
     /// on the first message that touched the type.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::UciError::Xsd`] on a cycle, or
+    /// [`crate::UciError::UnknownType`] if `type_name` is not a complex
+    /// type.
     pub fn flatten<'a>(&'a self, type_name: &str) -> Result<Vec<&'a Element>, super::UciError> {
         Ok(self
             .groups(type_name)?
@@ -382,10 +411,16 @@ impl Schema {
     /// [`Self::flatten`] answers which elements may appear; this also answers
     /// under what compositor, which is what tells a set of optional siblings
     /// apart from a set of alternatives.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`Self::flatten`].
     pub fn groups<'a>(&'a self, type_name: &str) -> Result<Vec<&'a Group>, super::UciError> {
         self.groups_chain(type_name, &mut Vec::new())
     }
 
+    /// Walks an extension chain, pushing names onto `chain` so a cycle
+    /// can be named rather than followed.
     fn groups_chain<'a>(
         &'a self,
         type_name: &str,
@@ -414,6 +449,7 @@ impl Schema {
         }
     }
 
+    /// Whether `type_name` is a named complex type in this schema.
     #[must_use]
     pub fn is_complex(&self, type_name: &str) -> bool {
         self.complex_types.contains_key(type_name)
@@ -551,6 +587,7 @@ fn stricter_f64(a: Option<f64>, b: Option<f64>, keep: fn(f64, f64) -> f64) -> Op
 }
 
 impl Default for Schema {
+    /// Same as [`Self::new`].
     fn default() -> Self {
         Self::new()
     }
@@ -574,6 +611,7 @@ pub fn choice(elements: Vec<Element>) -> Group {
     }
 }
 
+/// Required once (`minOccurs=1`, `maxOccurs=1`).
 #[must_use]
 pub fn el(name: &str, type_name: &str) -> Element {
     Element {
@@ -584,6 +622,7 @@ pub fn el(name: &str, type_name: &str) -> Element {
     }
 }
 
+/// Optional once (`minOccurs=0`, `maxOccurs=1`).
 #[must_use]
 pub fn el_opt(name: &str, type_name: &str) -> Element {
     Element {
@@ -594,6 +633,7 @@ pub fn el_opt(name: &str, type_name: &str) -> Element {
     }
 }
 
+/// Zero or more (`minOccurs=0`, `maxOccurs` unbounded).
 #[must_use]
 pub fn el_many(name: &str, type_name: &str) -> Element {
     Element {

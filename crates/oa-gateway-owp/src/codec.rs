@@ -1,4 +1,9 @@
 //! OWP 1.0 text-frame codec. Grammar follows OMSC-SPC-013; no UCI types.
+//!
+//! A frame is a keyword plus space-or-tab separated fields. JSON payloads
+//! (`INIT`, `INFO`, `PUB`) keep their spaces: the first token is the
+//! field, the rest of the line is the payload. This module does not
+//! compile a schema or convert XML.
 
 use std::fmt;
 use std::str::FromStr;
@@ -6,7 +11,10 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-/// `^[A-Za-z0-9_\-.]+$`
+/// Whether `s` is an OWP identifier: `^[A-Za-z0-9_\-.]+$`.
+///
+/// Empty is not an identifier. Used for `topic`, `sid`, `service_id`,
+/// and `group`. `SUB` `message_name` is only checked for non-empty.
 #[must_use]
 pub fn is_identifier(s: &str) -> bool {
     !s.is_empty()
@@ -14,6 +22,11 @@ pub fn is_identifier(s: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-' || b == b'.')
 }
 
+/// Protocol error name carried on `-ERR`.
+///
+/// [`Display`](Self#impl-Display-for-OwpError) and [`FromStr`] use the
+/// hyphenated wire tokens (`Unsupported-Version`), not the Rust variant
+/// names. This is not a parse failure; those stay as `ParseError`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OwpError {
     UnsupportedVersion,
@@ -59,6 +72,11 @@ impl FromStr for OwpError {
     }
 }
 
+/// JSON body of a client `INIT` frame.
+///
+/// `versions` must be non-empty after parse. `service_id` must be an
+/// identifier. `schema` is the protocol version string the server may
+/// require to match; it is not a UCI XSD path.
 #[derive(Debug, Clone, Deserialize)]
 pub struct InitPayload {
     pub versions: Vec<String>,
@@ -67,6 +85,7 @@ pub struct InitPayload {
     pub service_id: String,
 }
 
+/// UUID triple sent on `INFO`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Identifiers {
     pub system: String,
@@ -75,6 +94,7 @@ pub struct Identifiers {
     pub subsystem: Option<String>,
 }
 
+/// JSON body of a server `INFO` frame.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InfoPayload {
     pub version: String,
@@ -83,32 +103,50 @@ pub struct InfoPayload {
     pub system_label: String,
 }
 
+/// A parsed client frame.
+///
+/// `PUB` `payload` is the rest of the line, not a validated JSON
+/// object. Call [`type_hint_from_json`] when the root key is needed.
 #[derive(Debug, Clone)]
 pub enum ClientOp {
     Init(InitPayload),
+    /// `PUB <topic> <payload>`. `topic` is an identifier.
     Pub {
         topic: String,
         payload: String,
     },
+    /// `SUB <sid> <message_name> <topic> [group]`.
+    ///
+    /// `message_name` is not identifier-checked. A fourth token is the
+    /// optional group; a fifth is rejected as extra fields.
     Sub {
         sid: String,
         message_name: String,
         topic: String,
         group: Option<String>,
     },
+    /// `UNSUB <sid>`.
     Unsub {
         sid: String,
     },
 }
 
+/// A parsed server frame, or one about to be written.
+///
+/// [`Display`](Self#impl-Display-for-ServerOp) is the wire form. `INFO`
+/// JSON that cannot serialize becomes a `fmt` error, which should not
+/// happen for a well-formed [`InfoPayload`].
 #[derive(Debug, Clone)]
 pub enum ServerOp {
+    /// `+OK` with no trailing fields.
     Ok,
+    /// `-ERR <name> [details…]`. Details keep their spaces.
     Err {
         error: OwpError,
         details: Option<String>,
     },
     Info(InfoPayload),
+    /// `MSG <sid> <payload>`. Payload is the rest of the line.
     Msg {
         sid: String,
         payload: String,
@@ -132,6 +170,10 @@ impl fmt::Display for ServerOp {
     }
 }
 
+/// Why a frame could not be parsed.
+///
+/// Distinct from [`OwpError`], which is a protocol `-ERR` name inside a
+/// well-formed frame.
 #[derive(Debug)]
 pub enum ParseError {
     EmptyFrame,
@@ -174,10 +216,13 @@ impl fmt::Display for ParseError {
 
 impl std::error::Error for ParseError {}
 
+/// Space or tab. Newlines are not delimiters; a frame is one line.
 const fn is_delim(b: u8) -> bool {
     b == b' ' || b == b'\t'
 }
 
+/// First non-delimiter run and the remainder, with leading delimiters
+/// stripped from the remainder. `None` if `s` is only delimiters.
 fn split_first_token(s: &str) -> Option<(&str, &str)> {
     let bytes = s.as_bytes();
     let start = bytes.iter().position(|b| !is_delim(*b))?;
@@ -194,6 +239,9 @@ fn split_first_token(s: &str) -> Option<(&str, &str)> {
     Some((token, rest))
 }
 
+/// Up to `max` tokens. Leftover text after `max` is dropped, so the
+/// caller must treat `len == max` as “maybe more” when extra fields
+/// are illegal.
 fn tokenize(s: &str, max: usize) -> Vec<&str> {
     let mut tokens = Vec::with_capacity(max);
     let mut remaining = s;
@@ -209,6 +257,16 @@ fn tokenize(s: &str, max: usize) -> Vec<&str> {
     tokens
 }
 
+/// Parses one client text frame (`INIT`, `PUB`, `SUB`, `UNSUB`).
+///
+/// Leading and internal space/tab runs are skipped between fields.
+/// `PUB` payload is not parsed as JSON here.
+///
+/// # Errors
+///
+/// Returns a parse error if the frame is empty, the keyword is
+/// unknown, a required field is missing, an identifier is illegal, or
+/// `INIT` JSON is unusable.
 pub fn parse_client(frame: &str) -> Result<ClientOp, ParseError> {
     let (keyword, rest) = split_first_token(frame).ok_or(ParseError::EmptyFrame)?;
     match keyword {
@@ -220,6 +278,12 @@ pub fn parse_client(frame: &str) -> Result<ClientOp, ParseError> {
     }
 }
 
+/// Parses one server text frame (`+OK`, `-ERR`, `INFO`, `MSG`).
+///
+/// # Errors
+///
+/// Returns a parse error if the frame is empty, the keyword is
+/// unknown, `+OK` has trailing text, or a field is missing or illegal.
 pub fn parse_server(frame: &str) -> Result<ServerOp, ParseError> {
     let (keyword, rest) = split_first_token(frame).ok_or(ParseError::EmptyFrame)?;
     match keyword {
@@ -414,7 +478,15 @@ fn parse_unsub(rest: &str) -> Result<ClientOp, ParseError> {
     })
 }
 
-/// Extract the single root key of an OMS JSON object. Does not validate UCI.
+/// Returns the single root key of an OMS JSON object.
+///
+/// That key is the type hint the engine matches on. This does not
+/// validate UCI and does not walk nested members.
+///
+/// # Errors
+///
+/// Returns a parse error (labelled as `PUB`) if `text` is not an
+/// object with exactly one member.
 pub fn type_hint_from_json(text: &str) -> Result<String, ParseError> {
     let value: Value = serde_json::from_str(text).map_err(|e| ParseError::InvalidJson {
         op: "PUB",

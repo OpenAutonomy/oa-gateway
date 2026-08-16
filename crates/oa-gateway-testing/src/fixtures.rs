@@ -1,7 +1,14 @@
-//! Sample payloads. Paths stay valid when crates move; do not `include_str!`
-//! from the workspace root.
+//! Sample payloads. Paths stay valid when crates move; do not
+//! `include_str!` from the workspace root.
+//!
+//! The XML and JSON documents are the same logical `PositionReport`
+//! (UCI 2.5 / OMS). Integration tests send them over OWP, STOMP, and
+//! loopback; `oa-gateway-uci` uses them as a codec round-trip.
 
 /// Minimal UCI XML `PositionReport` used on the ASB / STOMP path.
+///
+/// Live broker tests rewrite the `<n>1</n>` field so concurrent
+/// messages can be told apart.
 pub const POSITION_REPORT_XML: &str = include_str!("../fixtures/PositionReport.xml");
 
 /// Same document as bytes (loopback / STOMP SEND).
@@ -11,6 +18,9 @@ pub const POSITION_REPORT_XML_BYTES: &[u8] = POSITION_REPORT_XML.as_bytes();
 pub const POSITION_REPORT_JSON: &str = include_str!("../fixtures/PositionReport.json");
 
 /// Filesystem path to the XML fixture (scripts / non-Rust tools).
+///
+/// Built from `CARGO_MANIFEST_DIR` so it does not depend on the
+/// process working directory.
 #[must_use]
 pub fn position_report_xml_path() -> &'static str {
     concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/PositionReport.xml")

@@ -29,11 +29,9 @@ schema = [
 validate = "warn"
 
 [loopback]
-enabled = true
 id = "loopback"
 
 [owp]
-enabled = true
 id = "owp"
 bind = "127.0.0.1:9000"
 server_id = "oa-gateway-0"
@@ -44,7 +42,6 @@ unwrap_ma_payloads = true
 xml_baseline = true
 
 [stomp]
-enabled = true
 id = "stomp"
 broker = "127.0.0.1:61613"
 host = "/"
