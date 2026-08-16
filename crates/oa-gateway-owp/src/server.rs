@@ -829,8 +829,7 @@ fn xml_to_oms_json(raw: &str, schema: Option<&Schema>) -> Result<String, String>
 /// parses XML. `xml_baseline` has to convert the inner the same way it
 /// converts the wrapper, or MA logs `expected XML` and drops the path.
 fn transcode_wrapper_inner(text: &str, schema: &Schema, want_xml: bool) -> Result<String, String> {
-    let mut root: serde_json::Value =
-        serde_json::from_str(text).map_err(|e| e.to_string())?;
+    let mut root: serde_json::Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
     let obj = match root.as_object_mut() {
         Some(obj) if obj.len() == 1 => obj,
         _ => return Ok(text.to_owned()),
@@ -856,10 +855,12 @@ fn transcode_wrapper_inner(text: &str, schema: &Schema, want_xml: bool) -> Resul
         return Ok(text.to_owned());
     }
     let converted = if want_xml {
-        let msg = oa_gateway_uci::Message::from_json(inner_text, schema).map_err(|e| e.to_string())?;
+        let msg =
+            oa_gateway_uci::Message::from_json(inner_text, schema).map_err(|e| e.to_string())?;
         msg.to_xml(schema).map_err(|e| e.to_string())?
     } else {
-        let msg = oa_gateway_uci::Message::from_xml(inner_text, schema).map_err(|e| e.to_string())?;
+        let msg =
+            oa_gateway_uci::Message::from_xml(inner_text, schema).map_err(|e| e.to_string())?;
         msg.to_json(schema).map_err(|e| e.to_string())?
     };
     *encoded = serde_json::Value::String(encode_hex_upper(converted.as_bytes()));
@@ -867,10 +868,7 @@ fn transcode_wrapper_inner(text: &str, schema: &Schema, want_xml: bool) -> Resul
 }
 
 fn decode_hex(s: &str) -> Result<Vec<u8>, String> {
-    let digits: Vec<u8> = s
-        .bytes()
-        .filter(|b| !b.is_ascii_whitespace())
-        .collect();
+    let digits: Vec<u8> = s.bytes().filter(|b| !b.is_ascii_whitespace()).collect();
     if digits.len() % 2 != 0 {
         return Err("EncodedPayload is not hexBinary: odd number of digits".into());
     }
