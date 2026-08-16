@@ -55,7 +55,7 @@ A config is a TOML file passed as the only argument: one section per adapter, pl
 - [docs/writing-an-adapter.md](docs/writing-an-adapter.md) — adding a protocol
 - [docs/using-custom-xsd.md](docs/using-custom-xsd.md) — running against your own message set
 - [docs/connecting-active-mq.md](docs/connecting-active-mq.md) — bridging an ActiveMQ broker
-- rustdoc — crate APIs, including the host binary's modules. Locally: `cargo doc --workspace --no-deps --document-private-items --open`. CI builds the same tree on every run (download the `rustdoc` artifact) and publishes it from the default branch (GitHub Pages / GitLab Pages). `oa-gateway-adapter` carries a runnable minimal adapter.
+- rustdoc — crate APIs, including the host binary's modules. Locally: `cargo doc --workspace --no-deps --document-private-items --open`. CI builds the same tree on every run (download the `rustdoc` artifact). A public default branch also publishes GitHub Pages; a private repo on a free plan cannot. GitLab Pages still publishes from the default branch. `oa-gateway-adapter` carries a runnable minimal adapter.
 
 ## FAQs
 

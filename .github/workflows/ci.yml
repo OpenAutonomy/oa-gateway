@@ -41,9 +41,14 @@ jobs:
           retention-days: 14
 
   pages:
-    # HTML is already built in `test`. This job only publishes it. Fork PRs
-    # and feature branches keep the artifact; they do not write the site.
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    # HTML is already built in `test`. This job only publishes it. Private
+    # repos, fork PRs, and feature branches keep the rustdoc artifact; they
+    # do not write the site. A free personal plan cannot host Pages on a
+    # private repository.
+    if: >-
+      github.event_name == 'push'
+      && !github.event.repository.private
+      && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     needs: test
     runs-on: ubuntu-latest
     permissions:
