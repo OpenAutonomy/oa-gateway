@@ -9,6 +9,7 @@ members = [
     "crates/oa-gateway-dds",
     "crates/oa-gateway-uci",
     "crates/oa-gateway-testing",
+    "crates/oa-gateway-bench",
     "crates/oa-gateway",
 ]
 resolver = "2"

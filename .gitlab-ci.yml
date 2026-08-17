@@ -63,6 +63,17 @@ pages:
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
+bench:
+  stage: test
+  needs: [test]
+  script:
+    - ./scripts/ci-bench.sh
+  artifacts:
+    name: bench
+    paths:
+      - bench/
+    expire_in: 1 week
+
 live-activemq:
   stage: test
   needs: [test]

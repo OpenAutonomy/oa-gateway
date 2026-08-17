@@ -71,6 +71,23 @@ jobs:
       - id: deployment
         uses: actions/deploy-pages@v4
 
+  bench:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.85.0
+      - uses: Swatinem/rust-cache@v2
+      - name: latency and throughput suite
+        run: ./scripts/ci-bench.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bench
+          path: bench/
+          retention-days: 14
+
   live-activemq:
     runs-on: ubuntu-latest
     needs: test

@@ -891,6 +891,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "oa-gateway-bench"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "futures-util",
+ "oa-gateway-core",
+ "oa-gateway-loopback",
+ "oa-gateway-owp",
+ "oa-gateway-testing",
+ "oa-gateway-uci",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite",
+]
+
+[[package]]
 name = "oa-gateway-core"
 version = "0.1.0"
 dependencies = [

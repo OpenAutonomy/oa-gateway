@@ -43,6 +43,8 @@ The following script is optional and needs Docker:
 
 CI also runs the ignored ActiveMQ XML round-trip after the unit gate.
 
+After the unit job, CI runs [`scripts/ci-bench.sh`](scripts/ci-bench.sh) and uploads a `bench` artifact (JSON, `summary.txt`, and PNGs when gnuplot is present). That job is a snapshot, not a performance gate. Local long runs and how to read drops are in [docs/benchmarking.md](docs/benchmarking.md).
+
 ## Notes
 
 - Do not compile against or commit `repos/` — those clones are reference only. The schema the gateway loads comes from `scripts/fetch-uci-schema.sh`, which lands in a gitignored `schema/`.

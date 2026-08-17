@@ -5,3 +5,5 @@
 repos/
 # Standards fetched by scripts/fetch-uci-schema.sh, not redistributed here.
 /schema/
+# Local output of scripts/ci-bench.sh
+/bench/
