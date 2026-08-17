@@ -2,16 +2,6 @@
 
 ![OA-Gateway: multi-protocol gateway bridging ActiveMQ, DDS, and WebSockets](docs/oa-gateway-banner.png)
 
-- [Introduction](#introduction)
-- [Getting started](#getting-started)
-- [Standards](#standards)
-- [Config](#config)
-- [Documentation](#documentation)
-- [FAQs](#faqs)
-- [Contributing](#contributing)
-- [Changelog](#changelog)
-- [License](#license)
-
 ## Introduction
 
 OA-Gateway is an independent prototype: a multi-protocol connector implemented in Rust. It is open source and free to use under the MIT License. It is not an [Open Arsenal](https://gitlab.com/open-arsenal/) project; it speaks OMS, UCI, and A-GRA so it can sit next to those systems.
