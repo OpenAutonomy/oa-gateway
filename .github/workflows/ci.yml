@@ -61,7 +61,7 @@ jobs:
       group: pages
       cancel-in-progress: false
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: rustdoc
           path: doc
