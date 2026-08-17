@@ -86,10 +86,13 @@
   <g transform="translate(530,270)" filter="url(#glow)">
     <circle r="34" fill="#0a1526" stroke="#fbbf24" stroke-width="2.5"/>
   </g>
-  <g transform="translate(530,270)">
-    <circle r="4" fill="#fbbf24"/>
-    <circle r="12" fill="none" stroke="#fde68a" stroke-width="1.6" opacity="0.8"/>
-    <circle r="19" fill="none" stroke="#fde68a" stroke-width="1.6" opacity="0.5"/>
+  <g transform="translate(530,270)" stroke="#fbbf24" stroke-width="2.4" fill="none" stroke-linecap="round">
+    <path d="M -15,-4 A 17,17 0 0 1 14,-13"/>
+    <path d="M 15,4 A 17,17 0 0 1 -14,13"/>
+  </g>
+  <g transform="translate(530,270)" fill="#fbbf24">
+    <g transform="translate(14,-13) rotate(47.1)"><polygon points="0,-5 10,0 0,5"/></g>
+    <g transform="translate(-14,13) rotate(227.1)"><polygon points="0,-5 10,0 0,5"/></g>
   </g>
   <text x="530" y="324" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" fill="#fbbf24" letter-spacing="0.5">DDS</text>
 
@@ -97,8 +100,20 @@
     <polygon points="770,104 848,147 848,233 770,276 692,233 692,147"
              fill="#0a1526" stroke="#38bdf8" stroke-width="3.5"/>
   </g>
-  <path d="M 752,189 L 770,174 L 788,189" fill="none" stroke="#38bdf8" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="770" y="232" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="800" letter-spacing="0.5" fill="#f8fafc">OA <tspan fill="#7dd3fc">GATEWAY</tspan></text>
+  <g transform="translate(770,168) scale(0.5)" stroke="#38bdf8" stroke-width="3" fill="#38bdf8">
+    <line x1="0" y1="0" x2="0" y2="-40" stroke-width="2.5"/>
+    <line x1="0" y1="0" x2="35" y2="20" stroke-width="2.5"/>
+    <line x1="0" y1="0" x2="-35" y2="20" stroke-width="2.5"/>
+    <line x1="0" y1="0" x2="-30" y2="-25" stroke-width="2.5"/>
+    <line x1="0" y1="0" x2="30" y2="-25" stroke-width="2.5"/>
+    <circle cx="0" cy="0" r="9" fill="#e0f2fe" stroke="#38bdf8"/>
+    <circle cx="0" cy="-40" r="6" stroke="none"/>
+    <circle cx="35" cy="20" r="6" stroke="none"/>
+    <circle cx="-35" cy="20" r="6" stroke="none"/>
+    <circle cx="-30" cy="-25" r="6" stroke="none"/>
+    <circle cx="30" cy="-25" r="6" stroke="none"/>
+  </g>
+  <text x="770" y="218" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="800" letter-spacing="0.5" fill="#f8fafc">OA <tspan fill="#7dd3fc">GATEWAY</tspan></text>
 
   <g transform="translate(1000,190)" filter="url(#glow)">
     <circle r="38" fill="#0a1526" stroke="#38bdf8" stroke-width="2.5"/>
