@@ -65,11 +65,18 @@ jobs:
         with:
           name: rustdoc
           path: doc
+      # Artifacts belong to the workflow run, not the attempt.
+      # Re-running this job would otherwise upload a second
+      # `github-pages` next to the first, and deploy-pages@v5
+      # refuses to choose.
       - uses: actions/upload-pages-artifact@v5
         with:
           path: doc
+          name: github-pages-${{ github.run_attempt }}
       - id: deployment
         uses: actions/deploy-pages@v5
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
 
   bench:
     runs-on: ubuntu-latest
