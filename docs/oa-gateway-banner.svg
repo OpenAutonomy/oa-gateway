@@ -1,0 +1,108 @@
+<svg width="1200" height="380" viewBox="0 0 1200 380" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#050a14"/>
+      <stop offset="50%" stop-color="#0a1526"/>
+      <stop offset="100%" stop-color="#050a14"/>
+    </linearGradient>
+
+    <radialGradient id="hexGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/>
+    </radialGradient>
+
+    <linearGradient id="greenLine" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#34d399" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#34d399" stop-opacity="0.9"/>
+    </linearGradient>
+    <linearGradient id="amberLine" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#fbbf24" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#fbbf24" stop-opacity="0.9"/>
+    </linearGradient>
+    <linearGradient id="blueLine" gradientUnits="userSpaceOnUse" x1="840" y1="190" x2="960" y2="190">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.9"/>
+    </linearGradient>
+
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <pattern id="dots" width="28" height="28" patternUnits="userSpaceOnUse">
+      <circle cx="1.3" cy="1.3" r="1.2" fill="#3b82f6"/>
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="380" fill="url(#bg)"/>
+  <rect width="1200" height="380" fill="url(#dots)" opacity="0.3"/>
+
+  <text x="60" y="150" font-family="Arial, Helvetica, sans-serif" font-weight="800" font-size="58" letter-spacing="1">
+    <tspan fill="#38bdf8">OA</tspan><tspan fill="#f1f5f9">-Gateway</tspan>
+  </text>
+  <text x="62" y="182" font-family="Arial, Helvetica, sans-serif" font-weight="600" font-size="17" letter-spacing="5" fill="#7dd3fc">MULTI-PROTOCOL GATEWAY</text>
+
+  <line x1="62" y1="204" x2="380" y2="204" stroke="#1e3a5f" stroke-width="2"/>
+
+  <text x="62" y="238" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#94a3b8">Bridge protocols. Unify messaging.</text>
+
+  <g transform="translate(62,300)">
+    <circle cx="13" cy="10" r="13" fill="#f1f5f9"/>
+    <path fill="#0a1526" transform="translate(1,-2) scale(0.55)" d="M24 4c-11 0-20 9-20 20 0 8.8 5.7 16.3 13.7 19 1 .2 1.4-.4 1.4-1v-3.6c-5.6 1.2-6.8-2.4-6.8-2.4-.9-2.3-2.2-3-2.2-3-1.9-1.3.1-1.2.1-1.2 2 .1 3.1 2.1 3.1 2.1 1.8 3.1 4.7 2.2 5.9 1.7.2-1.3.7-2.2 1.3-2.7-4.5-.5-9.2-2.3-9.2-10 0-2.2.8-4 2.1-5.4-.2-.5-.9-2.6.2-5.4 0 0 1.7-.6 5.6 2a19.4 19.4 0 0 1 10.2 0c3.9-2.6 5.6-2 5.6-2 1.1 2.8.4 4.9.2 5.4 1.3 1.4 2.1 3.2 2.1 5.4 0 7.7-4.7 9.4-9.2 10 .7.6 1.4 1.9 1.4 3.8v5.6c0 .6.4 1.2 1.4 1C38.3 40.3 44 32.8 44 24c0-11-9-20-20-20z"/>
+    <text x="32" y="15" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="600" fill="#7dd3fc">oa-gateway</text>
+  </g>
+
+  <circle cx="770" cy="190" r="175" fill="url(#hexGlow)"/>
+
+  <g stroke-width="2.2" fill="none">
+    <path d="M 560,110 C 640,110 660,152 700,178" stroke="url(#greenLine)"/>
+    <path d="M 560,270 C 640,270 660,228 700,202" stroke="url(#amberLine)"/>
+    <path d="M 840,190 C 900,190 900,190 960,190" stroke="url(#blueLine)"/>
+  </g>
+  <g fill="#6ee7b7">
+    <circle r="3"><animateMotion dur="2.4s" repeatCount="indefinite" path="M 560,110 C 640,110 660,152 700,178"/></circle>
+  </g>
+  <g fill="#fde68a">
+    <circle r="3"><animateMotion dur="2.4s" begin="0.8s" repeatCount="indefinite" path="M 560,270 C 640,270 660,228 700,202"/></circle>
+  </g>
+  <g fill="#93c5fd">
+    <circle r="3"><animateMotion dur="2s" begin="0.4s" repeatCount="indefinite" path="M 840,190 C 900,190 900,190 960,190"/></circle>
+  </g>
+
+  <g transform="translate(530,110)" filter="url(#glow)">
+    <circle r="34" fill="#0a1526" stroke="#34d399" stroke-width="2.5"/>
+  </g>
+  <g transform="translate(530,110)" stroke="#a7f3d0" stroke-width="2" fill="none">
+    <circle r="4" fill="#34d399" stroke="none"/>
+    <line x1="0" y1="0" x2="-14" y2="-10"/>
+    <line x1="0" y1="0" x2="14" y2="-10"/>
+    <line x1="0" y1="0" x2="0" y2="16"/>
+    <circle cx="-14" cy="-10" r="3" fill="#34d399" stroke="none"/>
+    <circle cx="14" cy="-10" r="3" fill="#34d399" stroke="none"/>
+    <circle cx="0" cy="16" r="3" fill="#34d399" stroke="none"/>
+  </g>
+  <text x="530" y="164" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" fill="#34d399" letter-spacing="0.5">ACTIVEMQ</text>
+
+  <g transform="translate(530,270)" filter="url(#glow)">
+    <circle r="34" fill="#0a1526" stroke="#fbbf24" stroke-width="2.5"/>
+  </g>
+  <g transform="translate(530,270)">
+    <circle r="4" fill="#fbbf24"/>
+    <circle r="12" fill="none" stroke="#fde68a" stroke-width="1.6" opacity="0.8"/>
+    <circle r="19" fill="none" stroke="#fde68a" stroke-width="1.6" opacity="0.5"/>
+  </g>
+  <text x="530" y="324" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" fill="#fbbf24" letter-spacing="0.5">DDS</text>
+
+  <g filter="url(#glow)">
+    <polygon points="770,104 848,147 848,233 770,276 692,233 692,147"
+             fill="#0a1526" stroke="#38bdf8" stroke-width="3.5"/>
+  </g>
+  <path d="M 752,189 L 770,174 L 788,189" fill="none" stroke="#38bdf8" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="770" y="232" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="800" letter-spacing="0.5" fill="#f8fafc">OA <tspan fill="#7dd3fc">GATEWAY</tspan></text>
+
+  <g transform="translate(1000,190)" filter="url(#glow)">
+    <circle r="38" fill="#0a1526" stroke="#38bdf8" stroke-width="2.5"/>
+  </g>
+  <text x="1000" y="200" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#e0f2fe">{ }</text>
+  <text x="1000" y="252" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" fill="#38bdf8" letter-spacing="0.5">WEBSOCKETS</text>
+</svg>

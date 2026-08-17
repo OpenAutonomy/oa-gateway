@@ -1,6 +1,6 @@
 # OA-Gateway
 
-![OA-Gateway: protocol-agnostic routing between OWP, STOMP, and DDS](docs/oa-gateway-banner.png)
+![OA-Gateway: multi-protocol gateway bridging ActiveMQ, DDS, and WebSockets](docs/oa-gateway-banner.png)
 
 - [Introduction](#introduction)
 - [Getting started](#getting-started)
