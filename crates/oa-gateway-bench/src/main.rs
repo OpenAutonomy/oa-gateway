@@ -38,5 +38,6 @@ async fn run() -> Result<(), String> {
         Command::Loopback(args) => scenarios::loopback::run(args).await,
         Command::Owp(args) => scenarios::owp::run(args).await,
         Command::Uci(args) => scenarios::uci::run(args),
+        Command::Ping(args) => scenarios::ping::run(args).await,
     }
 }

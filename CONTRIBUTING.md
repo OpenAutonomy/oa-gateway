@@ -51,3 +51,4 @@ After the unit job, CI runs [`scripts/ci-bench.sh`](scripts/ci-bench.sh) and upl
 - Cross-adapter tests and fixtures live in `crates/oa-gateway-testing`. Adapter crates keep unit tests only.
 - New behavior needs a test that asserts observable routing or codec output, not source layout.
 - Commit messages: why, not how.
+- User-facing changes belong under `[Unreleased]` in [CHANGELOG.md](CHANGELOG.md).
