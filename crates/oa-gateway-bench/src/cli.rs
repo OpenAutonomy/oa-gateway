@@ -12,6 +12,7 @@ Usage:
   oa-gateway-bench loopback [options]
   oa-gateway-bench owp      [options]
   oa-gateway-bench uci      [options]
+  oa-gateway-bench ping     [options]
 
 Shared options:
   --duration DUR       How long to publish (default 10s). 200ms, 10s, 1m, or seconds.
@@ -36,12 +37,16 @@ uci options:
   --iterations N       Convert this many times (default 2000).
   --direction DIR      json-to-xml (default) or xml-to-json.
 
+ping options:
+  --url URL            Attach to a running gateway instead of starting OWP.
+
 Examples:
   oa-gateway-bench engine --duration 5s --warmup 1s
   oa-gateway-bench engine --capacity 64
   oa-gateway-bench owp --xml-baseline --duration 5s
   oa-gateway-bench owp --url ws://127.0.0.1:9000/
   oa-gateway-bench uci --iterations 2000
+  oa-gateway-bench ping --url ws://127.0.0.1:9000/
 ";
 
 /// Parsed command line.
@@ -51,6 +56,7 @@ pub(crate) enum Command {
     Loopback(LoopbackArgs),
     Owp(OwpArgs),
     Uci(UciArgs),
+    Ping(PingArgs),
     Help,
 }
 
@@ -131,6 +137,12 @@ pub(crate) enum UciDirection {
     XmlToJson,
 }
 
+/// One-shot INIT / SUB / PUB / MSG against OWP.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub(crate) struct PingArgs {
+    pub url: Option<String>,
+}
+
 /// `uci` scenario.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct UciArgs {
@@ -169,6 +181,7 @@ where
         "loopback" => Ok(Command::Loopback(parse_loopback(&mut args)?)),
         "owp" => Ok(Command::Owp(parse_owp(&mut args)?)),
         "uci" => Ok(Command::Uci(parse_uci(&mut args)?)),
+        "ping" => Ok(Command::Ping(parse_ping(&mut args)?)),
         other if other.starts_with('-') => Err(format!(
             "unknown option `{other}`. Try `oa-gateway-bench --help`."
         )),
@@ -255,6 +268,25 @@ where
             other => {
                 return Err(format!(
                     "unknown option `{other}` for uci. Try `oa-gateway-bench --help`."
+                ))
+            }
+        }
+    }
+    Ok(out)
+}
+
+fn parse_ping<I>(args: &mut I) -> Result<PingArgs, String>
+where
+    I: Iterator<Item = String>,
+{
+    let mut out = PingArgs::default();
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "-h" | "--help" => return Err(USAGE.trim_end().to_owned()),
+            "--url" => out.url = Some(next(args, "--url")?),
+            other => {
+                return Err(format!(
+                    "unknown option `{other}` for ping. Try `oa-gateway-bench --help`."
                 ))
             }
         }
@@ -393,6 +425,27 @@ mod tests {
         assert!(o.xml_baseline);
         assert!(o.ack_latency);
         assert_eq!(o.url.as_deref(), Some("ws://127.0.0.1:9000/"));
+    }
+
+    #[test]
+    fn ping_url() {
+        let Command::Ping(p) = parse_args(args(&["ping"])).unwrap() else {
+            panic!("expected ping");
+        };
+        assert_eq!(p.url, None);
+
+        let Command::Ping(p) =
+            parse_args(args(&["ping", "--url", "ws://127.0.0.1:9000/"])).unwrap()
+        else {
+            panic!("expected ping");
+        };
+        assert_eq!(p.url.as_deref(), Some("ws://127.0.0.1:9000/"));
+    }
+
+    #[test]
+    fn ping_rejects_unknown_flags() {
+        let err = parse_args(args(&["ping", "--duration", "1s"])).unwrap_err();
+        assert!(err.contains("--duration"), "{err}");
     }
 
     #[test]

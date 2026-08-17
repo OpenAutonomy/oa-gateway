@@ -55,8 +55,8 @@ host = "/"
 login = ""
 passcode = ""
 destination_prefix = "/topic/"
-# Engine topic names == STOMP dest suffixes. For sk-cal / Ghost Detector, list
-# UCI message type names (PositionReport, SubsystemStatus, …).
+# Engine topic names == STOMP dest suffixes. List UCI message type names
+# (PositionReport, SubsystemStatus, …).
 topics = ["demo"]
 unwrap_ma_payloads = true
 reconnect = true

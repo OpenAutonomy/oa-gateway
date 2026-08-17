@@ -2,10 +2,8 @@
 
 ## Reporting a vulnerability
 
-While this repository is private, open an issue: only collaborators can read it,
-so that is already a private channel. If the repository is ever made public,
-turn on GitHub's private vulnerability reporting first and use that instead —
-issues become world-readable at that moment, including any that are open.
+Use GitHub's private vulnerability reporting: Security → Report a vulnerability.
+**Do not open a public issue** for a vulnerability.
 
 Expect a best-effort response from a single maintainer, not a staffed queue.
 Fixes land on `main`; there is no backport branch to wait for.
@@ -13,18 +11,18 @@ Fixes land on `main`; there is no backport branch to wait for.
 ## What this software assumes
 
 OA-Gateway is a prototype, and its security posture is the honest consequence of
-that: **there is no authentication, no authorization, and no transport
-security.** Any peer that can open a connection to an adapter port can publish
-under any service identity, subscribe to any topic, and be believed. Nothing is
-encrypted in transit, and nothing verifies that the broker on the other end is
-the broker you meant.
+that: **there is no authentication, no authorization, and no in-process TLS.**
+Any peer that can open a connection to an adapter port can publish under any
+service identity, subscribe to any topic, and be believed. Nothing is encrypted
+in transit, and nothing verifies that the broker on the other end is the broker
+you meant.
 
-So run it on loopback, or on a segment you control end to end, and put
-authentication and TLS in front of it if you need them. The host-oriented
-configs in `config/` bind to loopback for this reason. A compose launch mounts
-whatever path you pass in `OAG_CONFIG`; `config/compose.toml` listens on all
-interfaces inside the container so Docker can publish the port, and the compose
-file still maps that port to `127.0.0.1` on the host.
+Bind loopback, or put a reverse proxy in front that terminates TLS and
+authentication. The host-oriented configs in `config/` bind to loopback for this
+reason. A compose launch mounts whatever path you pass in `OAG_CONFIG`;
+`config/compose.toml` listens on all interfaces inside the container so Docker
+can publish the port, and the compose file still maps that port to `127.0.0.1`
+on the host.
 
 That assumption is what makes the rest of this document coherent. A finding is
 interesting here if it lets a peer do something the posture above does *not*
@@ -85,9 +83,8 @@ are capped before they are decoded, and conversion refuses nesting deeper than
 
 ## Supported versions
 
-None, in the release sense. Every crate is `0.1.0`, nothing is published, and
-there are no tags. `main` is the only supported thing, and its API may change
-without notice.
+`0.1.0` on `main` is the supported line. The API may still change. There is no
+backport branch.
 
 ## Dependencies
 

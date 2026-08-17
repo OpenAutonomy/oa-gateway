@@ -4,10 +4,12 @@
 
 - [Introduction](#introduction)
 - [Getting started](#getting-started)
+- [Standards](#standards)
 - [Config](#config)
 - [Documentation](#documentation)
 - [FAQs](#faqs)
 - [Contributing](#contributing)
+- [Changelog](#changelog)
 - [License](#license)
 
 ## Introduction
@@ -38,6 +40,16 @@ Start the process with a configuration file. The host starts an adapter for each
 ./target/release/oa-gateway config/default.toml
 ```
 
+There is no authentication and no in-process TLS. Bind loopback, as `config/default.toml` does, or put a reverse proxy in front. See [SECURITY.md](SECURITY.md).
+
+In another terminal, send one message through the engine:
+
+```bash
+cargo run -p oa-gateway-bench --release -- ping --url ws://127.0.0.1:9000/
+```
+
+That does INIT (`002.5.0`), SUB `Ping` on `demo`, PUB `{"Ping":{"n":1}}`, waits for MSG, and exits 0.
+
 To run the gateway in Docker, pass a configuration path:
 
 ```bash
@@ -45,6 +57,10 @@ OAG_CONFIG=$PWD/config/compose.toml docker compose -f compose/gateway.yml up --b
 ```
 
 That serves OWP at `ws://127.0.0.1:9000/`. A local ActiveMQ broker is a separate stack (`compose/activemq.yml`). See [docs/connecting-active-mq.md](docs/connecting-active-mq.md).
+
+## Standards
+
+UCI, OMS, and A-GRA XSD documents are not in the tree. [`scripts/fetch-uci-schema.sh`](scripts/fetch-uci-schema.sh) writes a gitignored `schema/`. Tests use a fixture schema. The [Dockerfile](Dockerfile) fetches UCI 2.5 at image build. See [docs/using-custom-xsd.md](docs/using-custom-xsd.md).
 
 ## Config
 
@@ -75,6 +91,10 @@ A config is a TOML file passed as the only argument: one section per adapter, pl
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Changelog
+
+Notable changes are in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 

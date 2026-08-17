@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 pub(crate) mod engine;
 pub(crate) mod loopback;
 pub(crate) mod owp;
+pub(crate) mod ping;
 pub(crate) mod uci;
 
 /// Waits until `received` stops increasing, or two seconds elapse.
