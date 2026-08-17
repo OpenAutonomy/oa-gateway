@@ -16,6 +16,7 @@ oa-gateway-core.workspace = true
 oa-gateway-loopback.workspace = true
 oa-gateway-owp.workspace = true
 oa-gateway-stomp.workspace = true
+oa-gateway-dds.workspace = true
 oa-gateway-uci.workspace = true
 serde.workspace = true
 tokio.workspace = true

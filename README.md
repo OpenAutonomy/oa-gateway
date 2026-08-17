@@ -12,7 +12,7 @@
 
 OA-Gateway is an independent prototype: a multi-protocol connector implemented in Rust. It is open source and free to use under the MIT License. It is not an [Open Arsenal](https://gitlab.com/open-arsenal/) project; it speaks OMS, UCI, and A-GRA so it can sit next to those systems.
 
-It currently supports WebSocket (OWP) and STOMP (ActiveMQ) adapters. The routing core is protocol-agnostic. Adapters own framing, handshake, and any schema logic. A new protocol is a new adapter; it is not a change to the core.
+It currently supports WebSocket (OWP), STOMP (ActiveMQ), and DDS (rustdds) adapters. The routing core is protocol-agnostic. Adapters own framing, handshake, and any schema logic. A new protocol is a new adapter; it is not a change to the core.
 
 Goals:
 
@@ -56,6 +56,7 @@ A config is a TOML file passed as the only argument: one section per adapter, pl
 - [docs/writing-an-adapter.md](docs/writing-an-adapter.md) — adding a protocol
 - [docs/using-custom-xsd.md](docs/using-custom-xsd.md) — running against a custom message set
 - [docs/connecting-active-mq.md](docs/connecting-active-mq.md) — bridging an ActiveMQ broker
+- [docs/connecting-dds.md](docs/connecting-dds.md) — joining a DDS domain
 - rustdoc — crate APIs, including the host binary's modules. Build locally with `cargo doc --workspace --no-deps --document-private-items --open`. CI builds the same tree on every run; download the `rustdoc` artifact. A public default branch also publishes GitHub Pages. A private repository on a free plan cannot. GitLab Pages still publishes from the default branch. `oa-gateway-adapter` includes a runnable minimal adapter.
 
 ## FAQs
@@ -66,6 +67,7 @@ A config is a TOML file passed as the only argument: one section per adapter, pl
 1. [How can I add a new protocol?](docs/writing-an-adapter.md)
 1. [How can I use my own XSD?](docs/using-custom-xsd.md)
 1. [How can I connect an ActiveMQ broker?](docs/connecting-active-mq.md)
+1. [How can I join a DDS domain?](docs/connecting-dds.md)
 
 ## Contributing
 

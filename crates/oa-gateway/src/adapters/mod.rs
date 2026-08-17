@@ -4,6 +4,7 @@
 //! module owns construction and task lifetime; protocol work stays in the
 //! adapter crates.
 
+mod dds;
 mod loopback;
 mod owp;
 mod stomp;
@@ -72,11 +73,22 @@ pub(crate) async fn start(
     }
 
     if let Some(broker) = stomp_broker {
-        handles.push(stomp::start(&config.stomp, broker, engine, shutdown)?);
+        handles.push(stomp::start(
+            &config.stomp,
+            broker,
+            Arc::clone(&engine),
+            shutdown.clone(),
+        )?);
+    }
+
+    if config.dds.enabled {
+        handles.push(dds::start(&config.dds, engine, shutdown)?);
     }
 
     if handles.is_empty() {
-        return Err("no adapters enabled. Add a [loopback], [owp], or [stomp] section.".into());
+        return Err(
+            "no adapters enabled. Add a [loopback], [owp], [stomp], or [dds] section.".into(),
+        );
     }
 
     Ok(handles)

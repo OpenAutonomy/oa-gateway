@@ -9,12 +9,14 @@ use std::path::Path;
 use serde::Deserialize;
 use tracing::info;
 
+mod dds;
 mod engine;
 mod loopback;
 mod owp;
 mod stomp;
 mod uci;
 
+pub(crate) use dds::DdsSection;
 pub(crate) use engine::EngineSection;
 pub(crate) use loopback::LoopbackSection;
 pub(crate) use owp::OwpSection;
@@ -45,6 +47,9 @@ pub(crate) struct Config {
     /// STOMP client. On when the `[stomp]` table is present.
     #[serde(default)]
     pub(crate) stomp: StompSection,
+    /// DDS participant. On when the `[dds]` table is present.
+    #[serde(default)]
+    pub(crate) dds: DdsSection,
 }
 
 /// Serde default for fields that must be true when omitted.
@@ -100,11 +105,14 @@ mod tests {
         assert!(!empty.loopback.enabled);
         assert!(!empty.owp.enabled);
         assert!(!empty.stomp.enabled);
+        assert!(!empty.dds.enabled);
 
-        let named: Config = toml::from_str("[owp]\n[stomp]\n").unwrap();
+        let named: Config =
+            toml::from_str("[owp]\n[stomp]\n[dds]\nqos = \"config/dds-qos.xml\"\n").unwrap();
         assert!(!named.loopback.enabled);
         assert!(named.owp.enabled);
         assert!(named.stomp.enabled);
+        assert!(named.dds.enabled);
 
         let held: Config = toml::from_str("[owp]\nenabled = false\n").unwrap();
         assert!(!held.owp.enabled);
@@ -114,7 +122,7 @@ mod tests {
     /// `deny_unknown_fields` would otherwise turn into a startup failure.
     #[test]
     fn shipped_configs_parse() {
-        for name in ["default.toml", "asb.toml", "compose.toml"] {
+        for name in ["default.toml", "asb.toml", "compose.toml", "dds.toml"] {
             let path = Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../../config")
                 .join(name);
@@ -140,6 +148,22 @@ mod tests {
         let config: Config = toml::from_str("[stomp]\non_panic = \"die\"\n").unwrap();
         let err = config.stomp.on_panic_mode().unwrap_err();
         assert!(err.contains("stomp.on_panic"), "{err}");
+    }
+
+    #[test]
+    fn dds_provider_and_qos_are_checked() {
+        let config: Config =
+            toml::from_str("[dds]\nprovider = \"rustdds\"\nqos = \"config/dds-qos.xml\"\n")
+                .unwrap();
+        assert!(config.dds.enabled);
+        assert_eq!(
+            config.dds.provider_kind().unwrap(),
+            oa_gateway_dds::DdsProviderKind::Rustdds
+        );
+
+        let config: Config = toml::from_str("[dds]\nprovider = \"cyclone\"\n").unwrap();
+        let err = config.dds.provider_kind().unwrap_err();
+        assert!(err.contains("dds.provider"), "{err}");
     }
 
     #[test]

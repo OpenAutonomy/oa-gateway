@@ -32,8 +32,9 @@ use crate::schema;
 ///
 /// Returns an error if the config cannot be loaded, the schema or
 /// validation mode is unusable, `stomp.on_panic` is not `abort` or
-/// `reconnect`, no adapters are enabled, an address cannot be
-/// resolved, or the process cannot listen for Ctrl-C.
+/// `reconnect`, `dds.provider` or `dds.qos` is unusable, no adapters
+/// are enabled, an address cannot be resolved, or the process cannot
+/// listen for Ctrl-C.
 pub(crate) async fn serve(config_path: &Path) -> Result<(), String> {
     init_tracing();
 

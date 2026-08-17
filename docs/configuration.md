@@ -1,6 +1,6 @@
 # Configuration
 
-The host takes one TOML file as its only argument. Every section in that file is optional. Naming `[loopback]`, `[owp]`, or `[stomp]` starts that adapter; omitting the table leaves it off. Set `enabled = false` to keep the keys in the file without starting the adapter. An unknown key is a startup error. At least one adapter table must be present and enabled.
+The host takes one TOML file as its only argument. Every section in that file is optional. Naming `[loopback]`, `[owp]`, `[stomp]`, or `[dds]` starts that adapter; omitting the table leaves it off. Set `enabled = false` to keep the keys in the file without starting the adapter. An unknown key is a startup error. At least one adapter table must be present and enabled.
 
 ```bash
 ./target/release/oa-gateway config/default.toml
@@ -17,6 +17,7 @@ The gateway does not terminate TLS and does not authenticate its own peers. Bind
 | [`config/default.toml`](../config/default.toml) | Local development: loopback and OWP on loopback, STOMP off, no schema. |
 | [`config/compose.toml`](../config/compose.toml) | Container example for `compose/gateway.yml`: OWP on `0.0.0.0:9000`, STOMP off. |
 | [`config/asb.toml`](../config/asb.toml) | Host-side ActiveMQ bridge with a schema, `xml_baseline`, and STOMP enabled. Requires `scripts/fetch-uci-schema.sh` and a broker. |
+| [`config/dds.toml`](../config/dds.toml) | Loopback plus a rustdds participant on domain 0. Requires [`config/dds-qos.xml`](../config/dds-qos.xml). |
 
 `shipped_configs_parse` fails if one of those files names a key the structs do not declare.
 
@@ -92,6 +93,23 @@ STOMP is a client toward an ActiveMQ or other broker. It is off unless this tabl
 
 `login` and `passcode` are the broker's credentials and are sent in the clear.
 
+## `[dds]`
+
+DDS is a participant on a domain. It is off unless this table is in the file. There is no broker hostname to resolve. Worked examples, the QoS subset, and topic mapping are in [connecting-dds.md](connecting-dds.md).
+
+| Key | Default | What it does |
+|---|---|---|
+| `enabled` | on when the section is present | `false` keeps the keys without starting the adapter. |
+| `id` | `"dds"` | Engine adapter id. |
+| `provider` | `"rustdds"` | Which `DdsProvider` to construct. `"rustdds"` is the only legal value in this build. A typo is refused as `dds.provider: …`. |
+| `domain_id` | `0` | DDS domain the participant joins. Peers must use the same id. |
+| `qos` | required | Path to a QoS file. Missing or empty is a startup error when the section is present. rustdds parses a documented DDS-XML subset (reliability, durability, history). A later vendor provider may pass the same path to its own loader. |
+| `topics` | `["demo"]` | Engine topic names and DDS topic names, bridged both ways. A name you do not list is not bridged. |
+| `unwrap_ma_payloads` | `true` | Peel A-GRA Rx/Tx wrappers on inbound samples and publish the wrapper and the inner message. |
+| `suppress_echo` | `true` | Skip outbound writes when the envelope came from this adapter, so a message does not loop between the gateway and the domain. |
+
+`[dds]` is omitted from [`config/default.toml`](../config/default.toml) because the local toy has no domain to join. Use [`config/dds.toml`](../config/dds.toml) when you want one.
+
 ## Adding a section
 
-A new adapter needs a `#[derive(Deserialize)]` struct in `crates/oa-gateway/src/config/` with `#[serde(deny_unknown_fields)]` and a default on every field, and a corresponding block in `config/default.toml`. [Writing an adapter](writing-an-adapter.md) covers the rest of the wiring.
+A new adapter needs a `#[derive(Deserialize)]` struct in `crates/oa-gateway/src/config/` with `#[serde(deny_unknown_fields)]` and a default on every field, and a corresponding block in a shipped example (`config/default.toml`, or a worked file such as `config/dds.toml` when the adapter is opt-in). [Writing an adapter](writing-an-adapter.md) covers the rest of the wiring.

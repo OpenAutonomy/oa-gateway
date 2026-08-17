@@ -110,6 +110,67 @@ pub fn wrapper_kind(payload: &[u8]) -> Option<WrapperKind> {
     None
 }
 
+/// Builds wrapper and inner envelopes from structured Rx/Tx fields.
+///
+/// The DDS adapter's wire type is these fields plus raw
+/// `EncodedPayload` bytes, not XML or JSON text. The wrapper envelope
+/// is a minimal JSON document so [`wrapper_kind`] and [`unwrap`] still
+/// recognize it.
+///
+/// # Errors
+///
+/// Returns [`AgraError::PayloadTooLarge`] if `encoded` is over
+/// [`MAX_DECODED_PAYLOAD`], or [`AgraError::Json`] if the wrapper
+/// document cannot be serialized.
+pub fn unwrapped_from_parts(
+    topic: &str,
+    meta: WrapperMeta,
+    encoded: Bytes,
+) -> Result<Unwrapped, AgraError> {
+    if encoded.len() > MAX_DECODED_PAYLOAD {
+        return Err(AgraError::PayloadTooLarge);
+    }
+    let inner_bytes = encoded.to_vec();
+    let inner_ct = sniff_content_type(&inner_bytes);
+    let inner_hint = type_hint_from_inner(&inner_bytes, &meta.message_type_enum);
+    let wrapper_json = minimal_wrapper_json(&meta, &inner_bytes)?;
+    let wrapper = Envelope::new(
+        RouteKey::typed(topic, meta.kind.element_name()),
+        wrapper_json,
+    )
+    .with_content_type(ContentType::json());
+    let inner = inner_envelope(topic, inner_bytes, inner_ct, inner_hint, &meta);
+    Ok(Unwrapped {
+        wrapper,
+        inner,
+        meta,
+    })
+}
+
+fn minimal_wrapper_json(meta: &WrapperMeta, inner: &[u8]) -> Result<Bytes, AgraError> {
+    let mut data = json!({
+        "MessageType": meta.message_type_enum,
+        "EncodedPayload": hex::encode_upper(inner),
+    });
+    if let Some(v) = &meta.originator_uuid {
+        data["DataPayloadOriginatorID"] = json!({ "UUID": v });
+    }
+    if let Some(v) = &meta.rx_payload_id {
+        data["RxDataPayloadID"] = json!({ "UUID": v });
+    }
+    if let Some(v) = &meta.command_id {
+        data["CommandID"] = json!({ "UUID": v });
+    }
+    if let Some(v) = &meta.destination_routing {
+        data["DestinationRouting"] = json!(v);
+    }
+    let root = json!({
+        meta.kind.element_name(): { "MessageData": data }
+    });
+    let text = serde_json::to_string(&root).map_err(|e| AgraError::Json(e.to_string()))?;
+    Ok(Bytes::from(text))
+}
+
 /// Unwrap OMS JSON or XML Rx/Tx envelopes into wrapper + inner envelopes.
 pub fn unwrap(topic: &str, payload: &[u8]) -> Result<Unwrapped, AgraError> {
     let text = std::str::from_utf8(payload)
@@ -586,6 +647,26 @@ mod tests {
             Some("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
         );
         assert_eq!(u.wrapper.route.type_hint.as_deref(), Some(RX_ELEMENT));
+    }
+
+    #[test]
+    fn parts_round_trip_to_inner_bytes() {
+        let inner = Bytes::from(inner_json());
+        let meta = WrapperMeta {
+            kind: WrapperKind::Rx,
+            message_type_enum: "POSITION_REPORT".into(),
+            originator_uuid: Some("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".into()),
+            rx_payload_id: None,
+            command_id: None,
+            destination_routing: None,
+        };
+        let u = unwrapped_from_parts("demo", meta, inner.clone()).unwrap();
+        assert_eq!(u.inner.payload, inner);
+        assert_eq!(u.inner.route.type_hint.as_deref(), Some("PositionReport"));
+        assert_eq!(u.wrapper.route.type_hint.as_deref(), Some(RX_ELEMENT));
+        assert!(wrapper_kind(&u.wrapper.payload).is_some());
+        let again = unwrap("demo", &u.wrapper.payload).unwrap();
+        assert_eq!(again.inner.payload, inner);
     }
 
     #[test]

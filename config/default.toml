@@ -42,6 +42,8 @@ max_frame_size = 16777216
 max_connections = 256
 max_subscriptions = 1024
 
+# DDS is omitted here. See config/dds.toml and config/dds-qos.xml.
+#
 # Client to an ActiveMQ (or other) STOMP broker. Naming the table turns
 # it on; enabled = false keeps these keys without connecting. Java
 # CAL/OpenWire peers share these destinations.

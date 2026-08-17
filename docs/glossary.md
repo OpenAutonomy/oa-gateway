@@ -40,5 +40,5 @@ This page defines OA-Gateway's own terms, then the domain terms it borrows. Expa
 | **STOMP** | Simple Text Oriented Messaging Protocol. A text framing over TCP that ActiveMQ accepts on `:61613`. `oa-gateway-stomp` is a STOMP *client*, not a JMS implementation. |
 | **JMS** | Java Message Service. The Java messaging API whose topic model ActiveMQ exposes; a JMS topic `demo` is STOMP destination `/topic/demo`. |
 | **OpenWire** | ActiveMQ's native binary wire protocol, and what Java CAL peers use. The gateway does not speak it — ActiveMQ bridges OpenWire and STOMP when the destination names match, which is why the naming rule matters. |
-| **DDS** | Data Distribution Service. Another OMS transport, out of scope for v0. |
+| **DDS** | Data Distribution Service. `oa-gateway-dds` joins a domain as a participant. Engine topic equals DDS topic. Samples are A-GRA Rx/Tx (`MaDataPayload` on the wire) rather than a generated UCI IDL catalog. The first provider is rustdds; a later Cyclone or Fast DDS stack is another `DdsProvider`, not a change to the adapter. |
 | **WebSocket** | The transport OWP runs over, on `ws://127.0.0.1:9000/` with subprotocol `owp`. |

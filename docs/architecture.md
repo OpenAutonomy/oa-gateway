@@ -33,6 +33,14 @@ classDiagram
             <<component>>
             oa-gateway-stomp
         }
+        class DdsAdapter {
+            <<component>>
+            oa-gateway-dds
+        }
+        class DdsProvider {
+            <<interface>>
+            oa-gateway-dds
+        }
     }
 
     namespace Contract {
@@ -67,15 +75,19 @@ classDiagram
     Adapter <|.. LoopbackAdapter
     Adapter <|.. OwpAdapter
     Adapter <|.. StompAdapter
+    Adapter <|.. DdsAdapter
+    DdsAdapter --> DdsProvider : uses
     Adapter --> Engine : uses
     Gateway ..> LoopbackAdapter : starts
     Gateway ..> OwpAdapter : starts
     Gateway ..> StompAdapter : starts
+    Gateway ..> DdsAdapter : starts
     Gateway ..> Engine
     Gateway ..> Uci : compiles
     OwpAdapter ..> Uci : convert
     OwpAdapter ..> Agra : unwrap
     StompAdapter ..> Agra : unwrap
+    DdsAdapter ..> Agra : unwrap
     Agra --> Engine : Envelope
 ```
 
@@ -88,6 +100,7 @@ classDiagram
 | `oa-gateway-loopback` | In-process peer with no socket. | adapter and core |
 | `oa-gateway-owp` | WebSocket server: framing, per-connection subscriptions, and optional convert/validate. | adapter, core, uci, and agra |
 | `oa-gateway-stomp` | STOMP 1.2 client toward a broker, including echo skip and reconnect. | adapter, core, and agra |
+| `oa-gateway-dds` | DDS participant: engine topic equals DDS topic, A-GRA Rx/Tx samples, rustdds provider. | adapter, core, and agra |
 | `oa-gateway` | Composition root: load TOML, compile the schema, resolve addresses, and spawn `run`. | every runtime crate |
 | `oa-gateway-testing` | Cross-engine tests and harnesses. Adapter crates must not depend on it. | optional and one-way |
 
@@ -103,7 +116,7 @@ Headers are namespaced by owner (`oag.*`, `stomp.*`, `agra.*`). The `oag.*` cons
 
 ## Message flow
 
-`config/asb.toml` is the two-adapter path: OWP on one side and a STOMP client toward a broker on the other. One OWP adapter id covers every WebSocket connection. STOMP is a single client session on the bus.
+`config/asb.toml` is the two-adapter path: OWP on one side and a STOMP client toward a broker on the other. One OWP adapter id covers every WebSocket connection. STOMP is a single client session on the bus. `config/dds.toml` is the same idea on a DDS domain: loopback plus one rustdds participant. The sample type is A-GRA Rx/Tx; the DDS topic name is the engine topic.
 
 ```mermaid
 sequenceDiagram
@@ -137,20 +150,20 @@ The binary owns process lifetime. It does not implement a protocol.
 1. Parse the command line: one config path, or `--help` / `--version`.
 2. Load the TOML file. An unknown key is a startup error. A named adapter table is on; an omitted table is off.
 3. Compile `[uci].schema` before any adapter listens.
-4. Resolve `owp.bind` and `stomp.broker`.
+4. Resolve `owp.bind` and `stomp.broker`. DDS has no hostname; `[dds] qos` is checked as a path.
 5. Spawn each enabled adapter's `run` on the shared `Engine` and a cancellation token.
 6. Log engine counters until Ctrl-C, then cancel and join every task.
 
 If `run` returns `Err`, that adapter is down. The host logs the error and leaves the others running. It does not restart a finished `run`. STOMP retries inside its own loop; `[stomp] on_panic` chooses abort or reconnect after a session panic.
 
-`src/config/` and `src/adapters/` name loopback, OWP, and STOMP. A new protocol is a crate plus a host section, not a dynamically loaded plugin.
+`src/config/` and `src/adapters/` name loopback, OWP, STOMP, and DDS. A new protocol is a crate plus a host section, not a dynamically loaded plugin. The DDS crate talks to rustdds only through a `DdsProvider` trait so a later vendor stack is another implementation, not a change to the adapter.
 
 ## Libraries
 
 `oa-gateway-uci` and `oa-gateway-agra` are codecs. Adapters depend on them; they are not adapters and they do not own a socket.
 
 - **UCI** compiles XSD, converts JSON ↔ XML, and reports schema violations. Conversion is forgiving; validation is a separate pass. See [using-custom-xsd.md](using-custom-xsd.md).
-- **A-GRA** unwraps an Rx/Tx hex payload so subscribers can route on the inner message type. OWP and STOMP call it when `unwrap_ma_payloads` is on. Platform-facing A-GRA interfaces use native message types and do not use this crate.
+- **A-GRA** unwraps an Rx/Tx hex payload so subscribers can route on the inner message type. OWP, STOMP, and DDS call it when `unwrap_ma_payloads` is on. DDS samples carry the inner bytes already decoded; `unwrapped_from_parts` builds the same wrapper and inner envelopes without serializing to XML first. Platform-facing A-GRA interfaces use native message types and do not use this crate.
 
 ## Design constraints
 
@@ -166,4 +179,5 @@ If `run` returns `Err`, that adapter is down. The host logs the error and leaves
 | Implement a protocol | [writing-an-adapter.md](writing-an-adapter.md) and the Echo doc-test in `oa-gateway-adapter` |
 | Change a configuration key | [configuration.md](configuration.md) |
 | Bridge ActiveMQ | [connecting-active-mq.md](connecting-active-mq.md) |
+| Join a DDS domain | [connecting-dds.md](connecting-dds.md) |
 | Browse crate APIs | `cargo doc --workspace --no-deps --document-private-items --open` |

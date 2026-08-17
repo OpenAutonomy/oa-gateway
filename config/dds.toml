@@ -1,0 +1,16 @@
+# Worked example: rustdds provider on domain 0. Requires no broker.
+# QoS is a file the provider interprets (DDS-XML subset for rustdds).
+#
+#   ./target/release/oa-gateway config/dds.toml
+
+[loopback]
+id = "loopback"
+
+[dds]
+id = "dds"
+provider = "rustdds"
+domain_id = 0
+qos = "config/dds-qos.xml"
+topics = ["demo"]
+unwrap_ma_payloads = true
+suppress_echo = true

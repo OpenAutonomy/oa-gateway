@@ -26,6 +26,7 @@ Options:
 Examples:
   oa-gateway config/default.toml   OWP on ws://127.0.0.1:9000/ (no broker needed)
   oa-gateway config/asb.toml       adds a STOMP client for ActiveMQ on :61613
+  oa-gateway config/dds.toml       loopback plus a rustdds participant on domain 0
 
 Set RUST_LOG to change log filtering (default: info).
 ";

@@ -59,7 +59,7 @@ An adapter that bridges an external bus must not send back what it just received
 - On the way in, stamp with `envelope.with_origin(&your_id)`.
 - On the way out, skip when `envelope.is_echo_of(&your_id)`.
 
-The engine does not skip by origin. One adapter id may cover many connections, as OWP does. STOMP implements the convention in `inbound_publish` and `forward_outbound`. `[stomp] suppress_echo` (default `true`) is the knob. A new bridging adapter must do the same.
+The engine does not skip by origin. One adapter id may cover many connections, as OWP does. STOMP implements the convention in `inbound_publish` and `forward_outbound`. DDS does the same, and the rustdds provider also drops samples whose writer shares this participant's GUID prefix, because rustdds delivers local writes. `[stomp] suppress_echo` and `[dds] suppress_echo` (both default `true`) are the knobs. A new bridging adapter must do the same.
 
 ## Backpressure
 
@@ -80,13 +80,13 @@ The adapter sequences its own startup, teardown, and reconnect:
 
 The host crate (`crates/oa-gateway`) reads a TOML section per adapter (`src/config/`), validates it, and spawns `run` (`src/adapters/`). Naming the table starts the adapter. `enabled` must default to `true` when the section is present and to `false` in `Default` (the omitted-section path).
 
-To add an adapter, add a `#[derive(Deserialize)]` section struct in `src/config/` with `#[serde(deny_unknown_fields)]` and `#[serde(default = "...")]` on every field, resolve addresses with `resolve_addr` before spawning, and start the adapter from `src/adapters/`. Add the section to `config/default.toml`. The `shipped_configs_parse` test fails if the file and the struct disagree.
+To add an adapter, add a `#[derive(Deserialize)]` section struct in `src/config/` with `#[serde(deny_unknown_fields)]` and `#[serde(default = "...")]` on every field, resolve addresses with `resolve_addr` before spawning when the protocol has a hostname, and start the adapter from `src/adapters/`. Add the section to a shipped example. DDS has no hostname; it checks that `[dds] qos` exists instead. The `shipped_configs_parse` test fails if a shipped file and the struct disagree.
 
 ## Testing
 
-Adapter crates keep unit tests for their own codec and mapping logic. Traffic that crosses the engine belongs in `oa-gateway-testing`. Its `harness` feature provides OWP and STOMP helpers and `start_mini_broker()`, an in-process STOMP broker on an ephemeral port, so most tests do not need Docker.
+Adapter crates keep unit tests for their own codec and mapping logic. Traffic that crosses the engine belongs in `oa-gateway-testing`. Its `harness` feature provides OWP, STOMP, and DDS helpers and `start_mini_broker()`, an in-process STOMP broker on an ephemeral port, so most tests do not need Docker.
 
-The fastest end-to-end check is against `Loopback`: subscribe a loopback handle to the topic the adapter publishes, drive the adapter's transport, and assert on the envelope that arrives. `crates/oa-gateway-testing/tests/stomp_bridge.rs` is the pattern to copy.
+The fastest end-to-end check is against `Loopback`: subscribe a loopback handle to the topic the adapter publishes, drive the adapter's transport, and assert on the envelope that arrives. `crates/oa-gateway-testing/tests/stomp_bridge.rs` and `tests/dds_bridge.rs` are the pattern to copy.
 
 ## Reference adapters
 
@@ -94,4 +94,5 @@ Read them in this order:
 
 1. `oa-gateway-loopback` — the smallest complete adapter, about 90 lines including the trait implementation.
 2. `oa-gateway-stomp` — a client bridge: framing, handshake, reconnect, echo suppression, and destination mapping.
-3. `oa-gateway-owp` — a server: it accepts connections, tracks per-connection subscriptions, and performs schema translation.
+3. `oa-gateway-dds` — a domain participant: provider shim, file-based QoS, A-GRA samples, and echo skip including local rustdds writes.
+4. `oa-gateway-owp` — a server: it accepts connections, tracks per-connection subscriptions, and performs schema translation.

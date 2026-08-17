@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dds>
+  <qos_library name="Oag">
+    <qos_profile name="default">
+      <datawriter_qos>
+        <reliability>
+          <kind>RELIABLE</kind>
+        </reliability>
+        <durability>
+          <kind>VOLATILE</kind>
+        </durability>
+        <history>
+          <kind>KEEP_LAST</kind>
+          <depth>16</depth>
+        </history>
+      </datawriter_qos>
+    </qos_profile>
+  </qos_library>
+</dds>
