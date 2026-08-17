@@ -1,5 +1,7 @@
 # OA-Gateway
 
+![OA-Gateway: protocol-agnostic routing between OWP, STOMP, and DDS](docs/oa-gateway-banner.png)
+
 - [Introduction](#introduction)
 - [Getting started](#getting-started)
 - [Config](#config)
