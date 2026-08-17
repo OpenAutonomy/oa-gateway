@@ -30,7 +30,7 @@ hex = "0.4"
 futures-util = "0.3"
 regex = { version = "1", default-features = false, features = ["std", "unicode"] }
 roxmltree = "0.21"
-rustdds = "0.11"
+rustdds = "0.14"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
