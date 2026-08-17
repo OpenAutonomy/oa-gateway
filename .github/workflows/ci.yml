@@ -65,7 +65,7 @@ jobs:
         with:
           name: rustdoc
           path: doc
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: doc
       - id: deployment
