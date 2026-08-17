@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Workspace rustdoc landing page uses rustdoc's CSS so the Pages root
+  matches the crate docs.
+
 ## [0.1.0] - 2026-08-17
 
 First public release. Distributed as a git tag and a GitHub Release, not on
