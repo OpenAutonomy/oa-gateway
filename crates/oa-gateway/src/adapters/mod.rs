@@ -26,13 +26,14 @@ use crate::config::Config;
 /// logged inside its task; the handle still completes so shutdown can join
 /// it.
 ///
-/// `schema` and `validate` are handed to OWP only. The other adapters do
-/// not convert or check payloads.
+/// `schema` and `validate` are handed to OWP and DDS. STOMP and loopback
+/// do not convert or check payloads.
 ///
 /// # Errors
 ///
-/// Returns an error if an enabled adapter's address cannot be resolved, or
-/// if every adapter is disabled.
+/// Returns an error if an enabled adapter's address cannot be resolved, if
+/// `owp.on_panic`, `dds.on_panic`, or `stomp.on_panic` is not `abort` or
+/// `reconnect`, or if every adapter is disabled.
 pub(crate) async fn start(
     config: &Config,
     engine: Arc<Engine>,
@@ -69,7 +70,7 @@ pub(crate) async fn start(
             validate,
             Arc::clone(&engine),
             shutdown.clone(),
-        ));
+        )?);
     }
 
     if let Some(broker) = stomp_broker {
@@ -82,7 +83,13 @@ pub(crate) async fn start(
     }
 
     if config.dds.enabled {
-        handles.push(dds::start(&config.dds, engine, shutdown)?);
+        handles.push(dds::start(
+            &config.dds,
+            schema.as_ref(),
+            validate,
+            engine,
+            shutdown,
+        )?);
     }
 
     if handles.is_empty() {

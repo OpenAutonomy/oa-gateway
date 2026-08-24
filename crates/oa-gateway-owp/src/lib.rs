@@ -17,10 +17,11 @@ mod session;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use oa_gateway_adapter::{Adapter, AdapterError};
+use oa_gateway_adapter::{after_join, Adapter, AdapterError, AfterSession};
 use oa_gateway_core::{AdapterId, Engine};
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
+use tracing::warn;
 
 pub use codec::{
     is_identifier, parse_client, parse_server, type_hint_from_json, ClientOp, InfoPayload,
@@ -38,13 +39,60 @@ impl Adapter for OwpAdapter {
     }
 
     /// Binds the configured address and accepts connections until
-    /// `shutdown` is cancelled.
+    /// `shutdown` is cancelled, retrying a bind failure, a session
+    /// error, or a session panic per [`OwpConfig::on_panic`] and
+    /// [`OwpConfig::reconnect`].
+    ///
+    /// Each attempt runs on its own child task, so a panic in the
+    /// accept loop is a join error here rather than an unwind that
+    /// would otherwise take the retry loop down with it.
     ///
     /// # Errors
     ///
-    /// Returns [`AdapterError::Io`] if the address cannot be bound.
-    /// Session errors are handled per connection and do not fail `run`.
+    /// Returns [`AdapterError::Io`] if the address cannot be bound and
+    /// [`OwpConfig::reconnect`] is off. Per-connection session errors
+    /// are handled inside the accept loop and never reach here.
     async fn run(
+        self: Arc<Self>,
+        engine: Arc<Engine>,
+        shutdown: CancellationToken,
+    ) -> Result<(), AdapterError> {
+        loop {
+            if shutdown.is_cancelled() {
+                return Ok(());
+            }
+            let adapter = Arc::clone(&self);
+            let eng = Arc::clone(&engine);
+            let token = shutdown.clone();
+            let joined =
+                tokio::spawn(async move { adapter.bind_and_serve(eng, token).await }).await;
+            match after_join(
+                joined,
+                self.config().reconnect,
+                self.config().on_panic,
+                self.id(),
+            ) {
+                AfterSession::ReturnOk => return Ok(()),
+                AfterSession::ReturnErr(err) => return Err(err),
+                AfterSession::Retry { message } => {
+                    if shutdown.is_cancelled() {
+                        return Ok(());
+                    }
+                    warn!(adapter = %self.id(), "{message}");
+                }
+            }
+            tokio::select! {
+                _ = shutdown.cancelled() => return Ok(()),
+                _ = tokio::time::sleep(self.config().reconnect_delay) => {}
+            }
+        }
+    }
+}
+
+impl OwpAdapter {
+    /// One bind-and-accept session: the unit [`Adapter::run`]'s retry
+    /// loop restarts on failure or panic.
+    async fn bind_and_serve(
         self: Arc<Self>,
         engine: Arc<Engine>,
         shutdown: CancellationToken,

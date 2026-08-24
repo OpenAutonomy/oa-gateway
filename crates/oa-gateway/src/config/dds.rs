@@ -38,6 +38,22 @@ pub(crate) struct DdsSection {
     /// Skip outbound samples that originated on this adapter.
     #[serde(default = "default_true")]
     pub(crate) suppress_echo: bool,
+    /// Rejoin the domain after the session ends or panics. Defaults to
+    /// `false`: an existing deployment sees no behavior change until
+    /// it opts in.
+    #[serde(default)]
+    pub(crate) reconnect: bool,
+    /// Seconds to wait between rejoin attempts. Defaults to `1`.
+    #[serde(default = "default_dds_reconnect_delay_secs")]
+    pub(crate) reconnect_delay_secs: u64,
+    /// `abort` or `reconnect` when the session panics. Defaults to
+    /// `"abort"`.
+    #[serde(default = "default_dds_on_panic")]
+    pub(crate) on_panic: String,
+    /// Largest inbound sample accepted, in bytes. Defaults to the
+    /// adapter crate's limit.
+    #[serde(default = "default_dds_max_sample_size")]
+    pub(crate) max_sample_size: usize,
 }
 
 impl Default for DdsSection {
@@ -51,6 +67,10 @@ impl Default for DdsSection {
             topics: default_dds_topics(),
             unwrap_ma_payloads: true,
             suppress_echo: true,
+            reconnect: false,
+            reconnect_delay_secs: default_dds_reconnect_delay_secs(),
+            on_panic: default_dds_on_panic(),
+            max_sample_size: default_dds_max_sample_size(),
         }
     }
 }
@@ -65,6 +85,17 @@ impl DdsSection {
         self.provider
             .parse()
             .map_err(|err| format!("dds.provider: {err}"))
+    }
+
+    /// Parses [`Self::on_panic`] into [`oa_gateway_adapter::OnPanic`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the string is not `abort` or `reconnect`.
+    pub(crate) fn on_panic_mode(&self) -> Result<oa_gateway_adapter::OnPanic, String> {
+        self.on_panic
+            .parse()
+            .map_err(|err| format!("dds.on_panic: {err}"))
     }
 
     /// # Errors
@@ -89,4 +120,13 @@ fn default_dds_provider() -> String {
 }
 fn default_dds_topics() -> Vec<String> {
     vec!["demo".into()]
+}
+fn default_dds_reconnect_delay_secs() -> u64 {
+    1
+}
+fn default_dds_on_panic() -> String {
+    oa_gateway_adapter::OnPanic::default().to_string()
+}
+fn default_dds_max_sample_size() -> usize {
+    oa_gateway_dds::DEFAULT_MAX_SAMPLE_SIZE
 }

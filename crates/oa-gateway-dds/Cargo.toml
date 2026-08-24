@@ -13,6 +13,7 @@ bytes.workspace = true
 oa-gateway-adapter.workspace = true
 oa-gateway-agra.workspace = true
 oa-gateway-core.workspace = true
+oa-gateway-uci.workspace = true
 roxmltree.workspace = true
 rustdds.workspace = true
 serde = { workspace = true, features = ["derive"] }

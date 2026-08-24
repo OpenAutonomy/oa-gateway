@@ -56,6 +56,18 @@ pub(crate) struct OwpSection {
     /// refused and the session continues.
     #[serde(default = "default_owp_max_subscriptions")]
     pub(crate) max_subscriptions: usize,
+    /// Rebind and accept again after the accept loop ends or panics.
+    /// Defaults to `false`: an existing deployment sees no behavior
+    /// change until it opts in.
+    #[serde(default)]
+    pub(crate) reconnect: bool,
+    /// Seconds to wait between rebind attempts. Defaults to `1`.
+    #[serde(default = "default_owp_reconnect_delay_secs")]
+    pub(crate) reconnect_delay_secs: u64,
+    /// `abort` or `reconnect` when the accept loop panics. Defaults to
+    /// `"abort"`.
+    #[serde(default = "default_owp_on_panic")]
+    pub(crate) on_panic: String,
 }
 
 impl Default for OwpSection {
@@ -72,7 +84,23 @@ impl Default for OwpSection {
             max_frame_size: default_owp_max_frame_size(),
             max_connections: default_owp_max_connections(),
             max_subscriptions: default_owp_max_subscriptions(),
+            reconnect: false,
+            reconnect_delay_secs: default_owp_reconnect_delay_secs(),
+            on_panic: default_owp_on_panic(),
         }
+    }
+}
+
+impl OwpSection {
+    /// Parses [`Self::on_panic`] into [`oa_gateway_adapter::OnPanic`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the string is not `abort` or `reconnect`.
+    pub(crate) fn on_panic_mode(&self) -> Result<oa_gateway_adapter::OnPanic, String> {
+        self.on_panic
+            .parse()
+            .map_err(|err| format!("owp.on_panic: {err}"))
     }
 }
 
@@ -99,4 +127,10 @@ fn default_owp_max_connections() -> usize {
 }
 fn default_owp_max_subscriptions() -> usize {
     oa_gateway_owp::DEFAULT_MAX_SUBSCRIPTIONS
+}
+fn default_owp_reconnect_delay_secs() -> u64 {
+    1
+}
+fn default_owp_on_panic() -> String {
+    oa_gateway_adapter::OnPanic::default().to_string()
 }

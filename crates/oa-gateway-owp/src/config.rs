@@ -4,7 +4,9 @@
 //! XSD the host compiles. `xml_baseline` is what needs that XSD.
 
 use std::net::SocketAddr;
+use std::time::Duration;
 
+use oa_gateway_adapter::OnPanic;
 use oa_gateway_uci::validate::Mode as ValidateMode;
 
 /// Largest OWP frame accepted from a client, in bytes.
@@ -53,6 +55,13 @@ pub struct OwpConfig {
     /// What to do about a payload that does not follow the loaded schema.
     /// Has no effect without one: there is nothing to check against.
     pub validate: ValidateMode,
+    /// Panic in the accept loop: abort `run`, or treat it as a failed
+    /// session.
+    pub on_panic: OnPanic,
+    /// Rebind and accept again after the accept loop ends or panics.
+    pub reconnect: bool,
+    /// Sleep between rebind attempts.
+    pub reconnect_delay: Duration,
 }
 
 impl Default for OwpConfig {
@@ -69,6 +78,9 @@ impl Default for OwpConfig {
             max_connections: DEFAULT_MAX_CONNECTIONS,
             max_subscriptions: DEFAULT_MAX_SUBSCRIPTIONS,
             validate: ValidateMode::default(),
+            on_panic: OnPanic::Abort,
+            reconnect: false,
+            reconnect_delay: Duration::from_secs(1),
         }
     }
 }

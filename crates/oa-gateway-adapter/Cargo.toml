@@ -11,8 +11,6 @@ description = "Adapter trait for multi-protocol gateway protocol plugins"
 async-trait.workspace = true
 oa-gateway-core.workspace = true
 thiserror.workspace = true
+tokio.workspace = true
 tokio-util.workspace = true
-
-[dev-dependencies]
-# tests/echo.rs runs the minimal adapter the crate docs only compile.
-tokio = { workspace = true, features = ["full"] }
+tracing.workspace = true

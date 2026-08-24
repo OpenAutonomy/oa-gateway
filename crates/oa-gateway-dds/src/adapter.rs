@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use oa_gateway_adapter::{Adapter, AdapterError};
+use oa_gateway_adapter::{after_join, Adapter, AdapterError, AfterSession};
 use oa_gateway_agra::{
     element_to_enum, unwrap as unwrap_ma, unwrapped_from_parts, wrapper_kind, WrapperKind,
     WrapperMeta,
@@ -17,12 +17,14 @@ use oa_gateway_agra::{
 use oa_gateway_core::{
     AdapterId, Delivery, Engine, Envelope, RouteKey, SubId, DEFAULT_CHANNEL_CAPACITY,
 };
+use oa_gateway_uci::validate::{summarize, Mode as ValidateMode};
 use tokio::sync::mpsc;
 use tokio::time::interval;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 use crate::config::DdsConfig;
+use crate::convert::violations_of;
 use crate::provider::{provider_for, DdsSession};
 use crate::types::DdsSample;
 
@@ -169,20 +171,64 @@ async fn inbound_publish(
     topic: &str,
     sample: DdsSample,
 ) -> Result<(), String> {
+    if sample.encoded.len() > adapter.config.max_sample_size {
+        warn!(
+            adapter = %adapter.id,
+            topic,
+            len = sample.encoded.len(),
+            limit = adapter.config.max_sample_size,
+            "dropping an oversized dds sample"
+        );
+        return Ok(());
+    }
     let stamp = |env: Envelope| env.with_origin(&adapter.id);
     if adapter.config.unwrap_ma_payloads {
         let peeled = unwrapped_from_parts(topic, sample.meta, sample.encoded)
             .map_err(|err| err.to_string())?;
-        log_drops(adapter, engine.publish(stamp(peeled.wrapper)).await);
-        log_drops(adapter, engine.publish(stamp(peeled.inner)).await);
+        publish_checked(adapter, engine, stamp(peeled.wrapper)).await;
+        publish_checked(adapter, engine, stamp(peeled.inner)).await;
         return Ok(());
     }
     let env = Envelope::new(
         RouteKey::typed(topic, sample.meta.kind.element_name()),
         sample.encoded,
     );
-    log_drops(adapter, engine.publish(stamp(env)).await);
+    publish_checked(adapter, engine, stamp(env)).await;
     Ok(())
+}
+
+/// Checks `env`'s payload against [`DdsConfig::schema`], then publishes
+/// it — or drops it, when [`DdsConfig::validate`] is
+/// [`ValidateMode::Reject`].
+///
+/// DDS has no peer connection to notify the way OWP's WebSocket session
+/// does, so a rejected sample is dropped and logged rather than
+/// answered; there is no DDS equivalent of OWP's error frame.
+async fn publish_checked(adapter: &DdsAdapter, engine: &Arc<Engine>, env: Envelope) {
+    let violations = violations_of(
+        &env.payload,
+        adapter.config.schema.as_deref(),
+        adapter.config.validate,
+    );
+    if !violations.is_empty() {
+        let summary = summarize(&violations);
+        if adapter.config.validate == ValidateMode::Reject {
+            warn!(
+                adapter = %adapter.id,
+                topic = %env.route.topic,
+                violations = %summary,
+                "dropping a dds sample that does not follow the UCI schema"
+            );
+            return;
+        }
+        warn!(
+            adapter = %adapter.id,
+            topic = %env.route.topic,
+            violations = %summary,
+            "dds sample does not follow the UCI schema; forwarding it anyway"
+        );
+    }
+    log_drops(adapter, engine.publish(env).await);
 }
 
 fn sample_from_envelope(envelope: &Envelope) -> Result<DdsSample, String> {
@@ -228,11 +274,50 @@ impl Adapter for DdsAdapter {
         DdsAdapter::id(self)
     }
 
+    /// Joins the domain and bridges until `shutdown`, retrying a
+    /// failed or panicked session per [`DdsConfig::on_panic`] and
+    /// [`DdsConfig::reconnect`].
+    ///
+    /// Each attempt runs on its own child task, so a panic while
+    /// joined is a join error here rather than an unwind that would
+    /// otherwise take the retry loop down with it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AdapterError::Failed`] if the provider cannot join or
+    /// a topic cannot be created, and [`DdsConfig::reconnect`] is off.
     async fn run(
         self: Arc<Self>,
         engine: Arc<Engine>,
         shutdown: CancellationToken,
     ) -> Result<(), AdapterError> {
-        self.serve(engine, shutdown).await
+        loop {
+            if shutdown.is_cancelled() {
+                return Ok(());
+            }
+            let adapter = Arc::clone(&self);
+            let eng = Arc::clone(&engine);
+            let token = shutdown.clone();
+            let joined = tokio::spawn(async move { adapter.serve(eng, token).await }).await;
+            match after_join(
+                joined,
+                self.config.reconnect,
+                self.config.on_panic,
+                &self.id,
+            ) {
+                AfterSession::ReturnOk => return Ok(()),
+                AfterSession::ReturnErr(err) => return Err(err),
+                AfterSession::Retry { message } => {
+                    if shutdown.is_cancelled() {
+                        return Ok(());
+                    }
+                    warn!(adapter = %self.id, "{message}");
+                }
+            }
+            tokio::select! {
+                _ = shutdown.cancelled() => return Ok(()),
+                _ = tokio::time::sleep(self.config.reconnect_delay) => {}
+            }
+        }
     }
 }

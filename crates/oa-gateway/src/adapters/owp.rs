@@ -28,6 +28,10 @@ use crate::config::OwpSection;
 ///
 /// A failure from `run` is logged and the task still finishes, so one
 /// adapter cannot take the host down.
+///
+/// # Errors
+///
+/// Returns an error if `on_panic` is not `abort` or `reconnect`.
 pub(crate) fn start(
     section: &OwpSection,
     bind: SocketAddr,
@@ -35,7 +39,7 @@ pub(crate) fn start(
     validate: ValidateMode,
     engine: Arc<Engine>,
     shutdown: CancellationToken,
-) -> JoinHandle<()> {
+) -> Result<JoinHandle<()>, String> {
     let mut adapter = OwpAdapter::new(
         section.id.clone(),
         OwpConfig {
@@ -54,6 +58,9 @@ pub(crate) fn start(
             max_connections: section.max_connections,
             max_subscriptions: section.max_subscriptions,
             validate,
+            on_panic: section.on_panic_mode()?,
+            reconnect: section.reconnect,
+            reconnect_delay: std::time::Duration::from_secs(section.reconnect_delay_secs),
         },
     );
     if let Some(schema) = schema {
@@ -61,9 +68,9 @@ pub(crate) fn start(
     }
     let adapter = Arc::new(adapter);
     info!(id = %adapter.id(), bind = %bind, "starting owp adapter");
-    tokio::spawn(async move {
+    Ok(tokio::spawn(async move {
         if let Err(err) = adapter.run(engine, shutdown).await {
             error!(error = %err, "owp adapter failed");
         }
-    })
+    }))
 }

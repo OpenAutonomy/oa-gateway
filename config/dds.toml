@@ -14,3 +14,13 @@ qos = "config/dds-qos.xml"
 topics = ["demo"]
 unwrap_ma_payloads = true
 suppress_echo = true
+# Rejoin the domain if the session ends or panics, instead of leaving the
+# adapter stopped until the whole process is restarted.
+# reconnect = true
+# reconnect_delay_secs = 1
+# on_panic = "abort"   # or "reconnect"
+#
+# Checked the same way as [owp] traffic, against [uci].schema; validate has
+# no effect without one. An inbound sample over max_sample_size is dropped
+# before it is unwrapped or converted.
+# max_sample_size = 16777216

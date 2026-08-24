@@ -111,6 +111,13 @@ impl Adapter for Loopback {
     /// There is no socket. Tests that only call [`Loopback::subscribe`]
     /// and [`Loopback::publish`] never need this.
     ///
+    /// Unlike OWP, STOMP, and DDS, this has no session to retry and
+    /// nothing in it panics in normal operation — there is no I/O and
+    /// no protocol state, only a wait on `shutdown` — so it carries no
+    /// `on_panic`/`reconnect` config. That is deliberate, not a gap:
+    /// panic supervision on a function that cannot fail would be
+    /// config with nothing to affect.
+    ///
     /// # Errors
     ///
     /// Does not fail. [`Ok`] after the token fires.
