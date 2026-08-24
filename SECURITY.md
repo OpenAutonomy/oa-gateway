@@ -39,8 +39,11 @@ already permit.
   matched, or a wrapper unwrapped into the wrong inner type. A gateway that
   quietly hands a message to the wrong peer is worse than one that refuses it.
 - A codec turning a malformed frame into a plausible-but-wrong message instead
-  of an error, particularly the A-GRA wrapper fields, which are located by
-  substring search rather than by a parser.
+  of an error. The A-GRA wrapper fields had exactly this bug — they were
+  located by substring search, so a sibling field's free text containing the
+  literal text of a tag name could anchor extraction to the wrong place — and
+  that class is treated as a defect, not a limitation. They are parsed with
+  `roxmltree` now, the same library `oa-gateway-uci` uses.
 - `scripts/fetch-uci-schema.sh` accepting a schema document that does not match
   the digests pinned in `scripts/uci-schema.sha256`.
 
@@ -51,11 +54,12 @@ only that an already-trusted peer can waste resources. They are hardening work
 rather than security reports. Listing them here so nobody spends time proving
 what is already written down.
 
-Both edges now cap what a peer can hand them: `stomp.max_frame_size` and
-`owp.max_frame_size` are 16 MiB by default, `owp.max_connections` and
-`owp.max_subscriptions` bound how much state one caller can create, hex payloads
-are capped before they are decoded, and conversion refuses nesting deeper than
-96 elements. What remains is about correctness rather than resources:
+Every edge now caps what a peer can hand it: `stomp.max_frame_size`,
+`owp.max_frame_size`, and `dds.max_sample_size` are 16 MiB by default,
+`owp.max_connections` and `owp.max_subscriptions` bound how much state one
+caller can create, hex payloads are capped before they are decoded, and
+conversion refuses nesting deeper than 96 elements. What remains is about
+correctness rather than resources:
 
 - **Conversion still accepts what the standard does not.** `maxOccurs` decides
   only whether a field becomes an array, an alternation converts as a set of

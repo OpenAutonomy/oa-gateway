@@ -98,9 +98,9 @@ classDiagram
 | `oa-gateway-uci` | XSD compilation, JSON ↔ XML conversion, and validation. A library, not an adapter. | none of the workspace crates at runtime |
 | `oa-gateway-agra` | Peel and wrap `MA_RxDataPayload` / `MA_TxDataPayloadCommand`. A library. | core |
 | `oa-gateway-loopback` | In-process peer with no socket. | adapter and core |
-| `oa-gateway-owp` | WebSocket server: framing, per-connection subscriptions, and optional convert/validate. | adapter, core, uci, and agra |
+| `oa-gateway-owp` | WebSocket server: framing, per-connection subscriptions, optional convert/validate, and reconnect. | adapter, core, uci, and agra |
 | `oa-gateway-stomp` | STOMP 1.2 client toward a broker, including echo skip and reconnect. | adapter, core, and agra |
-| `oa-gateway-dds` | DDS participant: engine topic equals DDS topic, A-GRA Rx/Tx samples, rustdds provider. | adapter, core, and agra |
+| `oa-gateway-dds` | DDS participant: engine topic equals DDS topic, A-GRA Rx/Tx samples, rustdds provider, optional validate and reconnect. | adapter, core, uci, and agra |
 | `oa-gateway` | Composition root: load TOML, compile the schema, resolve addresses, and spawn `run`. | every runtime crate |
 | `oa-gateway-testing` | Cross-engine tests and harnesses. Adapter crates must not depend on it. | optional and one-way |
 
@@ -141,7 +141,7 @@ sequenceDiagram
 
 Inbound MESSAGE frames are stamped with `oag.origin_adapter`. When `suppress_echo` is on, outbound SEND skips envelopes that originated on this adapter. The engine does not skip by origin. OWP uses one adapter id for every WebSocket, so a core-level origin skip would hide a message from other clients on the same server.
 
-Conversion and validation run only in OWP. The host hands `[uci].schema` and `validate` to that adapter. STOMP forwards bytes to ActiveMQ; Java CAL peers already speak XML on that bus. With `xml_baseline`, the WebSocket side is OMS JSON while the engine and the broker see UCI XML.
+Conversion (JSON ↔ XML) runs only in OWP. Validation runs in OWP and DDS; the host hands `[uci].schema` and `validate` to both. STOMP forwards bytes to ActiveMQ; Java CAL peers already speak XML on that bus. With `xml_baseline`, the WebSocket side is OMS JSON while the engine and the broker see UCI XML.
 
 ## Host
 
@@ -154,7 +154,7 @@ The binary owns process lifetime. It does not implement a protocol.
 5. Spawn each enabled adapter's `run` on the shared `Engine` and a cancellation token.
 6. Log engine counters until Ctrl-C, then cancel and join every task.
 
-If `run` returns `Err`, that adapter is down. The host logs the error and leaves the others running. It does not restart a finished `run`. STOMP retries inside its own loop; `[stomp] on_panic` chooses abort or reconnect after a session panic.
+If `run` returns `Err`, that adapter is down. The host logs the error and leaves the others running. It does not restart a finished `run`. STOMP, OWP, and DDS each retry inside their own loop, built on the same `after_join`/`OnPanic` decision in `oa-gateway-adapter`; `on_panic` on each one chooses abort or reconnect after a session panic. Loopback has no session and no `on_panic` key — nothing in it can fail or panic in normal operation.
 
 `src/config/` and `src/adapters/` name loopback, OWP, STOMP, and DDS. A new protocol is a crate plus a host section, not a dynamically loaded plugin. The DDS crate talks to rustdds only through a `DdsProvider` trait so a later vendor stack is another implementation, not a change to the adapter.
 
