@@ -11,6 +11,7 @@ use std::collections::BTreeMap;
 
 use bytes::Bytes;
 use oa_gateway_core::{ContentType, Envelope, RouteKey};
+use roxmltree::{Document, Node};
 use serde_json::{json, Value};
 
 pub const RX_ELEMENT: &str = "MA_RxDataPayload";
@@ -240,12 +241,14 @@ fn unwrap_json(topic: &str, text: &str) -> Result<Unwrapped, AgraError> {
 }
 
 fn unwrap_xml(topic: &str, text: &str) -> Result<Unwrapped, AgraError> {
-    let root = xml_root_local_name(text).ok_or(AgraError::NotAWrapper)?;
-    let kind = WrapperKind::from_element(&root).ok_or(AgraError::NotAWrapper)?;
+    let doc = parse_checked(text).ok_or(AgraError::NotAWrapper)?;
+    let root = doc.root_element();
+    let kind = WrapperKind::from_element(root.tag_name().name()).ok_or(AgraError::NotAWrapper)?;
+
     let message_type_enum =
-        xml_local_text(text, "MessageType").ok_or(AgraError::MissingField("MessageType"))?;
+        local_text(root, "MessageType").ok_or(AgraError::MissingField("MessageType"))?;
     let hex_payload =
-        xml_local_text(text, "EncodedPayload").ok_or(AgraError::MissingField("EncodedPayload"))?;
+        local_text(root, "EncodedPayload").ok_or(AgraError::MissingField("EncodedPayload"))?;
     let inner_bytes = decode_hex(hex_payload.trim())?;
     let inner_ct = sniff_content_type(&inner_bytes);
     let inner_hint = type_hint_from_inner(&inner_bytes, message_type_enum);
@@ -253,10 +256,10 @@ fn unwrap_xml(topic: &str, text: &str) -> Result<Unwrapped, AgraError> {
     let meta = WrapperMeta {
         kind,
         message_type_enum: message_type_enum.to_owned(),
-        originator_uuid: xml_nested_uuid(text, "DataPayloadOriginatorID"),
-        rx_payload_id: xml_nested_uuid(text, "RxDataPayloadID"),
-        command_id: xml_nested_uuid(text, "CommandID"),
-        destination_routing: xml_local_text(text, "DestinationRouting").map(str::to_owned),
+        originator_uuid: nested_uuid(root, "DataPayloadOriginatorID"),
+        rx_payload_id: nested_uuid(root, "RxDataPayloadID"),
+        command_id: nested_uuid(root, "CommandID"),
+        destination_routing: local_text(root, "DestinationRouting").map(str::to_owned),
     };
 
     let wrapper = Envelope::new(
@@ -511,60 +514,140 @@ fn json_str<'a>(data: &'a Value, field: &'static str) -> Result<&'a str, AgraErr
 /// Local name of an XML document element, or `None` if there is no element.
 ///
 /// A declaration, comment, or DOCTYPE ahead of the root is stepped over rather
-/// than treated as the element. Producers emit `<?xml …?>` as a matter of
-/// course, so stopping at the first `<` reports no element at all — which makes
-/// [`wrapper_kind`] answer "not a wrapper" for perfectly ordinary input and
-/// silently disables unwrapping.
+/// than treated as the element, since producers emit `<?xml …?>` as a matter of
+/// course and treating that as the element would make [`wrapper_kind`] answer
+/// "not a wrapper" for perfectly ordinary input and silently disable unwrapping.
 #[must_use]
 pub fn xml_root_local_name(xml: &str) -> Option<String> {
+    let doc = parse_checked(xml)?;
+    Some(doc.root_element().tag_name().name().to_owned())
+}
+
+/// Parses `xml` into a tree, refusing anything nested deep enough to be a
+/// stack-overflow attempt before roxmltree — which has no depth limit of its
+/// own — ever recurses into it.
+fn parse_checked(xml: &str) -> Option<Document<'_>> {
+    if nesting_exceeds(xml, MAX_WRAPPER_DEPTH) {
+        return None;
+    }
+    Document::parse(xml).ok()
+}
+
+/// Deepest element nesting a wrapper document is allowed before parsing is
+/// refused outright.
+///
+/// A real Rx/Tx wrapper is a handful of levels deep: `MessageData` holding a
+/// few flat fields, one of them (`EncodedPayload`) an opaque hex string rather
+/// than nested XML. This is headroom over that shape, not a measurement of it —
+/// wide enough that no real wrapper is ever refused, narrow enough that a peer
+/// cannot hide a few thousand levels of nesting inside a field this crate never
+/// otherwise inspects.
+const MAX_WRAPPER_DEPTH: usize = 64;
+
+/// Whether `xml` nests elements deeper than `limit`, checked on the text
+/// rather than a parsed tree.
+///
+/// Deliberately an over-estimate: rejecting an odd document costs a message,
+/// while under-counting costs the process, so anything ambiguous counts as
+/// nesting. A `<` inside a comment, a processing instruction, or a DOCTYPE is
+/// skipped, since none of them open an element. Quoting inside a start tag is
+/// tracked for the opposite reason: `>` and `/>` are legal in an attribute
+/// value, and treating one as the end of a tag is how a deep document would
+/// pass for a shallow one.
+fn nesting_exceeds(text: &str, limit: usize) -> bool {
+    let bytes = text.as_bytes();
     let mut i = 0;
-    while let Some(rel) = xml[i..].find('<') {
-        let start = i + rel;
-        let rest = &xml[start + 1..];
-        if rest.starts_with('?') {
-            let close = rest.find("?>")?;
-            i = start + 1 + close + 2;
+    let mut depth: usize = 0;
+    while i < bytes.len() {
+        if bytes[i] != b'<' {
+            i += 1;
             continue;
         }
-        if let Some(inner) = rest.strip_prefix("!--") {
-            let close = inner.find("-->")?;
-            i = start + 4 + close + 3;
-            continue;
-        }
-        if rest.starts_with('!') {
-            let close = rest.find('>')?;
-            i = start + 1 + close + 1;
-            continue;
-        }
-        if rest.starts_with('/') {
-            return None;
-        }
-        let name_end = rest.find(|c: char| c.is_whitespace() || c == '>' || c == '/')?;
-        let qname = &rest[..name_end];
-        return Some(qname.rsplit(':').next().unwrap_or(qname).to_owned());
-    }
-    None
-}
-
-fn xml_local_text<'a>(xml: &'a str, local: &str) -> Option<&'a str> {
-    let patterns = [format!("<{local}>"), format!(":{local}>")];
-    for pat in &patterns {
-        if let Some(idx) = xml.find(pat) {
-            let after = idx + pat.len();
-            if let Some(rel) = xml[after..].find("</") {
-                return Some(&xml[after..after + rel]);
+        let rest = &bytes[i + 1..];
+        if let Some(end) = skip_past(rest, b"!--", b"-->") {
+            i += 1 + end;
+        } else if let Some(end) = skip_past(rest, b"?", b"?>") {
+            i += 1 + end;
+        } else if rest.first() == Some(&b'!') {
+            i += 1 + rest
+                .iter()
+                .position(|&c| c == b'>')
+                .map_or(rest.len(), |p| p + 1);
+        } else if rest.first() == Some(&b'/') {
+            depth = depth.saturating_sub(1);
+            i += 1 + rest
+                .iter()
+                .position(|&c| c == b'>')
+                .map_or(rest.len(), |p| p + 1);
+        } else {
+            depth += 1;
+            if depth > limit {
+                return true;
             }
+            let (consumed, self_closing) = scan_start_tag(rest);
+            if self_closing {
+                depth -= 1;
+            }
+            i += 1 + consumed;
         }
     }
-    None
+    false
 }
 
-fn xml_nested_uuid(xml: &str, parent_local: &str) -> Option<String> {
-    let open = xml
-        .find(&format!("<{parent_local}"))
-        .or_else(|| xml.find(&format!(":{parent_local}")))?;
-    let slice = &xml[open..];
-    xml_local_text(slice, "UUID").map(str::to_owned)
+/// Bytes consumed if `rest` opens with `open`, through the matching `close`.
+///
+/// An unterminated construct consumes the remainder, which ends the scan
+/// rather than looping; the parser is what reports it as malformed.
+fn skip_past(rest: &[u8], open: &[u8], close: &[u8]) -> Option<usize> {
+    if !rest.starts_with(open) {
+        return None;
+    }
+    let body = &rest[open.len()..];
+    let end = body
+        .windows(close.len())
+        .position(|w| w == close)
+        .map_or(body.len(), |p| p + close.len());
+    Some(open.len() + end)
+}
+
+/// Bytes consumed by a start tag, and whether it closed itself.
+///
+/// Tracks quoting so a `>` or `/>` inside an attribute value is not mistaken
+/// for the end of the tag.
+fn scan_start_tag(rest: &[u8]) -> (usize, bool) {
+    let mut i = 0;
+    let mut quote: Option<u8> = None;
+    let mut prev = 0u8;
+    while i < rest.len() {
+        let c = rest[i];
+        match quote {
+            Some(q) if c == q => quote = None,
+            Some(_) => {}
+            None if c == b'"' || c == b'\'' => quote = Some(c),
+            None if c == b'>' => return (i + 1, prev == b'/'),
+            None => {}
+        }
+        prev = c;
+        i += 1;
+    }
+    (rest.len(), false)
+}
+
+/// Text of the first descendant element named `local`, ignoring whatever
+/// namespace prefix it carries.
+fn local_text<'input>(node: Node<'input, 'input>, local: &str) -> Option<&'input str> {
+    node.descendants()
+        .find(|n| n.is_element() && n.tag_name().name() == local)
+        .and_then(|n| n.text())
+}
+
+/// Text of the `UUID` child nested inside the first descendant element named
+/// `parent_local`.
+fn nested_uuid(node: Node<'_, '_>, parent_local: &str) -> Option<String> {
+    let parent = node
+        .descendants()
+        .find(|n| n.is_element() && n.tag_name().name() == parent_local)?;
+    local_text(parent, "UUID").map(str::to_owned)
 }
 
 /// Copy wrapper metadata onto an existing header map (adapters).
@@ -799,7 +882,7 @@ mod tests {
     }
 
     #[test]
-    fn root_name_skips_prolog_comments_and_doctype() {
+    fn root_name_skips_prolog_and_comments_but_refuses_a_doctype() {
         assert_eq!(xml_root_local_name("<Ping/>").as_deref(), Some("Ping"));
         assert_eq!(
             xml_root_local_name(r#"<?xml version="1.0"?><Ping/>"#).as_deref(),
@@ -809,10 +892,12 @@ mod tests {
             xml_root_local_name("<!-- note --><Ping/>").as_deref(),
             Some("Ping")
         );
-        assert_eq!(
-            xml_root_local_name("<!DOCTYPE Ping><Ping/>").as_deref(),
-            Some("Ping")
-        );
+        // roxmltree refuses a document that declares a DTD outright rather than
+        // reading past it, which is stricter than the substring scanner this
+        // replaced — that one had no opinion on a DOCTYPE's contents, which is
+        // exactly the class of thing (external entities, expansion bombs) a
+        // wrapper parser has no business evaluating in the first place.
+        assert_eq!(xml_root_local_name("<!DOCTYPE Ping><Ping/>"), None);
         // Prefixed names reduce to the local part.
         assert_eq!(
             xml_root_local_name(r#"<uci:Ping xmlns:uci="x"/>"#).as_deref(),
@@ -824,5 +909,40 @@ mod tests {
         assert_eq!(xml_root_local_name("<?xml"), None);
         assert_eq!(xml_root_local_name("<!-- open"), None);
         assert_eq!(xml_root_local_name("<Ping"), None);
+    }
+
+    /// A wrapper this shallow is nowhere near the limit and must still parse.
+    #[test]
+    fn an_ordinary_wrapper_is_far_under_the_depth_limit() {
+        let xml = tx_wrapper_with_prolog();
+        assert!(!nesting_exceeds(&xml, MAX_WRAPPER_DEPTH));
+    }
+
+    /// Without this a peer-supplied wrapper deep enough exhausts the stack
+    /// inside roxmltree, which has no depth limit of its own — the same class
+    /// of bug SECURITY.md documents for the STOMP frame decoder.
+    #[test]
+    fn a_deeply_nested_wrapper_is_refused_before_roxmltree_recurses() {
+        let mut deep = String::from("<leaf/>");
+        for _ in 0..10_000 {
+            deep = format!("<n>{deep}</n>");
+        }
+        assert!(nesting_exceeds(&deep, MAX_WRAPPER_DEPTH));
+        assert_eq!(xml_root_local_name(&deep), None);
+        assert!(unwrap("demo", deep.as_bytes()).is_err());
+    }
+
+    /// `>` and `/>` are legal inside a quoted attribute value. Read naively,
+    /// each of these looks like a tag that ended and closed itself, so a
+    /// document could nest without ever appearing to.
+    #[test]
+    fn a_tag_cannot_hide_depth_in_an_attribute_value() {
+        let hidden: String = (0..MAX_WRAPPER_DEPTH + 1)
+            .map(|_| r#"<n x="/>">"#)
+            .collect();
+        assert!(
+            nesting_exceeds(&hidden, MAX_WRAPPER_DEPTH),
+            "nesting behind a quoted attribute value must still count"
+        );
     }
 }

@@ -11,6 +11,7 @@ description = "A-GRA MA_RxDataPayload / MA_TxDataPayloadCommand wrap and unwrap"
 bytes.workspace = true
 hex.workspace = true
 oa-gateway-core.workspace = true
+roxmltree.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

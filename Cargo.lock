@@ -875,6 +875,7 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tokio-util",
+ "tracing",
 ]
 
 [[package]]
@@ -884,6 +885,7 @@ dependencies = [
  "bytes",
  "hex",
  "oa-gateway-core",
+ "roxmltree",
  "serde",
  "serde_json",
  "thiserror 2.0.20",
@@ -926,6 +928,7 @@ dependencies = [
  "oa-gateway-adapter",
  "oa-gateway-agra",
  "oa-gateway-core",
+ "oa-gateway-uci",
  "roxmltree",
  "rustdds",
  "serde",
