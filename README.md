@@ -62,15 +62,17 @@ A config is a TOML file passed as the only argument: one section per adapter, pl
 
 ## Documentation
 
-- [docs/glossary.md](docs/glossary.md) — acronyms and OA-Gateway's own vocabulary
-- [docs/architecture.md](docs/architecture.md) — crates, routing, and an example path
-- [docs/configuration.md](docs/configuration.md) — TOML sections, keys, and defaults
-- [docs/writing-an-adapter.md](docs/writing-an-adapter.md) — adding a protocol
-- [docs/using-custom-xsd.md](docs/using-custom-xsd.md) — running against a custom message set
-- [docs/connecting-active-mq.md](docs/connecting-active-mq.md) — bridging an ActiveMQ broker
-- [docs/connecting-dds.md](docs/connecting-dds.md) — joining a DDS domain
-- [docs/benchmarking.md](docs/benchmarking.md) — latency and throughput utility, plus the CI `bench` artifact
-- rustdoc — crate APIs, including the host binary's modules. Build locally with `cargo doc --workspace --no-deps --document-private-items --open`. CI builds the same tree on every run; download the `rustdoc` artifact. A public default branch also publishes GitHub Pages. A private repository on a free plan cannot. `oa-gateway-adapter` includes a runnable minimal adapter.
+The guide and the crate API reference are both published at [openautonomy.github.io/oa-gateway](https://openautonomy.github.io/oa-gateway/).
+
+- [Glossary](https://openautonomy.github.io/oa-gateway/guide/glossary.html) — acronyms and OA-Gateway's own vocabulary
+- [Architecture](https://openautonomy.github.io/oa-gateway/guide/architecture.html) — crates, routing, and an example path
+- [Configuration](https://openautonomy.github.io/oa-gateway/guide/configuration.html) — TOML sections, keys, and defaults
+- [Writing an Adapter](https://openautonomy.github.io/oa-gateway/guide/writing-an-adapter.html) — adding a protocol
+- [Using a Custom XSD](https://openautonomy.github.io/oa-gateway/guide/using-custom-xsd.html) — running against a custom message set
+- [Connecting ActiveMQ](https://openautonomy.github.io/oa-gateway/guide/connecting-active-mq.html) — bridging an ActiveMQ broker
+- [Connecting DDS](https://openautonomy.github.io/oa-gateway/guide/connecting-dds.html) — joining a DDS domain
+- [Benchmarking](https://openautonomy.github.io/oa-gateway/guide/benchmarking.html) — latency and throughput utility, plus the CI `bench` artifact
+- [rustdoc](https://openautonomy.github.io/oa-gateway/) — crate APIs, including the host binary's modules. Build locally with `cargo doc --workspace --no-deps --document-private-items --open`. `oa-gateway-adapter` includes a runnable minimal adapter.
 
 ## Contributing
 

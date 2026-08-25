@@ -1,0 +1,18 @@
+[book]
+title = "OA-Gateway Guide"
+authors = ["John Henry Burns"]
+language = "en"
+src = "docs"
+
+[build]
+build-dir = "target/doc/guide"
+
+[output.html]
+git-repository-url = "https://github.com/OpenAutonomy/oa-gateway"
+edit-url-template = "https://github.com/OpenAutonomy/oa-gateway/edit/main/{path}"
+additional-js = ["mermaid.min.js", "mermaid-init.js"]
+
+[preprocessor]
+
+[preprocessor.mermaid]
+command = "mdbook-mermaid"

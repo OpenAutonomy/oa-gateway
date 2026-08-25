@@ -34,17 +34,28 @@ jobs:
           RUSTDOCFLAGS: "-D warnings"
       - name: rustdoc landing page
         run: ./scripts/write-rustdoc-index.sh target/doc
+      - name: install mdbook
+        run: |
+          curl -sSL https://github.com/rust-lang/mdBook/releases/download/v0.5.4/mdbook-v0.5.4-x86_64-unknown-linux-gnu.tar.gz \
+            | tar -xz -C /usr/local/bin
+          curl -sSL https://github.com/badboy/mdbook-mermaid/releases/download/v0.17.1/mdbook-mermaid-v0.17.1-x86_64-unknown-linux-gnu.tar.gz \
+            | tar -xz -C /usr/local/bin
+      - name: build guide
+        run: |
+          mdbook-mermaid install .
+          mdbook build
       - uses: actions/upload-artifact@v7
         with:
-          name: rustdoc
+          name: site
           path: target/doc
           retention-days: 14
 
   pages:
-    # HTML is already built in `test`. This job only publishes it. Private
-    # repos, fork PRs, and feature branches keep the rustdoc artifact; they
-    # do not write the site. A free personal plan cannot host Pages on a
-    # private repository.
+    # HTML is already built in `test`: rustdoc at the root, the docs/*.md
+    # guide under guide/. This job only publishes it. Private repos, fork
+    # PRs, and feature branches keep the site artifact; they do not write
+    # the site. A free personal plan cannot host Pages on a private
+    # repository.
     if: >-
       github.event_name == 'push'
       && !github.event.repository.private
@@ -63,7 +74,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          name: rustdoc
+          name: site
           path: doc
       # Artifacts belong to the workflow run, not the attempt.
       # Re-running this job would otherwise upload a second

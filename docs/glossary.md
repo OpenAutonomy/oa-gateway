@@ -1,6 +1,6 @@
 # Glossary
 
-This page defines OA-Gateway's own terms, then the domain terms it borrows. Expansions are those that can be confirmed against the standards documents themselves, which are not shipped in this repository — see [using-custom-xsd.md](using-custom-xsd.md) for how the UCI schema is fetched. Where a standard does not establish an expansion, the entry describes the role the term plays in this repository.
+This page defines OA-Gateway's own terms, then the domain terms it borrows. Expansions are those that can be confirmed against the standards documents themselves, which are not shipped in this repository — see [using a custom XSD](using-custom-xsd.md) for how the UCI schema is fetched. Where a standard does not establish an expansion, the entry describes the role the term plays in this repository.
 
 ## OA-Gateway's own terms
 

@@ -18,9 +18,13 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked --document-private-items
 ./scripts/write-rustdoc-index.sh target/doc
+mdbook-mermaid install .
+mdbook build
 ```
 
-That is what CI runs on every push and pull request. The rustdoc HTML is uploaded as a `rustdoc` artifact. On a public default branch, GitHub Pages also publishes it (set the source to GitHub Actions on first use). A private repository on a free plan cannot host Pages; download the artifact instead.
+`mdbook build` needs [mdBook](https://github.com/rust-lang/mdBook) and [mdbook-mermaid](https://github.com/badboy/mdbook-mermaid) on `PATH` (`cargo install mdbook mdbook-mermaid --locked`, or `brew install mdbook` plus a downloaded `mdbook-mermaid` release — it isn't in Homebrew). `mdbook-mermaid install .` vendors `mermaid.min.js`/`mermaid-init.js` at the repo root (gitignored, regenerated on demand) so `architecture.md`'s diagrams render; `mdbook build` then renders `docs/*.md` (configured in `book.toml`) into `target/doc/guide`.
+
+That is what CI runs on every push and pull request. The rustdoc HTML and the built guide are uploaded together as a `site` artifact. On a public default branch, GitHub Pages also publishes it (set the source to GitHub Actions on first use). A private repository on a free plan cannot host Pages; download the artifact instead.
 
 Touching dependencies also runs `cargo deny check` against the policy in
 `deny.toml` — advisories, licenses, and sources. Install it with
