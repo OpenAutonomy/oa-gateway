@@ -2,7 +2,7 @@
 
 `oa-gateway-bench` measures publish-to-delivery latency, throughput, and engine drop counts. It is a client of the public APIs. It does not change routing, framing, or conversion.
 
-Shared GitHub and GitLab runners are noisy. Numbers from CI are a snapshot, not a regression gate. Compare two runs only when the machine and the flags match.
+Shared GitHub runners are noisy. Numbers from CI are a snapshot, not a regression gate. Compare two runs only when the machine and the flags match.
 
 ## Scenarios
 
@@ -49,4 +49,4 @@ The unit job does not run the long suite. After `test` passes, a `bench` job run
 
 If `jq` and `gnuplot` are available (the script installs them when it can), it also writes `bench/latency.png` and `bench/throughput.png`. A missing plotter does not fail the job.
 
-GitHub uploads the `bench/` directory as a `bench` artifact (14 days). GitLab keeps the same path for one week. Pull requests upload too, so a reviewer can download the PR zip next to one from the default branch. Do not treat those pictures as a pass/fail signal.
+GitHub uploads the `bench/` directory as a `bench` artifact (14 days). Pull requests upload too, so a reviewer can download the PR zip next to one from the default branch. Do not treat those pictures as a pass/fail signal.

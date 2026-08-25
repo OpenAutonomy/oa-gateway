@@ -1,6 +1,6 @@
 # Contributing
 
-OA-Gateway is an independent prototype under the MIT License. Pull requests and merge requests are welcome.
+OA-Gateway is an independent prototype under the MIT License. Pull requests are welcome.
 
 Start with [docs/glossary.md](docs/glossary.md) for the acronyms, [docs/architecture.md](docs/architecture.md) for the crate graph, and [docs/writing-an-adapter.md](docs/writing-an-adapter.md) if you are adding a protocol.
 
@@ -20,7 +20,7 @@ RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked --document-p
 ./scripts/write-rustdoc-index.sh target/doc
 ```
 
-That is what CI runs on every push and pull/merge request (GitHub Actions and GitLab CI). The rustdoc HTML is uploaded as a `rustdoc` artifact. On a public default branch, GitHub Pages also publishes it (set the source to GitHub Actions on first use). A private repository on a free plan cannot host Pages; download the artifact instead. GitLab Pages still publishes from the default branch.
+That is what CI runs on every push and pull request. The rustdoc HTML is uploaded as a `rustdoc` artifact. On a public default branch, GitHub Pages also publishes it (set the source to GitHub Actions on first use). A private repository on a free plan cannot host Pages; download the artifact instead.
 
 Touching dependencies also runs `cargo deny check` against the policy in
 `deny.toml` — advisories, licenses, and sources. Install it with
