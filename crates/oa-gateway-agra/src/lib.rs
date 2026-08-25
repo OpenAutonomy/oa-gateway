@@ -7,8 +7,6 @@
 //!
 //! The engine stays wrapper-agnostic: this crate turns envelopes inside out.
 
-use std::collections::BTreeMap;
-
 use bytes::Bytes;
 use oa_gateway_core::{ContentType, Envelope, RouteKey};
 use roxmltree::{Document, Node};
@@ -648,23 +646,6 @@ fn nested_uuid(node: Node<'_, '_>, parent_local: &str) -> Option<String> {
         .descendants()
         .find(|n| n.is_element() && n.tag_name().name() == parent_local)?;
     local_text(parent, "UUID").map(str::to_owned)
-}
-
-/// Copy wrapper metadata onto an existing header map (adapters).
-#[must_use]
-pub fn merge_meta_headers(
-    mut headers: BTreeMap<String, String>,
-    meta: &WrapperMeta,
-) -> BTreeMap<String, String> {
-    headers.insert(HDR_WRAPPER.into(), meta.kind.element_name().into());
-    headers.insert(HDR_MESSAGE_TYPE.into(), meta.message_type_enum.clone());
-    if let Some(v) = &meta.originator_uuid {
-        headers.insert(HDR_ORIGINATOR.into(), v.clone());
-    }
-    if let Some(v) = &meta.command_id {
-        headers.insert(HDR_COMMAND_ID.into(), v.clone());
-    }
-    headers
 }
 
 #[cfg(test)]
