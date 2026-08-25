@@ -7,8 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `owp.reconnect`, `owp.reconnect_delay_secs`, `owp.on_panic`: the OWP
+  adapter can rebind and keep accepting after its accept loop ends or
+  panics, matching STOMP. Defaults preserve today's no-retry behavior.
+- `dds.reconnect`, `dds.reconnect_delay_secs`, `dds.on_panic`: the same,
+  for rejoining the domain after the DDS adapter's session ends or panics.
+- `dds.max_sample_size`: an oversized inbound DDS sample is dropped and
+  logged instead of being unwrapped or converted.
+- DDS now checks inbound samples against `[uci].schema` and `[uci].validate`
+  the same way OWP traffic is checked. `reject` drops a non-conforming
+  sample and logs it; DDS has no peer connection to answer with an error.
+
 ### Fixed
 
+- A-GRA wrapper fields (`MessageType`, `EncodedPayload`,
+  `DestinationRouting`, nested `UUID`s) are now located by parsing the
+  wrapper XML with `roxmltree` instead of substring search, closing a
+  class of misdirected-field-extraction bug on adversarial input.
 - Workspace rustdoc landing page uses rustdoc's CSS so the Pages root
   matches the crate docs.
 

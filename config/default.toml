@@ -41,6 +41,11 @@ xml_baseline = false
 max_frame_size = 16777216
 max_connections = 256
 max_subscriptions = 1024
+# Rebind and accept again if the accept loop ends or panics, instead of
+# leaving the adapter stopped until the whole process is restarted.
+# reconnect = true
+# reconnect_delay_secs = 1
+# on_panic = "abort"   # or "reconnect"
 
 # DDS is omitted here. See config/dds.toml and config/dds-qos.xml.
 #

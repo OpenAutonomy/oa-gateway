@@ -66,6 +66,9 @@ OWP is the WebSocket server. It is off unless this table is in the file.
 | `max_frame_size` | `16777216` | Largest frame accepted from a client, in bytes. An oversized frame ends that session. |
 | `max_connections` | `256` | Connections served at once. Further connections are closed on accept. |
 | `max_subscriptions` | `1024` | Subscriptions one connection may hold. A SUB past the limit is refused and the session continues. |
+| `reconnect` | `false` | Rebind and accept again after the accept loop ends or panics, instead of leaving the adapter stopped until the whole process restarts. Defaults off so an existing deployment sees no behavior change until it opts in. |
+| `reconnect_delay_secs` | `1` | Seconds to wait between rebind attempts. |
+| `on_panic` | `"abort"` | `"abort"` ends the adapter when the accept loop panics; `"reconnect"` treats the panic as a failed session and then follows `reconnect`. A typo is refused as `owp.on_panic: …`. |
 
 A client is not authenticated, so these three limits isolate one peer from the memory of the others. The subscription default is larger than the UCI catalog, so a client can still subscribe to every message type in the standard.
 
@@ -107,6 +110,12 @@ DDS is a participant on a domain. It is off unless this table is in the file. Th
 | `topics` | `["demo"]` | Engine topic names and DDS topic names, bridged both ways. A name you do not list is not bridged. |
 | `unwrap_ma_payloads` | `true` | Peel A-GRA Rx/Tx wrappers on inbound samples and publish the wrapper and the inner message. |
 | `suppress_echo` | `true` | Skip outbound writes when the envelope came from this adapter, so a message does not loop between the gateway and the domain. |
+| `reconnect` | `false` | Rejoin the domain after the session ends or panics, instead of leaving the adapter stopped until the whole process restarts. Defaults off so an existing deployment sees no behavior change until it opts in. |
+| `reconnect_delay_secs` | `1` | Seconds to wait between rejoin attempts. |
+| `on_panic` | `"abort"` | `"abort"` ends the adapter when the session panics; `"reconnect"` treats the panic as a failed session and then follows `reconnect`. A typo is refused as `dds.on_panic: …`. |
+| `max_sample_size` | `16777216` | Largest inbound sample accepted, in bytes, before it is unwrapped or converted. An oversized sample is dropped and logged rather than ending the session — DDS has no per-peer connection to end. |
+
+Inbound samples are checked against `[uci].schema` the same way OWP traffic is; `[uci].validate` decides what a violation costs, and has no effect without a schema. Unlike OWP, DDS has no peer connection to notify, so `reject` drops the sample and logs it rather than answering an error frame.
 
 `[dds]` is omitted from [`config/default.toml`](../config/default.toml) because the local toy has no domain to join. Use [`config/dds.toml`](../config/dds.toml) when you want one.
 

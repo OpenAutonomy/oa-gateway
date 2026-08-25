@@ -47,7 +47,7 @@ The compiler follows UCI's Schema Style & Design Specification rather than XSD a
 - **Flat compositors.** An `xs:sequence` or `xs:choice` that holds another compositor, or that carries its own `minOccurs`/`maxOccurs`, has no representation in the flat element model.
 - **Restriction for simple types**, with the facets the validator understands: `enumeration`, `pattern`, `length`, `minLength`, `maxLength`, and the four `min`/`max` bounds. `whiteSpace` is accepted and ignored. Any other facet is refused, because a constraint that is silently dropped cannot be told apart from one that was never there.
 
-The constructs outside that list do not appear in UCI, so none of them is a limitation you will meet with the published schema. Attributes and `xs:any` are refused by name. `substitutionGroup=` is the one construct read past rather than refused: the element still compiles, but the substitution relationship is not known, so nothing enforces it. If a message set needs any of those constructs, the compiler is `crates/oa-gateway-uci/src/xsd.rs`, and the error names the construct it stopped on.
+The constructs outside that list do not appear in UCI, so none of them is a limitation you will meet with the published schema. Attributes and `xs:any` are refused by name. `substitutionGroup=` is the one construct read past rather than refused: the element still compiles, but the substitution relationship is not known, so nothing enforces it. If a message set needs any of those constructs, the compiler is `crates/oa-gateway-uci/src/xsd/`, and the error names the construct it stopped on.
 
 ## Checking a schema before deploy
 

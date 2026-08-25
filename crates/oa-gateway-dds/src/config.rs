@@ -3,6 +3,20 @@
 use std::fmt;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::Arc;
+use std::time::Duration;
+
+use oa_gateway_adapter::OnPanic;
+use oa_gateway_uci::validate::Mode as ValidateMode;
+use oa_gateway_uci::Schema;
+
+/// Largest DDS sample accepted from the domain, in bytes, before it is
+/// unwrapped or converted.
+///
+/// Matches OWP's default frame limit. DDS has no handshake of its own to
+/// cap a sample's size the way a WebSocket frame limit does, so this is
+/// a plain length check instead of a transport-level setting.
+pub const DEFAULT_MAX_SAMPLE_SIZE: usize = 16 * 1024 * 1024;
 
 /// Which [`crate::DdsProvider`] the host should construct.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -58,6 +72,22 @@ pub struct DdsConfig {
     pub unwrap_ma_payloads: bool,
     /// Skip outbound samples that originated on this adapter.
     pub suppress_echo: bool,
+    /// Panic while joined to the domain: abort `run`, or treat it as a
+    /// failed session.
+    pub on_panic: OnPanic,
+    /// Rejoin the domain after the session ends or panics.
+    pub reconnect: bool,
+    /// Sleep between rejoin attempts.
+    pub reconnect_delay: Duration,
+    /// Compiled UCI schema used to check inbound samples. `None` skips
+    /// the check: there is nothing to check against.
+    pub schema: Option<Arc<Schema>>,
+    /// What to do about an inbound sample that does not follow
+    /// [`Self::schema`]. Has no effect without one.
+    pub validate: ValidateMode,
+    /// Largest inbound sample accepted, in bytes, before it is unwrapped
+    /// or converted. An oversized sample is dropped and logged.
+    pub max_sample_size: usize,
 }
 
 impl Default for DdsConfig {
@@ -69,6 +99,12 @@ impl Default for DdsConfig {
             topics: vec!["demo".into()],
             unwrap_ma_payloads: true,
             suppress_echo: true,
+            on_panic: OnPanic::Abort,
+            reconnect: false,
+            reconnect_delay: Duration::from_secs(1),
+            schema: None,
+            validate: ValidateMode::default(),
+            max_sample_size: DEFAULT_MAX_SAMPLE_SIZE,
         }
     }
 }

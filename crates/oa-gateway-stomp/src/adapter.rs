@@ -8,20 +8,20 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use oa_gateway_adapter::{Adapter, AdapterError};
+use oa_gateway_adapter::{after_join, Adapter, AdapterError, AfterSession};
 use oa_gateway_agra::{unwrap as unwrap_ma, wrapper_kind};
 use oa_gateway_core::{
     AdapterId, Delivery, Engine, Envelope, RouteKey, SubId, DEFAULT_CHANNEL_CAPACITY,
 };
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 use crate::client::{
     connect, disconnect_frame, send_frame, subscribe_frame, FrameReader, FrameWriter,
 };
 use crate::codec::Frame;
-use crate::config::{OnPanic, StompConfig};
+use crate::config::StompConfig;
 use crate::dest::{
     inbound_route, sniff_content_type, sniff_type_hint, DestinationMap, HDR_ID, HDR_ORIGIN,
     HDR_STOMP_DEST, HDR_TOPIC, HDR_TYPE_HINT,
@@ -421,90 +421,5 @@ fn log_drops(adapter: &StompAdapter, outcome: oa_gateway_core::PublishOutcome) {
             dropped = outcome.dropped,
             "engine dropped deliveries on this publish"
         );
-    }
-}
-
-/// What the retry loop does after a session task ends.
-#[derive(Debug)]
-enum AfterSession {
-    ReturnOk,
-    ReturnErr(AdapterError),
-    Retry { message: String },
-}
-
-/// Maps a session join result onto abort, return, or retry.
-fn after_join(
-    joined: Result<Result<(), AdapterError>, tokio::task::JoinError>,
-    reconnect: bool,
-    on_panic: OnPanic,
-    adapter: &AdapterId,
-) -> AfterSession {
-    match joined {
-        Ok(Ok(())) => {
-            if reconnect {
-                AfterSession::Retry {
-                    message: "stomp session ended, reconnecting".into(),
-                }
-            } else {
-                AfterSession::ReturnOk
-            }
-        }
-        Ok(Err(err)) => {
-            if reconnect {
-                AfterSession::Retry {
-                    message: format!("stomp session failed, retrying: {err}"),
-                }
-            } else {
-                AfterSession::ReturnErr(err)
-            }
-        }
-        Err(join) if join.is_panic() => {
-            error!(adapter = %adapter, "stomp session panicked");
-            match (on_panic, reconnect) {
-                (OnPanic::Abort, _) | (OnPanic::Reconnect, false) => {
-                    AfterSession::ReturnErr(AdapterError::failed(adapter, "session panicked"))
-                }
-                (OnPanic::Reconnect, true) => AfterSession::Retry {
-                    message: "stomp session panicked, retrying".into(),
-                },
-            }
-        }
-        Err(_) => AfterSession::ReturnOk,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn panic_aborts_even_when_reconnect_is_on() {
-        let joined = tokio::spawn(async { panic!("session boom") }).await;
-        match after_join(joined, true, OnPanic::Abort, &AdapterId::new("stomp")) {
-            AfterSession::ReturnErr(err) => {
-                assert!(err.to_string().contains("session panicked"), "{err}");
-            }
-            other => panic!("expected abort, got {other:?}"),
-        }
-    }
-
-    #[tokio::test]
-    async fn panic_retries_when_on_panic_is_reconnect() {
-        let joined = tokio::spawn(async { panic!("session boom") }).await;
-        match after_join(joined, true, OnPanic::Reconnect, &AdapterId::new("stomp")) {
-            AfterSession::Retry { message } => {
-                assert!(message.contains("panicked"), "{message}");
-            }
-            other => panic!("expected retry, got {other:?}"),
-        }
-    }
-
-    #[tokio::test]
-    async fn panic_reconnect_still_stops_when_reconnect_is_off() {
-        let joined = tokio::spawn(async { panic!("session boom") }).await;
-        match after_join(joined, false, OnPanic::Reconnect, &AdapterId::new("stomp")) {
-            AfterSession::ReturnErr(_) => {}
-            other => panic!("expected err, got {other:?}"),
-        }
     }
 }

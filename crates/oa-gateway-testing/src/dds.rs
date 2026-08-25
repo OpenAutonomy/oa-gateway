@@ -24,18 +24,36 @@ pub async fn start_dds_adapter(
     domain_id: u16,
     topics: Vec<String>,
 ) -> CancellationToken {
+    start_dds_adapter_with(engine, id, domain_id, topics, |_| {}).await
+}
+
+/// As [`start_dds_adapter`], with the config open for editing first.
+///
+/// The fixture schema ([`oa_gateway_uci::slice::v25`]) is always
+/// attached, the same way [`crate::owp::start_owp_with`] attaches it —
+/// `edit` only needs to set [`DdsConfig::validate`] to turn checking on.
+/// Tests for `max_sample_size` set it far below the default, so reaching
+/// it costs a few bytes rather than megabytes.
+pub async fn start_dds_adapter_with(
+    engine: Arc<Engine>,
+    id: impl Into<String>,
+    domain_id: u16,
+    topics: Vec<String>,
+    edit: impl FnOnce(&mut DdsConfig),
+) -> CancellationToken {
     let shutdown = CancellationToken::new();
-    let adapter = Arc::new(DdsAdapter::new(
-        id.into(),
-        DdsConfig {
-            provider: DdsProviderKind::Rustdds,
-            domain_id,
-            qos: shipped_qos_path(),
-            topics,
-            unwrap_ma_payloads: true,
-            suppress_echo: true,
-        },
-    ));
+    let mut config = DdsConfig {
+        provider: DdsProviderKind::Rustdds,
+        domain_id,
+        qos: shipped_qos_path(),
+        topics,
+        unwrap_ma_payloads: true,
+        suppress_echo: true,
+        schema: Some(Arc::new(oa_gateway_uci::slice::v25().clone())),
+        ..DdsConfig::default()
+    };
+    edit(&mut config);
+    let adapter = Arc::new(DdsAdapter::new(id.into(), config));
     let token = shutdown.clone();
     let handle = tokio::spawn(async move { adapter.serve(engine, token).await });
     tokio::time::sleep(Duration::from_millis(400)).await;

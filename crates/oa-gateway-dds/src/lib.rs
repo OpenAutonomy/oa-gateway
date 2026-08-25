@@ -8,12 +8,13 @@
 
 mod adapter;
 mod config;
+mod convert;
 mod provider;
 mod qos_xml;
 mod types;
 
 pub use adapter::DdsAdapter;
-pub use config::{DdsConfig, DdsProviderKind};
+pub use config::{DdsConfig, DdsProviderKind, DEFAULT_MAX_SAMPLE_SIZE};
 pub use provider::{provider_for, DdsError, DdsProvider, DdsSession, RustddsProvider};
 pub use qos_xml::{load as load_qos, parse as parse_qos, QosSpec};
 pub use types::{DdsSample, MaDataPayload, TYPE_NAME};

@@ -1,52 +1,9 @@
-use std::fmt;
 use std::net::SocketAddr;
-use std::str::FromStr;
 use std::time::Duration;
 
+use oa_gateway_adapter::OnPanic;
+
 use crate::codec::DEFAULT_MAX_FRAME_SIZE;
-
-/// What to do when a STOMP session task panics.
-///
-/// The session always runs on a child task so a panic is a join
-/// error, not an unwind of the retry loop.
-/// [`Self::Abort`] ends `run`. [`Self::Reconnect`] treats the panic as
-/// a failed session and then follows [`StompConfig::reconnect`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum OnPanic {
-    /// End the adapter. Default so a bug stays visible.
-    #[default]
-    Abort,
-    /// Retry if [`StompConfig::reconnect`] is on.
-    Reconnect,
-}
-
-impl fmt::Display for OnPanic {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Abort => "abort",
-            Self::Reconnect => "reconnect",
-        })
-    }
-}
-
-impl FromStr for OnPanic {
-    type Err = String;
-
-    /// `abort` or `reconnect`.
-    ///
-    /// # Errors
-    ///
-    /// Returns a message if `s` is neither.
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "abort" => Ok(Self::Abort),
-            "reconnect" => Ok(Self::Reconnect),
-            other => Err(format!(
-                "unknown on_panic '{other}'; expected abort or reconnect"
-            )),
-        }
-    }
-}
 
 /// Runtime settings for a STOMP client session.
 ///
@@ -112,23 +69,5 @@ impl Default for StompConfig {
             on_panic: OnPanic::Abort,
             max_frame_size: DEFAULT_MAX_FRAME_SIZE,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn on_panic_reads_back() {
-        assert_eq!(
-            OnPanic::Abort.to_string().parse::<OnPanic>().unwrap(),
-            OnPanic::Abort
-        );
-        assert_eq!(
-            OnPanic::Reconnect.to_string().parse::<OnPanic>().unwrap(),
-            OnPanic::Reconnect
-        );
-        assert!(OnPanic::from_str("die").is_err());
     }
 }

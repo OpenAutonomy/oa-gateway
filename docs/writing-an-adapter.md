@@ -73,7 +73,7 @@ The adapter sequences its own startup, teardown, and reconnect:
 
 - **Subscribe after the transport is up**, so deliveries are not queued before they can be sent.
 - **Select on `shutdown.cancelled()`** in the same loop that reads the transport, so cancellation is observed promptly.
-- **Put the retry loop outside the session.** `StompAdapter::serve_inner` runs each `session` on a child task, so one failed connection retries without ending the adapter. `[stomp] on_panic` is `abort` (default: a panic ends `run`) or `reconnect` (treat the panic as a failed session, then follow `reconnect`). The host does not restart a finished `run`.
+- **Put the retry loop outside the session.** `StompAdapter::serve_inner`, `OwpAdapter::run`, and `DdsAdapter::run` each run one session on a child task, so a panic there is a join error rather than an unwind that would take the retry loop down with it — the join result is fed to the shared `oa_gateway_adapter::after_join`. `on_panic` is `abort` (default: a panic ends `run`) or `reconnect` (treat the panic as a failed session, then follow the adapter's own `reconnect` setting). The host does not restart a finished `run`. Loopback has no session and skips this entirely — nothing in it can fail or panic in normal operation.
 - **Call `drop_adapter` on the way out, and again when a session restarts.** The STOMP adapter also calls it at session start, which clears stale subscriptions left by a previous connection.
 
 ## Host wiring
