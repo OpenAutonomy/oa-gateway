@@ -2,9 +2,9 @@
 # Write a workspace landing page into a rustdoc output directory.
 #
 # rustdoc on the pinned stable toolchain does not emit target/doc/index.html
-# for a workspace. GitHub/GitLab Pages and a downloaded artifact would 404
-# at the site root without this. The page reuses rustdoc's hashed CSS/JS
-# from static.files/ so the root matches the crate docs.
+# for a workspace. GitHub Pages and a downloaded artifact would 404 at the
+# site root without this. The page reuses rustdoc's hashed CSS/JS from
+# static.files/ so the root matches the crate docs.
 set -euo pipefail
 
 DEST="${1:-target/doc}"
