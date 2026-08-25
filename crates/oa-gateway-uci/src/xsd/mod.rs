@@ -8,10 +8,10 @@
 //! rather than guessing, so a schema revision that starts using a new construct
 //! fails loudly instead of quietly losing data.
 //!
-//! Split into [`assemble`] (the `compile` entry point and per-document
-//! merging), [`parse`] (turning one XSD node into a schema type),
-//! [`node_util`] (small XML-node helpers shared by both), and
-//! [`references`] (the post-parse check that every type name resolves).
+//! Split into `assemble` (the `compile` entry point and per-document
+//! merging), `parse` (turning one XSD node into a schema type),
+//! `node_util` (small XML-node helpers shared by both), and
+//! `references` (the post-parse check that every type name resolves).
 //! Only [`compile`] is public; everything else is an implementation detail
 //! of how this module builds a [`Schema`](crate::Schema).
 

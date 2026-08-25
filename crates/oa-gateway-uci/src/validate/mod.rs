@@ -21,8 +21,8 @@
 //! [`MAX_VIOLATIONS`], because an operator comparing a producer against
 //! the standard wants the list, not a bisection.
 //!
-//! Split into [`mode`] (the [`Mode`] enum), [`violation`] (the report
-//! types), and [`rules`] (the walk that produces them) — this module
+//! Split into `mode` (the [`Mode`] enum), `violation` (the report
+//! types), and `rules` (the walk that produces them) — this module
 //! re-exports the public surface of all three so callers keep using
 //! `oa_gateway_uci::validate::{...}` as one flat path.
 
