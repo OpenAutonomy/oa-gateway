@@ -1,6 +1,6 @@
 # Glossary
 
-This page defines OA-Gateway's own terms, then the domain terms it borrows. Expansions are those that can be confirmed in the standards under `repos/`. Where a standard does not establish an expansion, the entry describes the role the term plays in this repository.
+This page defines OA-Gateway's own terms, then the domain terms it borrows. Expansions are those that can be confirmed against the standards documents themselves, which are not shipped in this repository — see [using-custom-xsd.md](using-custom-xsd.md) for how the UCI schema is fetched. Where a standard does not establish an expansion, the entry describes the role the term plays in this repository.
 
 ## OA-Gateway's own terms
 
@@ -22,12 +22,12 @@ This page defines OA-Gateway's own terms, then the domain terms it borrows. Expa
 
 | Term | Meaning |
 |---|---|
-| **OMS** | Open Mission Systems. The standards family this gateway interoperates with; `repos/oms_standard`. |
-| **UCI** | Universal Command and Control Interface. Supplies the message schema — message types such as `PositionReport` and `SubsystemStatus`; `repos/uci_standard`. `oa-gateway-uci` compiles the published XSD, so conversion covers whatever catalog the operator loads through `uci.schema`. |
+| **OMS** | Open Mission Systems. The standards family this gateway interoperates with. |
+| **UCI** | Universal Command and Control Interface. Supplies the message schema — message types such as `PositionReport` and `SubsystemStatus`. `oa-gateway-uci` compiles the published XSD, so conversion covers whatever catalog the operator loads through `uci.schema`; [`scripts/fetch-uci-schema.sh`](../scripts/fetch-uci-schema.sh) fetches the published UCI 2.5 documents. |
 | **CAL** | Critical Abstraction Layer. The OMS component boundary a participant implements. Java CALs speak OpenWire; `uci-cal-jms` and `sk-cal` are CAL implementations this gateway is meant to sit alongside. |
 | **OWP** | OMS WebSocket Protocol. The text-frame protocol `oa-gateway-owp` serves, with `INIT`/`SUB`/`PUB`/`MSG`/`OK`/`ERR` operations. Its grammar comes from OMSC-SPC-013, the language-agnostic CAL specification. |
 | **MT** | Message type. Used in this repo for the UCI type name carried in `type_hint`, as in "the wrapper MT and the inner MT". |
-| **A-GRA** | The standard defining the `MA_RxDataPayload` and `MA_TxDataPayloadCommand` wrappers that `oa-gateway-agra` peels. Schema and interface volumes are in `repos/a-gra_standard` (`Schema/A-GRA_MessageDefinitions_v5_0_a.xsd`, and the ASK 5.0a volumes under `Documentation/`). |
+| **A-GRA** | The standard defining the `MA_RxDataPayload` and `MA_TxDataPayloadCommand` wrappers that `oa-gateway-agra` peels, published as `A-GRA_MessageDefinitions_v5_0_a.xsd` alongside the ASK 5.0a interface volumes. |
 | **MA-C2, MA-MA, MA-VI, MA-MS** | A-GRA interface designators. They line up with the ASK 5.0a interface volumes: Command and Control, Peer, Vehicle, and Mission Systems respectively. The first two are external interfaces and use the Rx/Tx hexBinary wrappers; the platform-facing two use native MTs and skip the wrapper. |
 | **hexBinary** | `xs:hexBinary`, the XSD type A-GRA uses to carry a complete inner message as hex text inside a wrapper's `EncodedPayload`. |
 | **PolySample** | A UCI construct whose JSON form carries a `$type` discriminator; `oa-gateway-uci` handles it explicitly. |
