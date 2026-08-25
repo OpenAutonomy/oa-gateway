@@ -7,3 +7,6 @@ repos/
 /schema/
 # Local output of scripts/ci-bench.sh
 /bench/
+# Vendored by `mdbook-mermaid install .`, not redistributed here.
+/mermaid.min.js
+/mermaid-init.js

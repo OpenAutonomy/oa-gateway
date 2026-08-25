@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The `docs/*.md` guide is now published to GitHub Pages alongside rustdoc,
+  built with mdBook (`book.toml`, `docs/SUMMARY.md`) under `/guide/`. The
+  CI artifact that carries both is renamed from `rustdoc` to `site`.
 - `owp.reconnect`, `owp.reconnect_delay_secs`, `owp.on_panic`: the OWP
   adapter can rebind and keep accepting after its accept loop ends or
   panics, matching STOMP. Defaults preserve today's no-retry behavior.
