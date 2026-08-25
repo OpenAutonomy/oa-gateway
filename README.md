@@ -1,25 +1,29 @@
 # OA-Gateway
 
+[![CI](https://github.com/OpenAutonomy/oa-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/OpenAutonomy/oa-gateway/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 ![OA-Gateway: multi-protocol gateway bridging ActiveMQ, DDS, and WebSockets](docs/oa-gateway-banner.png)
 
 ## Introduction
 
-OA-Gateway is an independent prototype: a multi-protocol connector implemented in Rust. It is open source and free to use under the MIT License. It is not an [Open Arsenal](https://gitlab.com/open-arsenal/) project; it speaks OMS, UCI, and A-GRA so it can sit next to those systems.
+OA-Gateway is a multi-protocol message gateway written in Rust. It bridges WebSocket, ActiveMQ (STOMP), and DDS traffic through one protocol-agnostic routing core, and speaks OMS (Open Mission Systems), UCI (Universal Command and Control Interface), and A-GRA well enough to sit next to systems built on those standards — without being one of them, and without being an [Open Arsenal](https://gitlab.com/open-arsenal/) project itself.
 
-It currently supports WebSocket (OWP), STOMP (ActiveMQ), and DDS (rustdds) adapters. The routing core is protocol-agnostic. Adapters own framing, handshake, and any schema logic. A new protocol is a new adapter; it is not a change to the core.
+It is an independent prototype, open source under the MIT License. That status is not just a label: there is no authentication and no in-process TLS — see [SECURITY.md](SECURITY.md) before you point it at anything but loopback.
 
-Goals:
+## What it does
 
-- Compliance with the OMS, UCI, and A-GRA standards.
-- Topic- and destination-level routing, so traffic is addressed by name rather than by peer.
-- Extensibility: a new protocol is a new adapter.
+- **Bridges three protocols through one router.** WebSocket (OWP), STOMP (ActiveMQ), and DDS (rustdds) adapters all publish to and subscribe from the same in-process engine. A message published on one reaches every matching subscriber on every other.
+- **Routes by name, not by peer.** Traffic is addressed by topic and message type the same way across every protocol, so adding a subscriber never means telling a publisher about it.
+- **Adds a protocol without touching the core.** Each adapter owns its own framing, handshake, and schema logic. The routing core doesn't change to gain one.
+- **Converts and checks UCI traffic.** Compile a UCI XSD catalog and the gateway converts OMS JSON ↔ UCI XML at the edge and checks payloads against the schema, from `warn` to `reject`.
 
 ## Getting started
 
 Clone the repository and build it.
 
 ```bash
-git clone https://github.com/jburns3141/oa-gateway.git
+git clone https://github.com/OpenAutonomy/oa-gateway.git
 cd oa-gateway
 cargo build --release
 ```
@@ -68,16 +72,6 @@ A config is a TOML file passed as the only argument: one section per adapter, pl
 - [docs/benchmarking.md](docs/benchmarking.md) — latency and throughput utility, plus the CI `bench` artifact
 - rustdoc — crate APIs, including the host binary's modules. Build locally with `cargo doc --workspace --no-deps --document-private-items --open`. CI builds the same tree on every run; download the `rustdoc` artifact. A public default branch also publishes GitHub Pages. A private repository on a free plan cannot. `oa-gateway-adapter` includes a runnable minimal adapter.
 
-## FAQs
-
-1. [STOMP, UCI, ASB? What do all these terms mean?](docs/glossary.md)
-1. [How is the gateway put together?](docs/architecture.md)
-1. [How do I configure the gateway?](docs/configuration.md)
-1. [How can I add a new protocol?](docs/writing-an-adapter.md)
-1. [How can I use my own XSD?](docs/using-custom-xsd.md)
-1. [How can I connect an ActiveMQ broker?](docs/connecting-active-mq.md)
-1. [How can I join a DDS domain?](docs/connecting-dds.md)
-
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -88,4 +82,4 @@ Notable changes are in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
-Licensed under the [MIT License](LICENSE) (copyright John Henry Burns). Open source and free to use.
+Licensed under the [MIT License](LICENSE), copyright John Henry Burns.
