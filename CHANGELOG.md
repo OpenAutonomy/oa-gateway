@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- OWP now validates the JSON it delivers to an `xml_baseline` client after
+  converting from bus XML, not only the pre-conversion XML. `uci.validate`
+  governs a conversion-produced violation — for example an A-GRA wrapper's
+  `EncodedPayload` changing length once its inner document is re-encoded from
+  XML to JSON — the same way it governs a producer-caused one.
 - A-GRA wrapper fields (`MessageType`, `EncodedPayload`,
   `DestinationRouting`, nested `UUID`s) are now located by parsing the
   wrapper XML with `roxmltree` instead of substring search, closing a

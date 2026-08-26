@@ -378,6 +378,7 @@ async fn handle_sub(
         // cause is the same for every payload on this route.
         let mut logged = false;
         let mut logged_invalid = false;
+        let mut logged_conversion_invalid = false;
         while let Some(delivery) = rx.recv().await {
             let Ok(raw) = String::from_utf8(delivery.envelope.payload.to_vec()) else {
                 warn!("dropping non-utf8 payload destined for OWP");
@@ -425,7 +426,55 @@ async fn handle_sub(
             }
             let payload = if xml_baseline {
                 match xml_to_oms_json(&raw, schema.as_deref()) {
-                    Ok(json) => json,
+                    Ok(json) => {
+                        // Conversion is best-effort: a bug in it can produce JSON
+                        // that no longer follows the schema even though the bus
+                        // payload did. Checked separately from the producer check
+                        // above, and worded to say so, because the fix here is in
+                        // this gateway rather than in the producer.
+                        let violations =
+                            violations_of(json.as_bytes(), schema.as_deref(), validate);
+                        if !violations.is_empty() {
+                            let summary = summarize(&violations);
+                            if validate == ValidateMode::Reject {
+                                if !logged_conversion_invalid {
+                                    logged_conversion_invalid = true;
+                                    warn!(
+                                        adapter = %adapter_id,
+                                        sid = %local_sid,
+                                        violations = %summary,
+                                        "dropping a delivery that converted to a payload \
+                                         not following the UCI schema; later ones on this \
+                                         subscription are not logged"
+                                    );
+                                }
+                                let details = format!(
+                                    "delivery on {local_sid} converted to a payload that \
+                                     does not follow the UCI schema: {summary}"
+                                );
+                                if forward_tx
+                                    .send(err_op(OwpError::InvalidMessage, Some(&details)))
+                                    .await
+                                    .is_err()
+                                {
+                                    break;
+                                }
+                                continue;
+                            }
+                            if !logged_conversion_invalid {
+                                logged_conversion_invalid = true;
+                                warn!(
+                                    adapter = %adapter_id,
+                                    sid = %local_sid,
+                                    violations = %summary,
+                                    "converted payload does not follow the UCI schema; \
+                                     forwarding it anyway, and later ones on this \
+                                     subscription are not logged"
+                                );
+                            }
+                        }
+                        json
+                    }
                     Err(err) => {
                         if !logged {
                             logged = true;
