@@ -47,6 +47,19 @@ pub async fn start_owp_with(
     engine: Arc<Engine>,
     edit: impl FnOnce(&mut OwpConfig),
 ) -> (String, CancellationToken) {
+    start_owp_with_schema(engine, oa_gateway_uci::slice::v25().clone(), edit).await
+}
+
+/// As [`start_owp_with`], with the UCI schema open for editing too.
+///
+/// For a test that needs a shape the fixture schema does not declare —
+/// a specific facet, say — rather than stretching [`oa_gateway_uci::slice::v25`]
+/// to cover it.
+pub async fn start_owp_with_schema(
+    engine: Arc<Engine>,
+    schema: oa_gateway_uci::Schema,
+    edit: impl FnOnce(&mut OwpConfig),
+) -> (String, CancellationToken) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let shutdown = CancellationToken::new();
@@ -61,10 +74,7 @@ pub async fn start_owp_with(
     };
     edit(&mut config);
 
-    let adapter = Arc::new(
-        OwpAdapter::new("owp-test", config)
-            .with_schema(Arc::new(oa_gateway_uci::slice::v25().clone())),
-    );
+    let adapter = Arc::new(OwpAdapter::new("owp-test", config).with_schema(Arc::new(schema)));
     let token = shutdown.clone();
     tokio::spawn(async move {
         adapter.serve(listener, engine, token).await.unwrap();

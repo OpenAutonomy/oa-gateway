@@ -78,12 +78,6 @@ correctness rather than resources:
   translate are named in a startup warning rather than enforced, as are
   primitives it does not recognize; against the published catalog both lists are
   empty.
-- **Conversion is best-effort in one direction that still matters.** A payload
-  the engine carries in XML is converted for a JSON subscriber or the delivery is
-  dropped and the client told, so nothing arrives in an unannounced format. What
-  is not covered is the reverse question of whether a conversion that *succeeded*
-  produced a valid instance of the standard — see the `maxOccurs` and `choice`
-  note above.
 
 ## Supported versions
 
