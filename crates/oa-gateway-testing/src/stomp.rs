@@ -12,6 +12,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use oa_gateway_adapter::tls::{ClientTls, MaybeTlsStream, ServerTls};
 use oa_gateway_core::Engine;
 use oa_gateway_stomp::{decode_one, Frame, StompAdapter, StompConfig};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -19,6 +20,8 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
+
+use crate::tls::TestCerts;
 
 /// In-process STOMP 1.2 broker on an ephemeral port.
 ///
@@ -35,12 +38,24 @@ pub struct MiniBroker {
 ///
 /// Panics if the port cannot be bound.
 pub async fn start_mini_broker() -> MiniBroker {
+    start_mini_broker_with(None).await
+}
+
+/// As [`start_mini_broker`], but the broker terminates TLS with `certs`.
+///
+/// Connect to it with [`StompPeer::connect_tls`] or a [`StompConfig`]
+/// carrying a [`ClientTls`].
+pub async fn start_mini_broker_tls(certs: &TestCerts) -> MiniBroker {
+    start_mini_broker_with(Some(crate::tls::server_tls(certs))).await
+}
+
+async fn start_mini_broker_with(tls: Option<ServerTls>) -> MiniBroker {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let shutdown = CancellationToken::new();
     let token = shutdown.clone();
     tokio::spawn(async move {
-        run_broker(listener, token).await;
+        run_broker(listener, token, tls).await;
     });
     MiniBroker { addr, shutdown }
 }
@@ -68,7 +83,7 @@ struct BrokerState {
 }
 
 /// Accepts connections until `shutdown`. Each socket is its own task.
-async fn run_broker(listener: TcpListener, shutdown: CancellationToken) {
+async fn run_broker(listener: TcpListener, shutdown: CancellationToken, tls: Option<ServerTls>) {
     let state = Arc::new(Mutex::new(BrokerState {
         subs: HashMap::new(),
         next_msg: AtomicU64::new(1),
@@ -83,8 +98,9 @@ async fn run_broker(listener: TcpListener, shutdown: CancellationToken) {
                 conn_seq += 1;
                 let state = Arc::clone(&state);
                 let shutdown = shutdown.clone();
+                let tls = tls.clone();
                 tokio::spawn(async move {
-                    let _ = handle_conn(stream, conn_id, state, shutdown).await;
+                    let _ = handle_conn(stream, conn_id, state, shutdown, tls).await;
                 });
             }
         }
@@ -98,8 +114,13 @@ async fn handle_conn(
     conn_id: u64,
     state: Arc<Mutex<BrokerState>>,
     shutdown: CancellationToken,
+    tls: Option<ServerTls>,
 ) -> Result<(), ()> {
-    let (mut read, mut write) = stream.into_split();
+    let stream: MaybeTlsStream<TcpStream> = match &tls {
+        Some(tls) => tls.accept(stream).await.map_err(|_| ())?,
+        None => MaybeTlsStream::Plain(stream),
+    };
+    let (mut read, mut write) = tokio::io::split(stream);
     let (out_tx, mut out_rx) = mpsc::channel::<Frame>(64);
     let writer = tokio::spawn(async move {
         while let Some(frame) = out_rx.recv().await {
@@ -212,7 +233,7 @@ async fn dispatch(
 /// Not the gateway adapter. Use this as the "other side" of
 /// [`start_mini_broker`] or a live ActiveMQ.
 pub struct StompPeer {
-    stream: TcpStream,
+    stream: MaybeTlsStream<TcpStream>,
     buf: Vec<u8>,
 }
 
@@ -223,8 +244,23 @@ impl StompPeer {
     /// Panics if the socket cannot be opened or the first frame is not
     /// CONNECTED.
     pub async fn connect(addr: SocketAddr) -> Self {
-        let mut stream = TcpStream::connect(addr).await.unwrap();
+        let stream = TcpStream::connect(addr).await.unwrap();
         stream.set_nodelay(true).ok();
+        Self::handshake(MaybeTlsStream::Plain(stream)).await
+    }
+
+    /// As [`Self::connect`], negotiating TLS per `tls` before CONNECT.
+    ///
+    /// Panics if the socket cannot be opened, the TLS handshake fails, or
+    /// the first frame after CONNECT is not CONNECTED.
+    pub async fn connect_tls(addr: SocketAddr, tls: &ClientTls) -> Self {
+        let stream = TcpStream::connect(addr).await.unwrap();
+        stream.set_nodelay(true).ok();
+        let stream = tls.connect(stream).await.expect("tls handshake");
+        Self::handshake(stream).await
+    }
+
+    async fn handshake(mut stream: MaybeTlsStream<TcpStream>) -> Self {
         let connect = Frame::new("CONNECT")
             .with_header("accept-version", "1.2")
             .with_header("host", "/")
@@ -294,16 +330,28 @@ pub async fn start_stomp_adapter(
     topics: Vec<String>,
     settle: Duration,
 ) -> CancellationToken {
+    start_stomp_adapter_with(engine, id, broker, topics, settle, |_| {}).await
+}
+
+/// As [`start_stomp_adapter`], with the config open for editing first —
+/// for example to set [`StompConfig::tls`].
+pub async fn start_stomp_adapter_with(
+    engine: Arc<Engine>,
+    id: impl Into<String>,
+    broker: SocketAddr,
+    topics: Vec<String>,
+    settle: Duration,
+    edit: impl FnOnce(&mut StompConfig),
+) -> CancellationToken {
     let shutdown = CancellationToken::new();
-    let adapter = Arc::new(StompAdapter::new(
-        id.into(),
-        StompConfig {
-            broker,
-            topics,
-            reconnect: false,
-            ..StompConfig::default()
-        },
-    ));
+    let mut config = StompConfig {
+        broker,
+        topics,
+        reconnect: false,
+        ..StompConfig::default()
+    };
+    edit(&mut config);
+    let adapter = Arc::new(StompAdapter::new(id.into(), config));
     let (ready_tx, ready_rx) = oneshot::channel();
     let token = shutdown.clone();
     tokio::spawn(async move {
