@@ -6,7 +6,16 @@
 [advisories]
 # RustSec advisories fail the check. Anything tolerated belongs here with a
 # reason and the condition for removing it again, not as a silenced category.
-ignore = []
+ignore = [
+    # time's RFC 2822 parser can exhaust the stack on malicious input, fixed
+    # in 0.3.47 — which needs rustc 1.88, past this workspace's 1.85 pin.
+    # Reaches the tree only as a dev-dependency of rcgen (self-signed test
+    # certificates for oa-gateway-adapter's and oa-gateway-testing's TLS
+    # tests); nothing here parses RFC 2822, let alone attacker-controlled
+    # RFC 2822. Drop this once the toolchain pin moves to 1.88+ and `cargo
+    # update -p time` picks up a patched release on its own.
+    "RUSTSEC-2026-0009",
+]
 yanked = "deny"
 # Only report unmaintained crates we chose ourselves. Transitive ones are not
 # ours to swap, and failing on them turns an upstream decision into our outage.
@@ -22,6 +31,10 @@ allow = [
     "Apache-2.0 WITH LLVM-exception",
     "BSD-3-Clause",
     "Unicode-3.0",
+    # rustls-webpki and untrusted (rustls's certificate verification, used
+    # regardless of crypto provider) and ring itself are ISC, "AND" other
+    # terms rather than "OR" — ISC has to be allowed outright.
+    "ISC",
 ]
 # No copyleft license is listed, and none is needed. The crates that offer one
 # offer a permissive alternative too — r-efi is MIT or Apache-2.0 or
