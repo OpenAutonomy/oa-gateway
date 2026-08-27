@@ -1041,6 +1041,7 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "futures-util",
+ "oa-gateway-adapter",
  "oa-gateway-agra",
  "oa-gateway-core",
  "oa-gateway-dds",
@@ -1048,6 +1049,7 @@ dependencies = [
  "oa-gateway-owp",
  "oa-gateway-stomp",
  "oa-gateway-uci",
+ "rcgen",
  "serde_json",
  "tokio",
  "tokio-tungstenite",
@@ -1845,7 +1847,11 @@ checksum = "17a073bfed563fa236697a068031408a93cd9522e08abf9933ead3e73411bd71"
 dependencies = [
  "futures-util",
  "log",
+ "rustls",
+ "rustls-native-certs",
+ "rustls-pki-types",
  "tokio",
+ "tokio-rustls",
  "tungstenite",
 ]
 
@@ -1975,6 +1981,8 @@ dependencies = [
  "httparse",
  "log",
  "rand 0.10.2",
+ "rustls",
+ "rustls-pki-types",
  "sha1",
  "thiserror 2.0.20",
 ]

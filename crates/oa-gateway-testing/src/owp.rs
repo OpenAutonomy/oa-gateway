@@ -16,8 +16,10 @@ use tokio::net::TcpListener;
 use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::WebSocketStream;
+use tokio_tungstenite::{Connector, WebSocketStream};
 use tokio_util::sync::CancellationToken;
+
+use crate::tls::TestCerts;
 
 /// Client WebSocket after the `owp` subprotocol handshake.
 pub type OwpWs = WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
@@ -82,6 +84,42 @@ pub async fn start_owp_with_schema(
     (format!("ws://{addr}/"), shutdown)
 }
 
+/// As [`start_owp_with`], but the listener terminates TLS with `certs`.
+///
+/// Returns a `wss://127.0.0.1:{port}/` URL; connect to it with
+/// [`connect_tls`].
+pub async fn start_owp_tls_with(
+    engine: Arc<Engine>,
+    certs: &TestCerts,
+    edit: impl FnOnce(&mut OwpConfig),
+) -> (String, CancellationToken) {
+    let tls = crate::tls::server_tls(certs);
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let shutdown = CancellationToken::new();
+
+    let mut config = OwpConfig {
+        bind: addr,
+        server_id: "oa-gateway-test".into(),
+        system_label: "test".into(),
+        schema: Some("002.5.0".into()),
+        system_uuid: "11111111-1111-4111-8111-111111111111".into(),
+        ..OwpConfig::default()
+    };
+    edit(&mut config);
+
+    let adapter = Arc::new(
+        OwpAdapter::new("owp-test", config)
+            .with_schema(Arc::new(oa_gateway_uci::slice::v25().clone()))
+            .with_tls(tls),
+    );
+    let token = shutdown.clone();
+    tokio::spawn(async move {
+        adapter.serve(listener, engine, token).await.unwrap();
+    });
+    (format!("wss://{addr}/"), shutdown)
+}
+
 /// Opens a WebSocket to `url` with `Sec-WebSocket-Protocol: owp`.
 ///
 /// Panics if the handshake fails. The adapter refuses a socket that
@@ -92,6 +130,29 @@ pub async fn connect(url: &str) -> OwpWs {
         .insert("Sec-WebSocket-Protocol", "owp".parse().unwrap());
     let (ws, _) = tokio_tungstenite::connect_async(req).await.unwrap();
     ws
+}
+
+/// As [`connect`], for a `wss://` URL from [`start_owp_tls_with`], trusting
+/// the peer's certificate per `client_tls`.
+///
+/// Returns an error rather than panicking on a failed TLS handshake, since
+/// tests assert on that failure (an untrusted certificate, a plaintext
+/// client against a TLS listener).
+///
+/// # Errors
+///
+/// Returns the underlying tungstenite/TLS error if the handshake fails.
+pub async fn connect_tls(
+    url: &str,
+    client_tls: oa_gateway_adapter::tls::ClientTls,
+) -> Result<OwpWs, tokio_tungstenite::tungstenite::Error> {
+    let mut req = url.into_client_request().unwrap();
+    req.headers_mut()
+        .insert("Sec-WebSocket-Protocol", "owp".parse().unwrap());
+    let connector = Connector::Rustls(client_tls.config());
+    let (ws, _) =
+        tokio_tungstenite::connect_async_tls_with_config(req, None, false, Some(connector)).await?;
+    Ok(ws)
 }
 
 /// Sends one OWP text frame. Panics if the socket is closed.
