@@ -64,7 +64,7 @@ This build talks to another rustdds participant, including a second OA-Gateway p
 
 ## Limits
 
-- **The gateway does not terminate TLS and does not authenticate its own peers.** DDS Security is not configured. Keep participants on a trusted segment. [SECURITY.md](../SECURITY.md) states the assumptions.
+- **DDS traffic is not encrypted and peers are not authenticated.** RTPS runs on UDP, so the TLS available to the OWP adapter does not apply here; the DDS equivalent is DDS Security, which this build does not configure. Keep participants on a trusted segment. [SECURITY.md](../SECURITY.md) states the assumptions.
 - **One QoS profile applies to every topic** the adapter creates. There is no per-topic override in the TOML.
 - **Volatile durability** means a write before discovery is lost. A peer that joins late will not see earlier samples unless the QoS file uses `TRANSIENT_LOCAL`.
 - **No native UCI IDL catalog.** Inner messages stay bytes inside `MaDataPayload.encoded`.

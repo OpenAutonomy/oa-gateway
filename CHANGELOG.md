@@ -22,6 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - DDS now checks inbound samples against `[uci].schema` and `[uci].validate`
   the same way OWP traffic is checked. `reject` drops a non-conforming
   sample and logs it; DDS has no peer connection to answer with an error.
+- `owp.tls_cert`, `owp.tls_key`: the OWP listener terminates TLS when both
+  are set, so a client connects with `wss://` instead of needing a reverse
+  proxy in front. Encryption and server identity only — clients are still
+  not authenticated. Unset by default, and an unset pair leaves the
+  listener byte-for-byte as it was.
 
 ### Fixed
 

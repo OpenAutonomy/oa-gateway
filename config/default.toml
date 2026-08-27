@@ -1,4 +1,4 @@
-# Prototype host config. No TLS and no authentication — bind loopback only.
+# Prototype host config. No authentication; TLS not configured — bind loopback only.
 
 # How often the host logs engine published/delivered/dropped. 0 disables.
 # [engine]

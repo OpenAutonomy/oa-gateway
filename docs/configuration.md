@@ -8,7 +8,7 @@ The host takes one TOML file as its only argument. Every section in that file is
 
 Paths in the file are relative to the process working directory, normally the repository root. Hostnames (`owp.bind`, `stomp.broker`) are resolved once at startup. A name that does not resolve fails then, not later in a retry loop.
 
-The gateway does not terminate TLS and does not authenticate its own peers. Bind loopback, or keep both ends on a trusted segment. [SECURITY.md](../SECURITY.md) states the assumptions.
+TLS is off unless configured. `owp.tls_cert` / `owp.tls_key` make the OWP listener serve `wss://`; nothing else in this build has TLS yet. Either way the gateway does not authenticate its peers — a TLS connection is encrypted, not trusted. Bind loopback, or keep both ends on a trusted segment. [SECURITY.md](../SECURITY.md) states the assumptions.
 
 ## Shipped files
 
@@ -58,6 +58,8 @@ OWP is the WebSocket server. It is off unless this table is in the file.
 | `enabled` | on when the section is present | `false` keeps the keys without starting the adapter. |
 | `id` | `"owp"` | Engine adapter id. One id covers every WebSocket; it is not a per-connection name. |
 | `bind` | `"127.0.0.1:9000"` | Listen address, `host:port`. |
+| `tls_cert` | `""` | PEM certificate chain served to clients, leaf certificate first. Empty leaves the listener plaintext. Requires `tls_key`; setting one without the other is a startup error. |
+| `tls_key` | `""` | PEM private key for `tls_cert`, in PKCS#8, PKCS#1, or SEC1 form. Empty leaves the listener plaintext. |
 | `server_id` | `"oa-gateway-0"` | Identity sent on INIT. |
 | `system_label` | `"OA-Gateway Prototype"` | Human-readable label sent on INIT. |
 | `schema` | `"002.5.0"` | Protocol version string a client INIT must match exactly. This is not `[uci].schema`. Empty disables the check. |
@@ -71,6 +73,8 @@ OWP is the WebSocket server. It is off unless this table is in the file.
 | `on_panic` | `"abort"` | `"abort"` ends the adapter when the accept loop panics; `"reconnect"` treats the panic as a failed session and then follows `reconnect`. A typo is refused as `owp.on_panic: …`. |
 
 A client is not authenticated, so these three limits isolate one peer from the memory of the others. The subscription default is larger than the UCI catalog, so a client can still subscribe to every message type in the standard.
+
+With `tls_cert` and `tls_key` set, the listener speaks `wss://` and nothing else; a plaintext client is refused at the handshake. Clients are still not authenticated — TLS proves the server's identity to them, not theirs to it. Mutual TLS is not implemented.
 
 ## `[stomp]`
 

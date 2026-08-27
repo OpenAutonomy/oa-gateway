@@ -11,18 +11,30 @@ Fixes land on `main`; there is no backport branch to wait for.
 ## What this software assumes
 
 OA-Gateway is a prototype, and its security posture is the honest consequence of
-that: **there is no authentication, no authorization, and no in-process TLS.**
-Any peer that can open a connection to an adapter port can publish under any
-service identity, subscribe to any topic, and be believed. Nothing is encrypted
-in transit, and nothing verifies that the broker on the other end is the broker
-you meant.
+that: **there is no authentication and no authorization.** Any peer that can
+open a connection to an adapter port can publish under any service identity,
+subscribe to any topic, and be believed.
 
-Bind loopback, or put a reverse proxy in front that terminates TLS and
-authentication. The host-oriented configs in `config/` bind to loopback for this
-reason. A compose launch mounts whatever path you pass in `OAG_CONFIG`;
-`config/compose.toml` listens on all interfaces inside the container so Docker
-can publish the port, and the compose file still maps that port to `127.0.0.1`
-on the host.
+TLS is available on the OWP listener, and off by default. `owp.tls_cert` and
+`owp.tls_key` make it terminate TLS, so a client connects with `wss://`
+instead of plaintext `ws://`; unset (the default), the listener is exactly
+what it always was. Encryption is not authentication: a peer that completes a
+TLS handshake is still believed about who it is and what it may do, the same
+as a plaintext one. STOMP and DDS have no TLS yet — the STOMP client's
+connection to the broker is still fully plaintext and unverified, credentials
+included, and nothing verifies that the broker on the other end is the broker
+you meant. DDS's RTPS transport is UDP, not a TCP stream, so the TLS available
+to OWP could never apply to it as-is; DDS Security is the separate standard
+for that, and this build does not configure it.
+
+Bind loopback, or put a reverse proxy in front that authenticates callers.
+In-process TLS covers encryption and proves the gateway's identity to a
+client; it does not prove the client's identity to the gateway, and it does
+not decide what a connected peer may do. The host-oriented configs in
+`config/` bind to loopback for this reason. A compose launch mounts whatever
+path you pass in `OAG_CONFIG`; `config/compose.toml` listens on all interfaces
+inside the container so Docker can publish the port, and the compose file
+still maps that port to `127.0.0.1` on the host.
 
 That assumption is what makes the rest of this document coherent. A finding is
 interesting here if it lets a peer do something the posture above does *not*
