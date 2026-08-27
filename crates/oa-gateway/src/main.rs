@@ -10,6 +10,7 @@ mod cli;
 mod config;
 mod schema;
 mod serve;
+mod tls;
 
 use cli::{parse_args, Cli, USAGE};
 use serve::serve;

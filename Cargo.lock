@@ -899,6 +899,7 @@ dependencies = [
  "oa-gateway-owp",
  "oa-gateway-stomp",
  "oa-gateway-uci",
+ "rcgen",
  "serde",
  "tokio",
  "tokio-util",
