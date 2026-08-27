@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 use std::time::Duration;
 
+use oa_gateway_adapter::tls::ClientTls;
 use oa_gateway_adapter::OnPanic;
 
 use crate::codec::DEFAULT_MAX_FRAME_SIZE;
@@ -46,6 +47,9 @@ pub struct StompConfig {
     /// Largest frame accepted from the broker. Bounds the read buffer
     /// and the `content-length` a peer can claim.
     pub max_frame_size: usize,
+    /// Wrap the broker connection in TLS. `None` dials plaintext, which
+    /// is the default.
+    pub tls: Option<ClientTls>,
 }
 
 impl Default for StompConfig {
@@ -68,6 +72,7 @@ impl Default for StompConfig {
             suppress_echo: true,
             on_panic: OnPanic::Abort,
             max_frame_size: DEFAULT_MAX_FRAME_SIZE,
+            tls: None,
         }
     }
 }
