@@ -75,6 +75,8 @@ use tokio_util::sync::CancellationToken;
 mod supervise;
 pub use supervise::{after_join, AfterSession, OnPanic};
 
+pub mod tls;
+
 /// Fatal failure of one adapter. The host logs it and leaves the others running.
 ///
 /// This is not a per-message error. A bad payload is handled inside `run`
