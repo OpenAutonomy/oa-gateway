@@ -8,7 +8,7 @@ The host takes one TOML file as its only argument. Every section in that file is
 
 Paths in the file are relative to the process working directory, normally the repository root. Hostnames (`owp.bind`, `stomp.broker`) are resolved once at startup. A name that does not resolve fails then, not later in a retry loop.
 
-TLS is off unless configured. `owp.tls_cert` / `owp.tls_key` make the OWP listener serve `wss://`; nothing else in this build has TLS yet. Either way the gateway does not authenticate its peers — a TLS connection is encrypted, not trusted. Bind loopback, or keep both ends on a trusted segment. [SECURITY.md](../SECURITY.md) states the assumptions.
+TLS is off unless configured. `owp.tls_cert` / `owp.tls_key` make the OWP listener serve `wss://`; `stomp.tls` makes the STOMP client dial the broker over TLS instead of plaintext. DDS has neither — its transport is UDP, not a TCP stream. Either way the gateway does not authenticate its peers — a TLS connection is encrypted, not trusted. Bind loopback, or keep both ends on a trusted segment. [SECURITY.md](../SECURITY.md) states the assumptions.
 
 ## Shipped files
 
@@ -85,7 +85,7 @@ STOMP is a client toward an ActiveMQ or other broker. It is off unless this tabl
 | `enabled` | on when the section is present | `false` keeps the keys without starting the adapter. |
 | `id` | `"stomp"` | Engine adapter id. |
 | `broker` | `"127.0.0.1:61613"` | Broker address, `host:port`. |
-| `host` | `"/"` | STOMP `host` header. ActiveMQ Classic typically wants `"/"`. |
+| `host` | `"/"` | STOMP `host` header. ActiveMQ Classic typically wants `"/"`. This is not `tls_server_name` — it is a protocol header, not a hostname. |
 | `login` | `""` | CONNECT login. Empty omits the header instead of sending a blank. |
 | `passcode` | `""` | CONNECT passcode. Empty omits the header. Sent only when `login` is set. |
 | `destination_prefix` | `"/topic/"` | Prepended to each topic to form a STOMP destination. |
@@ -93,12 +93,15 @@ STOMP is a client toward an ActiveMQ or other broker. It is off unless this tabl
 | `unwrap_ma_payloads` | `true` | Peel A-GRA Rx/Tx hex wrappers on inbound MESSAGE and publish the wrapper and the inner message. |
 | `reconnect` | `true` | Retry the broker after a dropped session. |
 | `reconnect_delay_secs` | `1` | Seconds to wait between reconnect attempts. |
-| `connect_timeout_secs` | `5` | Seconds for TCP connect and for the CONNECTED wait, each. |
+| `connect_timeout_secs` | `5` | Seconds for TCP connect, the TLS handshake when `tls` is set, and the CONNECTED wait, each. |
 | `suppress_echo` | `true` | Skip outbound SEND when the envelope came from this adapter, so a message does not loop between the gateway and the broker. |
 | `on_panic` | `"abort"` | `"abort"` ends the adapter when a session task panics; `"reconnect"` treats the panic as a failed session and then follows `reconnect`. A typo is refused as `stomp.on_panic: …`. |
 | `max_frame_size` | `16777216` | Largest frame accepted from the broker, in bytes. It bounds both the read buffer and the `content-length` a peer can claim. |
+| `tls` | `false` | Wrap the broker connection in TLS. ActiveMQ Classic's SSL transport connector conventionally listens on `61612`, not `61613`. |
+| `tls_ca` | `""` | PEM bundle of the certificate authorities the broker's certificate must chain to. Empty uses the operating system trust store, which is where an organizational CA normally lives. |
+| `tls_server_name` | `""` | Name checked against the broker's certificate. Empty uses the host part of `broker`; a bare IP address there requires an IP SAN in the certificate, which most do not have. |
 
-`login` and `passcode` are the broker's credentials and are sent in the clear.
+`login` and `passcode` are the broker's credentials. They are sent in the clear unless `tls` is on, which is the reason to turn it on.
 
 ## `[dds]`
 
