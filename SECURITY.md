@@ -15,17 +15,19 @@ that: **there is no authentication and no authorization.** Any peer that can
 open a connection to an adapter port can publish under any service identity,
 subscribe to any topic, and be believed.
 
-TLS is available on the OWP listener, and off by default. `owp.tls_cert` and
-`owp.tls_key` make it terminate TLS, so a client connects with `wss://`
-instead of plaintext `ws://`; unset (the default), the listener is exactly
-what it always was. Encryption is not authentication: a peer that completes a
-TLS handshake is still believed about who it is and what it may do, the same
-as a plaintext one. STOMP and DDS have no TLS yet — the STOMP client's
-connection to the broker is still fully plaintext and unverified, credentials
-included, and nothing verifies that the broker on the other end is the broker
-you meant. DDS's RTPS transport is UDP, not a TCP stream, so the TLS available
-to OWP could never apply to it as-is; DDS Security is the separate standard
-for that, and this build does not configure it.
+TLS is available on OWP and STOMP, and off by default on both. `owp.tls_cert`
+and `owp.tls_key` make the OWP listener terminate TLS, so a client connects
+with `wss://` instead of plaintext `ws://`. `stomp.tls` makes the STOMP client
+dial the broker over TLS instead of plaintext, verifying the broker's
+certificate against `stomp.tls_ca` or the operating system trust store.
+Unset (the default for both), each is exactly what it always was. Encryption
+is not authentication: a peer or broker that completes a TLS handshake is
+still believed about who it is and what it may do, the same as a plaintext
+one — and `login`/`passcode` remain what authenticates the gateway to the
+broker, not the TLS handshake itself. DDS has no TLS — its RTPS transport is
+UDP, not a TCP stream, so the TLS available to OWP and STOMP could never
+apply to it as-is; DDS Security is the separate standard for that, and this
+build does not configure it.
 
 Bind loopback, or put a reverse proxy in front that authenticates callers.
 In-process TLS covers encryption and proves the gateway's identity to a

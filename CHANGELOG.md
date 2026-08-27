@@ -27,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   proxy in front. Encryption and server identity only — clients are still
   not authenticated. Unset by default, and an unset pair leaves the
   listener byte-for-byte as it was.
+- `stomp.tls`, `stomp.tls_ca`, `stomp.tls_server_name`: the STOMP client can
+  dial a broker over TLS, so `login` and `passcode` no longer have to cross
+  in the clear. The broker's certificate is verified against `tls_ca`, or
+  the operating system trust store when that is empty. Off by default.
 
 ### Fixed
 

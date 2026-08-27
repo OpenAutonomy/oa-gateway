@@ -60,7 +60,7 @@ WARN nothing is subscribed to this route, so the publish went nowhere route=Foo 
 
 ## Limits
 
-- **The gateway does not terminate TLS and does not authenticate its own peers.** `login` and `passcode` are the broker's credentials and are sent in the clear. Keep both ends on loopback or a trusted segment. [SECURITY.md](../SECURITY.md) states the assumptions.
+- **Set `stomp.tls` before sending credentials off a trusted segment.** Without it, `login` and `passcode` cross in the clear. ActiveMQ Classic's SSL transport connector conventionally listens on `61612`; point `broker` there and set `tls = true`. TLS verifies the broker's certificate — it does not authenticate the gateway to the broker, which is what `login` and `passcode` are for, and the gateway still does not authenticate its own peers. [SECURITY.md](../SECURITY.md) states the assumptions.
 - **Heartbeats are off.** The gateway negotiates `heart-beat: 0,0`, so a dead TCP connection is noticed when a write fails rather than on a timer. A broker that requires heartbeats needs a change in `crates/oa-gateway-stomp/src/client.rs`.
-- **Connect waits `connect_timeout_secs` (default 5) for TCP and for CONNECTED, each.**
+- **Connect waits `connect_timeout_secs` (default 5) for TCP, for the TLS handshake when `tls` is set, and for CONNECTED, each.**
 - **Echo is suppressed when `suppress_echo` is true (the default).** Inbound MESSAGE is stamped `oag.origin_adapter`. Outbound SEND skips that id so a message does not loop between the gateway and the broker.

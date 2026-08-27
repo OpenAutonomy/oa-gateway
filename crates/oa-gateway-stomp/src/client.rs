@@ -3,17 +3,20 @@
 //! Heartbeats are advertised as `0,0` (none). This crate does not send
 //! or expect them. `ack:auto` means the broker does not wait for ACK.
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
+use oa_gateway_adapter::tls::MaybeTlsStream;
+use tokio::io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
 
 use crate::codec::{decode_one_with_limit, CodecError, Frame};
 use crate::config::StompConfig;
 
+/// The socket a STOMP session runs over, TLS or not.
+type Stream = MaybeTlsStream<TcpStream>;
+
 /// Write half of a connected STOMP socket.
 pub struct FrameWriter {
-    write: OwnedWriteHalf,
+    write: WriteHalf<Stream>,
 }
 
 impl FrameWriter {
@@ -35,7 +38,7 @@ impl FrameWriter {
 /// [`decode_one_with_limit`] can take one frame. The cap is
 /// [`StompConfig::max_frame_size`].
 pub struct FrameReader {
-    read: OwnedReadHalf,
+    read: ReadHalf<Stream>,
     buf: Vec<u8>,
     max_frame_size: usize,
 }
@@ -62,16 +65,19 @@ impl FrameReader {
     }
 }
 
-/// Opens TCP, sends CONNECT, and waits for CONNECTED.
+/// Opens TCP, optionally negotiates TLS, sends CONNECT, and waits for
+/// CONNECTED.
 ///
-/// TCP and CONNECTED each use [`StompConfig::connect_timeout`]. `login`
-/// is omitted when unset; `passcode` is sent only when `login` is set.
-/// Nagle is disabled when the socket allows it.
+/// TCP, the TLS handshake when [`StompConfig::tls`] is set, and CONNECTED
+/// each use [`StompConfig::connect_timeout`]. `login` is omitted when
+/// unset; `passcode` is sent only when `login` is set. Nagle is disabled
+/// when the socket allows it.
 ///
 /// # Errors
 ///
-/// Returns [`CodecError::Io`] on timeout, a refused connect, a broker
-/// ERROR, a close before CONNECTED, or any other first frame.
+/// Returns [`CodecError::Io`] on timeout, a refused connect, a failed TLS
+/// handshake, a broker ERROR, a close before CONNECTED, or any other
+/// first frame.
 pub async fn connect(config: &StompConfig) -> Result<(FrameReader, FrameWriter), CodecError> {
     let stream = timeout(config.connect_timeout, TcpStream::connect(config.broker))
         .await
@@ -79,7 +85,17 @@ pub async fn connect(config: &StompConfig) -> Result<(FrameReader, FrameWriter),
         .map_err(CodecError::from)?;
     stream.set_nodelay(true).ok();
 
-    let (read, write) = stream.into_split();
+    let stream: Stream = match &config.tls {
+        Some(tls) => timeout(config.connect_timeout, tls.connect(stream))
+            .await
+            .map_err(|_| CodecError::Io(format!("tls handshake timed out ({})", config.broker)))?
+            .map_err(|err| {
+                CodecError::Io(format!("tls handshake failed ({}): {err}", config.broker))
+            })?,
+        None => MaybeTlsStream::Plain(stream),
+    };
+
+    let (read, write) = tokio::io::split(stream);
     let mut reader = FrameReader {
         read,
         buf: Vec::new(),

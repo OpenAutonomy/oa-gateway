@@ -34,7 +34,7 @@ Start the process with a configuration file. The host starts an adapter for each
 ./target/release/oa-gateway config/default.toml
 ```
 
-There is no authentication or authorization. TLS is available on the OWP listener and off by default. Bind loopback, as `config/default.toml` does, or put a reverse proxy in front. See [SECURITY.md](SECURITY.md).
+There is no authentication or authorization. TLS is available on the OWP listener and the STOMP client, off by default on both. Bind loopback, as `config/default.toml` does, or put a reverse proxy in front. See [SECURITY.md](SECURITY.md).
 
 In another terminal, send one message through the engine:
 

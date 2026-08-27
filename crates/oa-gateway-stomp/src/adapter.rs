@@ -183,6 +183,7 @@ impl StompAdapter {
             adapter = %self.id,
             broker = %self.config.broker,
             topics = ?self.config.topics,
+            tls = self.config.tls.is_some(),
             "stomp connected"
         );
         if let Some(tx) = ready {
