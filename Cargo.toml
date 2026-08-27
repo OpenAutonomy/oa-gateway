@@ -32,7 +32,7 @@ futures-util = "0.3"
 regex = { version = "1", default-features = false, features = ["std", "unicode"] }
 roxmltree = "0.21"
 rcgen = { version = "0.13", default-features = false, features = ["crypto", "ring", "pem"] }
-rustdds = "0.11"
+rustdds = "0.14"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 rustls-native-certs = "0.8"
 rustls-pki-types = "1"
