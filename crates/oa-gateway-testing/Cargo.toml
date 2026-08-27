@@ -12,6 +12,7 @@ default = ["harness"]
 harness = [
     "dep:bytes",
     "dep:futures-util",
+    "dep:oa-gateway-adapter",
     "dep:oa-gateway-agra",
     "dep:oa-gateway-core",
     "dep:oa-gateway-loopback",
@@ -19,6 +20,7 @@ harness = [
     "dep:oa-gateway-stomp",
     "dep:oa-gateway-dds",
     "dep:oa-gateway-uci",
+    "dep:rcgen",
     "dep:tokio",
     "dep:tokio-tungstenite",
     "dep:tokio-util",
@@ -27,6 +29,7 @@ harness = [
 [dependencies]
 bytes = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }
+oa-gateway-adapter = { workspace = true, optional = true }
 oa-gateway-agra = { workspace = true, optional = true }
 oa-gateway-core = { workspace = true, optional = true }
 oa-gateway-loopback = { workspace = true, optional = true }
@@ -34,12 +37,14 @@ oa-gateway-owp = { workspace = true, optional = true }
 oa-gateway-stomp = { workspace = true, optional = true }
 oa-gateway-dds = { workspace = true, optional = true }
 oa-gateway-uci = { workspace = true, optional = true }
+rcgen = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
-tokio-tungstenite = { workspace = true, optional = true }
+tokio-tungstenite = { workspace = true, optional = true, features = ["rustls-tls-native-roots"] }
 tokio-util = { workspace = true, optional = true }
 
 [dev-dependencies]
 bytes.workspace = true
+oa-gateway-adapter.workspace = true
 oa-gateway-agra.workspace = true
 oa-gateway-core.workspace = true
 oa-gateway-loopback.workspace = true
@@ -47,5 +52,6 @@ oa-gateway-owp.workspace = true
 oa-gateway-stomp.workspace = true
 oa-gateway-dds.workspace = true
 oa-gateway-uci.workspace = true
+rcgen.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["full", "test-util"] }

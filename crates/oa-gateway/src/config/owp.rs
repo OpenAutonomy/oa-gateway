@@ -45,6 +45,16 @@ pub(crate) struct OwpSection {
     /// XML. Requires `[uci].schema`. Defaults to `false`.
     #[serde(default)]
     pub(crate) xml_baseline: bool,
+    /// PEM certificate chain served to clients, leaf certificate first.
+    /// Empty (the default) leaves the listener plaintext. Requires
+    /// `tls_key`; setting one without the other is a startup error.
+    #[serde(default)]
+    pub(crate) tls_cert: String,
+    /// PEM private key for `tls_cert`, in PKCS#8, PKCS#1, or SEC1 form.
+    /// Empty (the default) leaves the listener plaintext. Requires
+    /// `tls_cert`.
+    #[serde(default)]
+    pub(crate) tls_key: String,
     /// Largest frame accepted from a client, in bytes. Oversized frames
     /// end that session. Defaults to the adapter crate's limit.
     #[serde(default = "default_owp_max_frame_size")]
@@ -81,6 +91,8 @@ impl Default for OwpSection {
             schema: default_schema(),
             unwrap_ma_payloads: true,
             xml_baseline: false,
+            tls_cert: String::new(),
+            tls_key: String::new(),
             max_frame_size: default_owp_max_frame_size(),
             max_connections: default_owp_max_connections(),
             max_subscriptions: default_owp_max_subscriptions(),

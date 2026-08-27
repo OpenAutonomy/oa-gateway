@@ -31,11 +31,16 @@ hex = "0.4"
 futures-util = "0.3"
 regex = { version = "1", default-features = false, features = ["std", "unicode"] }
 roxmltree = "0.21"
+rcgen = { version = "0.13", default-features = false, features = ["crypto", "ring", "pem"] }
 rustdds = "0.11"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+rustls-native-certs = "0.8"
+rustls-pki-types = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12", "logging"] }
 tokio-tungstenite = "0.30"
 tokio-util = { version = "0.7", features = ["rt"] }
 toml = "1.1"

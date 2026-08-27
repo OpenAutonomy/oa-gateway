@@ -19,4 +19,6 @@ pub mod owp;
 #[cfg(feature = "harness")]
 pub mod stomp;
 #[cfg(feature = "harness")]
+pub mod tls;
+#[cfg(feature = "harness")]
 pub mod util;

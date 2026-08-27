@@ -16,6 +16,7 @@ use tracing::{info, warn};
 use crate::adapters;
 use crate::config;
 use crate::schema;
+use crate::tls;
 
 /// Loads `config_path`, starts the enabled adapters, and blocks until Ctrl-C.
 ///
@@ -40,19 +41,28 @@ pub(crate) async fn serve(config_path: &Path) -> Result<(), String> {
 
     let config = config::load(config_path)?;
 
-    // Compile the schema before anything starts listening, for the same reason
-    // addresses are resolved up front: a bad input should fail cleanly rather
-    // than after adapters are already accepting traffic.
+    // Compile the schema and read any TLS material before anything starts
+    // listening, for the same reason addresses are resolved up front: a bad
+    // input should fail cleanly rather than after adapters are already
+    // accepting traffic.
     let schema = schema::load(&config)?;
     let validate = config.uci.validate_mode()?;
     if schema.is_some() {
         info!(mode = %validate, "schema validation");
     }
+    let host_tls = tls::load(&config)?;
 
     let engine = Arc::new(Engine::new());
     let shutdown = CancellationToken::new();
-    let mut handles =
-        adapters::start(&config, engine.clone(), schema, validate, shutdown.clone()).await?;
+    let mut handles = adapters::start(
+        &config,
+        engine.clone(),
+        schema,
+        validate,
+        host_tls,
+        shutdown.clone(),
+    )
+    .await?;
     if let Some(ticker) = stats_ticker(
         Arc::clone(&engine),
         config.engine.stats_interval_secs,

@@ -18,6 +18,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::addr::resolve_addr;
 use crate::config::Config;
+use crate::tls::HostTls;
 
 /// Resolves every listen/connect address, then spawns the adapters that are on.
 ///
@@ -39,6 +40,7 @@ pub(crate) async fn start(
     engine: Arc<Engine>,
     schema: Option<Arc<Schema>>,
     validate: ValidateMode,
+    tls: HostTls,
     shutdown: CancellationToken,
 ) -> Result<Vec<JoinHandle<()>>, String> {
     let owp_bind = if config.owp.enabled {
@@ -68,6 +70,7 @@ pub(crate) async fn start(
             bind,
             schema.as_ref(),
             validate,
+            tls.owp,
             Arc::clone(&engine),
             shutdown.clone(),
         )?);

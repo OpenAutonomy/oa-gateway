@@ -143,6 +143,8 @@ Inbound MESSAGE frames are stamped with `oag.origin_adapter`. When `suppress_ech
 
 Conversion (JSON ↔ XML) runs only in OWP. Validation runs in OWP and DDS; the host hands `[uci].schema` and `validate` to both. STOMP forwards bytes to ActiveMQ; Java CAL peers already speak XML on that bus. With `xml_baseline`, the WebSocket side is OMS JSON while the engine and the broker see UCI XML.
 
+TLS terminates at the socket, in the adapter, and is opt-in per adapter. OWP terminates it as a server when `owp.tls_cert`/`owp.tls_key` are set; nothing else in this build originates or terminates it yet. Neither the engine nor the codecs ever see a wrapped stream: `oa-gateway-adapter`'s `MaybeTlsStream` is what OWP's `Session` holds instead of a bare `TcpStream`, and its plaintext variant is exactly what a deployment with no certificate configured uses. DDS is not a candidate for this — RTPS runs on UDP, not a TCP stream — so its equivalent is DDS Security, which this build does not configure.
+
 ## Host
 
 The binary owns process lifetime. It does not implement a protocol.
@@ -170,7 +172,7 @@ If `run` returns `Err`, that adapter is down. The host logs the error and leaves
 - **The core does not parse payloads and does not name a protocol.** Logic that depends on the meaning of the bytes belongs in an adapter or a codec crate.
 - **Adapters do not call each other.** They share an `Engine`, which is what makes them independently testable and removable.
 - **Echo suppression is the bridging adapter's responsibility.** A new bus adapter must stamp origin and skip its own id the same way STOMP does. The engine will not do it.
-- **The gateway does not terminate TLS and does not authenticate its own peers.** OWP frame, connection, and subscription limits are what isolate one client from the others. [SECURITY.md](../SECURITY.md) states the assumptions.
+- **The gateway can terminate TLS but does not authenticate its own peers.** TLS covers encryption and proving the gateway's identity to a peer, nothing about the peer's identity or what it may do — OWP frame, connection, and subscription limits are still what isolate one client from the others. [SECURITY.md](../SECURITY.md) states the assumptions.
 
 ## Further reading
 

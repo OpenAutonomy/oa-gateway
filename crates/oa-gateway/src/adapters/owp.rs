@@ -7,6 +7,7 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use oa_gateway_adapter::tls::ServerTls;
 use oa_gateway_adapter::Adapter;
 use oa_gateway_core::Engine;
 use oa_gateway_owp::{OwpAdapter, OwpConfig};
@@ -37,6 +38,7 @@ pub(crate) fn start(
     bind: SocketAddr,
     schema: Option<&Arc<Schema>>,
     validate: ValidateMode,
+    tls: Option<ServerTls>,
     engine: Arc<Engine>,
     shutdown: CancellationToken,
 ) -> Result<JoinHandle<()>, String> {
@@ -66,8 +68,12 @@ pub(crate) fn start(
     if let Some(schema) = schema {
         adapter = adapter.with_schema(Arc::clone(schema));
     }
+    let tls_on = tls.is_some();
+    if let Some(tls) = tls {
+        adapter = adapter.with_tls(tls);
+    }
     let adapter = Arc::new(adapter);
-    info!(id = %adapter.id(), bind = %bind, "starting owp adapter");
+    info!(id = %adapter.id(), bind = %bind, tls = tls_on, "starting owp adapter");
     Ok(tokio::spawn(async move {
         if let Err(err) = adapter.run(engine, shutdown).await {
             error!(error = %err, "owp adapter failed");

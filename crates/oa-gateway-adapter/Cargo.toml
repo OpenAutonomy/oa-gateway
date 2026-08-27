@@ -10,7 +10,14 @@ description = "Adapter trait for multi-protocol gateway protocol plugins"
 [dependencies]
 async-trait.workspace = true
 oa-gateway-core.workspace = true
+rustls.workspace = true
+rustls-native-certs.workspace = true
+rustls-pki-types.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+tokio-rustls.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
+
+[dev-dependencies]
+rcgen.workspace = true
