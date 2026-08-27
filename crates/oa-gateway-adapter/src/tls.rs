@@ -127,7 +127,7 @@ impl ServerTls {
 /// certificate.
 #[derive(Clone)]
 pub struct ClientTls {
-    connector: TlsConnector,
+    config: Arc<ClientConfig>,
     server_name: ServerName<'static>,
 }
 
@@ -151,11 +151,18 @@ impl ClientTls {
     where
         S: AsyncRead + AsyncWrite + Unpin,
     {
-        let stream = self
-            .connector
-            .connect(self.server_name.clone(), stream)
-            .await?;
+        let connector = TlsConnector::from(Arc::clone(&self.config));
+        let stream = connector.connect(self.server_name.clone(), stream).await?;
         Ok(MaybeTlsStream::Client(Box::new(stream)))
+    }
+
+    /// The underlying rustls client config, for a caller that wants to run
+    /// its own TLS handshake instead of going through [`Self::connect`] —
+    /// for example a test client built on another WebSocket/TLS library
+    /// that takes a `rustls::ClientConfig` of its own.
+    #[must_use]
+    pub fn config(&self) -> Arc<ClientConfig> {
+        Arc::clone(&self.config)
     }
 }
 
@@ -334,7 +341,7 @@ pub fn client_tls_from_pem(
         .with_root_certificates(roots)
         .with_no_client_auth();
     Ok(ClientTls {
-        connector: TlsConnector::from(Arc::new(config)),
+        config: Arc::new(config),
         server_name: name,
     })
 }
