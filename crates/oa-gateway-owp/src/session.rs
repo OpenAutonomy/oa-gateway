@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use futures_util::{SinkExt, StreamExt};
+use oa_gateway_adapter::tls::MaybeTlsStream;
 use oa_gateway_adapter::AdapterError;
 use oa_gateway_agra::{unwrap as unwrap_ma, wrapper_kind, xml_root_local_name};
 use oa_gateway_core::{
@@ -42,7 +43,7 @@ pub(crate) struct Session {
     pub(crate) config: OwpConfig,
     pub(crate) schema: Option<Arc<Schema>>,
     pub(crate) conn_id: u64,
-    pub(crate) ws: WebSocketStream<TcpStream>,
+    pub(crate) ws: WebSocketStream<MaybeTlsStream<TcpStream>>,
     pub(crate) engine: Arc<Engine>,
     pub(crate) shutdown: CancellationToken,
 }

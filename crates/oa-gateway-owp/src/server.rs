@@ -6,12 +6,15 @@
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
+use oa_gateway_adapter::tls::{MaybeTlsStream, ServerTls};
 use oa_gateway_adapter::AdapterError;
 use oa_gateway_core::{AdapterId, Engine};
 use oa_gateway_uci::Schema;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Semaphore;
+use tokio::time::timeout;
 use tokio_tungstenite::accept_hdr_async_with_config;
 use tokio_tungstenite::tungstenite::handshake::server::{ErrorResponse, Request, Response};
 use tokio_tungstenite::tungstenite::http::{HeaderValue, StatusCode};
@@ -21,6 +24,11 @@ use tracing::{debug, info, warn};
 
 use crate::config::OwpConfig;
 use crate::session::{self, Session};
+
+/// Budget for a client to complete the TLS handshake, when TLS is
+/// configured. Without a limit, a peer that opens TCP and never speaks TLS
+/// would hold a connection permit forever.
+const TLS_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// OWP/WebSocket server adapter.
 ///
@@ -32,6 +40,7 @@ pub struct OwpAdapter {
     config: OwpConfig,
     conn_seq: AtomicU64,
     schema: Option<Arc<Schema>>,
+    tls: Option<ServerTls>,
     /// One permit per allowed connection, held for the life of the session.
     connections: Arc<Semaphore>,
     /// Set while connections are being refused, so saturation is logged on the
@@ -44,7 +53,8 @@ impl OwpAdapter {
     ///
     /// The connection semaphore is sized from
     /// [`OwpConfig::max_connections`]. No schema is attached until
-    /// [`Self::with_schema`].
+    /// [`Self::with_schema`], and the listener is plaintext until
+    /// [`Self::with_tls`].
     #[must_use]
     pub fn new(id: impl Into<AdapterId>, config: OwpConfig) -> Self {
         let connections = Arc::new(Semaphore::new(config.max_connections));
@@ -53,6 +63,7 @@ impl OwpAdapter {
             config,
             conn_seq: AtomicU64::new(1),
             schema: None,
+            tls: None,
             connections,
             at_capacity: AtomicBool::new(false),
         }
@@ -67,6 +78,16 @@ impl OwpAdapter {
     #[must_use]
     pub fn with_schema(mut self, schema: Arc<Schema>) -> Self {
         self.schema = Some(schema);
+        self
+    }
+
+    /// Terminate TLS on every accepted connection.
+    ///
+    /// Without this the listener stays plaintext, which is unchanged
+    /// behavior for a deployment that configures no certificate.
+    #[must_use]
+    pub fn with_tls(mut self, tls: ServerTls) -> Self {
+        self.tls = Some(tls);
         self
     }
 
@@ -99,7 +120,7 @@ impl OwpAdapter {
         shutdown: CancellationToken,
     ) -> Result<(), AdapterError> {
         let local = listener.local_addr()?;
-        info!(%local, adapter = %self.id, "owp listening");
+        info!(%local, adapter = %self.id, tls = self.tls.is_some(), "owp listening");
 
         loop {
             tokio::select! {
@@ -161,6 +182,21 @@ impl OwpAdapter {
         engine: Arc<Engine>,
         shutdown: CancellationToken,
     ) -> Result<(), AdapterError> {
+        let stream: MaybeTlsStream<TcpStream> = match &self.tls {
+            Some(tls) => match timeout(TLS_HANDSHAKE_TIMEOUT, tls.accept(stream)).await {
+                Ok(Ok(stream)) => stream,
+                Ok(Err(err)) => {
+                    debug!(%peer, error = %err, "tls handshake failed");
+                    return Ok(());
+                }
+                Err(_) => {
+                    debug!(%peer, "tls handshake timed out");
+                    return Ok(());
+                }
+            },
+            None => MaybeTlsStream::Plain(stream),
+        };
+
         // A frame over the cap is a protocol error the library reports on read,
         // which ends the session — the same outcome as an unparseable STOMP
         // frame, and it happens before the payload is fully buffered.
