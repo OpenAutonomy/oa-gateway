@@ -3,14 +3,16 @@
 //! Doing this here, once, keeps a missing file or a mismatched cert/key pair
 //! from being discovered only once a client tries to connect.
 
-use oa_gateway_adapter::tls::{server_tls, ServerTls};
+use oa_gateway_adapter::tls::{client_tls, server_tls, ClientTls, ServerTls};
 
+use crate::addr::host_part;
 use crate::config::Config;
 
 /// TLS material the host built before any adapter touched a socket.
 #[derive(Debug)]
 pub(crate) struct HostTls {
     pub(crate) owp: Option<ServerTls>,
+    pub(crate) stomp: Option<ClientTls>,
 }
 
 /// Reads the certificates and keys named in `config`, if any.
@@ -21,8 +23,10 @@ pub(crate) struct HostTls {
 /// # Errors
 ///
 /// Returns an error if `owp.tls_cert`/`owp.tls_key` is set without its
-/// pair, if either file cannot be read, or if the certificate and key do
-/// not parse or do not match each other.
+/// pair, if a cert/key/CA file cannot be read, if a certificate does not
+/// parse or does not match its key, or if `stomp.tls_server_name` (or the
+/// host part of `stomp.broker`, when that is empty) is not a usable DNS
+/// name or IP address.
 pub(crate) fn load(config: &Config) -> Result<HostTls, String> {
     let owp = if config.owp.enabled {
         let cert = non_empty_path(&config.owp.tls_cert);
@@ -31,7 +35,18 @@ pub(crate) fn load(config: &Config) -> Result<HostTls, String> {
     } else {
         None
     };
-    Ok(HostTls { owp })
+    let stomp = if config.stomp.enabled && config.stomp.tls {
+        let ca = non_empty_path(&config.stomp.tls_ca);
+        let name = if config.stomp.tls_server_name.is_empty() {
+            host_part(&config.stomp.broker)
+        } else {
+            &config.stomp.tls_server_name
+        };
+        Some(client_tls("stomp.tls", ca, name)?)
+    } else {
+        None
+    };
+    Ok(HostTls { owp, stomp })
 }
 
 fn non_empty_path(value: &str) -> Option<&std::path::Path> {
@@ -103,5 +118,65 @@ mod tests {
 
         std::fs::remove_file(&cert_path).ok();
         std::fs::remove_file(&key_path).ok();
+    }
+
+    #[test]
+    fn no_stomp_tls_configured_leaves_it_plaintext() {
+        let config: Config = toml::from_str("[stomp]\nenabled = true\n").unwrap();
+        assert!(load(&config).unwrap().stomp.is_none());
+    }
+
+    #[test]
+    fn a_disabled_stomp_adapter_is_not_checked_for_tls() {
+        let config: Config = toml::from_str(
+            "[stomp]\nenabled = false\ntls = true\ntls_ca = \"definitely/not/here.pem\"\n",
+        )
+        .unwrap();
+        assert!(load(&config).unwrap().stomp.is_none());
+    }
+
+    #[test]
+    fn stomp_tls_off_ignores_a_configured_ca() {
+        // tls = false is the switch; a leftover tls_ca must not be checked.
+        let config: Config = toml::from_str(
+            "[stomp]\nenabled = true\ntls = false\ntls_ca = \"definitely/not/here.pem\"\n",
+        )
+        .unwrap();
+        assert!(load(&config).unwrap().stomp.is_none());
+    }
+
+    #[test]
+    fn an_unreadable_stomp_ca_path_names_the_file() {
+        let config: Config = toml::from_str(
+            "[stomp]\nenabled = true\ntls = true\ntls_ca = \"definitely/not/here.pem\"\n",
+        )
+        .unwrap();
+        let err = load(&config).unwrap_err();
+        assert!(err.contains("stomp.tls_ca"), "{err}");
+        assert!(err.contains("definitely/not/here.pem"), "{err}");
+    }
+
+    #[test]
+    fn stomp_tls_server_name_defaults_to_the_broker_host_not_the_stomp_host_header() {
+        // An unparseable broker host surfaces in the error, proving it is
+        // what got used as the default server name — and `host = "/"`
+        // (the STOMP protocol header, not a hostname) is set alongside it
+        // to confirm that is not what was parsed instead.
+        let config: Config = toml::from_str(
+            "[stomp]\nenabled = true\ntls = true\nbroker = \"not a hostname!:61612\"\nhost = \"/\"\n",
+        )
+        .unwrap();
+        let err = load(&config).unwrap_err();
+        assert!(err.contains("not a hostname!"), "{err}");
+    }
+
+    #[test]
+    fn an_explicit_stomp_server_name_overrides_the_broker_host() {
+        let config: Config = toml::from_str(
+            "[stomp]\nenabled = true\ntls = true\nbroker = \"127.0.0.1:61612\"\ntls_server_name = \"not a hostname!\"\n",
+        )
+        .unwrap();
+        let err = load(&config).unwrap_err();
+        assert!(err.contains("stomp.tls_server_name"), "{err}");
     }
 }

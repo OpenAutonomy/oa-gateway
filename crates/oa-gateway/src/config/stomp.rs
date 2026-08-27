@@ -69,6 +69,20 @@ pub(crate) struct StompSection {
     /// adapter crate's limit.
     #[serde(default = "default_stomp_max_frame_size")]
     pub(crate) max_frame_size: usize,
+    /// Wrap the broker connection in TLS. Defaults to `false`. ActiveMQ
+    /// Classic's SSL transport connector conventionally listens on
+    /// `61612`, not `61613`.
+    #[serde(default)]
+    pub(crate) tls: bool,
+    /// PEM bundle of certificate authorities the broker's certificate
+    /// must chain to. Empty (the default) uses the operating system
+    /// trust store.
+    #[serde(default)]
+    pub(crate) tls_ca: String,
+    /// Name checked against the broker's certificate. Empty (the
+    /// default) uses the host part of `broker`.
+    #[serde(default)]
+    pub(crate) tls_server_name: String,
 }
 
 impl Default for StompSection {
@@ -89,6 +103,9 @@ impl Default for StompSection {
             suppress_echo: true,
             on_panic: default_stomp_on_panic(),
             max_frame_size: default_stomp_max_frame_size(),
+            tls: false,
+            tls_ca: String::new(),
+            tls_server_name: String::new(),
         }
     }
 }

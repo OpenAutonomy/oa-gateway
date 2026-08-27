@@ -80,6 +80,7 @@ pub(crate) async fn start(
         handles.push(stomp::start(
             &config.stomp,
             broker,
+            tls.stomp,
             Arc::clone(&engine),
             shutdown.clone(),
         )?);

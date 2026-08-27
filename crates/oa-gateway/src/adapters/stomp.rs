@@ -6,6 +6,7 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use oa_gateway_adapter::tls::ClientTls;
 use oa_gateway_adapter::Adapter;
 use oa_gateway_core::Engine;
 use oa_gateway_stomp::{StompAdapter, StompConfig};
@@ -28,6 +29,7 @@ use crate::config::StompSection;
 pub(crate) fn start(
     section: &StompSection,
     broker: SocketAddr,
+    tls: Option<ClientTls>,
     engine: Arc<Engine>,
     shutdown: CancellationToken,
 ) -> Result<JoinHandle<()>, String> {
@@ -41,6 +43,7 @@ pub(crate) fn start(
     } else {
         Some(section.passcode.clone())
     };
+    let tls_on = tls.is_some();
     let adapter = Arc::new(StompAdapter::new(
         section.id.clone(),
         StompConfig {
@@ -57,9 +60,10 @@ pub(crate) fn start(
             suppress_echo: section.suppress_echo,
             on_panic: section.on_panic_mode()?,
             max_frame_size: section.max_frame_size,
+            tls,
         },
     ));
-    info!(id = %adapter.id(), %broker, "starting stomp adapter");
+    info!(id = %adapter.id(), %broker, tls = tls_on, "starting stomp adapter");
     Ok(tokio::spawn(async move {
         if let Err(err) = adapter.run(engine, shutdown).await {
             error!(error = %err, "stomp adapter failed");
