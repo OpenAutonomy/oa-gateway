@@ -23,11 +23,12 @@ pub(crate) struct HostTls {
 /// # Errors
 ///
 /// Returns an error if `owp.tls_cert`/`owp.tls_key` is set without its
-/// pair, if `owp.tls_client_ca` is set without both of those, if a
-/// cert/key/CA file cannot be read, if a certificate does not parse or
-/// does not match its key, or if `stomp.tls_server_name` (or the host part
-/// of `stomp.broker`, when that is empty) is not a usable DNS name or IP
-/// address.
+/// pair, if `owp.tls_client_ca` is set without both of those, if
+/// `stomp.tls_client_cert`/`stomp.tls_client_key` is set without
+/// `stomp.tls = true`, if a cert/key/CA file cannot be read, if a
+/// certificate does not parse or does not match its key, or if
+/// `stomp.tls_server_name` (or the host part of `stomp.broker`, when that
+/// is empty) is not a usable DNS name or IP address.
 pub(crate) fn load(config: &Config) -> Result<HostTls, String> {
     let owp = if config.owp.enabled {
         let cert = non_empty_path(&config.owp.tls_cert);
@@ -37,14 +38,32 @@ pub(crate) fn load(config: &Config) -> Result<HostTls, String> {
     } else {
         None
     };
-    let stomp = if config.stomp.enabled && config.stomp.tls {
-        let ca = non_empty_path(&config.stomp.tls_ca);
-        let name = if config.stomp.tls_server_name.is_empty() {
-            host_part(&config.stomp.broker)
+    let stomp = if config.stomp.enabled {
+        if config.stomp.tls {
+            let ca = non_empty_path(&config.stomp.tls_ca);
+            let name = if config.stomp.tls_server_name.is_empty() {
+                host_part(&config.stomp.broker)
+            } else {
+                &config.stomp.tls_server_name
+            };
+            let client_cert = non_empty_path(&config.stomp.tls_client_cert);
+            let client_key = non_empty_path(&config.stomp.tls_client_key);
+            Some(client_tls("stomp.tls", ca, name, client_cert, client_key)?)
+        } else if !config.stomp.tls_client_cert.is_empty() {
+            return Err(
+                "stomp.tls_client_cert is set but stomp.tls is not. A client certificate \
+                 needs stomp.tls = true to matter."
+                    .into(),
+            );
+        } else if !config.stomp.tls_client_key.is_empty() {
+            return Err(
+                "stomp.tls_client_key is set but stomp.tls is not. A client certificate \
+                 needs stomp.tls = true to matter."
+                    .into(),
+            );
         } else {
-            &config.stomp.tls_server_name
-        };
-        Some(client_tls("stomp.tls", ca, name, None, None)?)
+            None
+        }
     } else {
         None
     };
@@ -220,5 +239,60 @@ mod tests {
         .unwrap();
         let err = load(&config).unwrap_err();
         assert!(err.contains("stomp.tls_server_name"), "{err}");
+    }
+
+    #[test]
+    fn a_stomp_client_cert_without_tls_is_refused_at_startup() {
+        let config: Config = toml::from_str(
+            "[stomp]\nenabled = true\ntls = false\ntls_client_cert = \"definitely/not/here.pem\"\n",
+        )
+        .unwrap();
+        let err = load(&config).unwrap_err();
+        assert!(err.contains("stomp.tls_client_cert"), "{err}");
+        assert!(err.contains("stomp.tls"), "{err}");
+    }
+
+    #[test]
+    fn a_stomp_client_key_without_tls_is_refused_at_startup() {
+        let config: Config = toml::from_str(
+            "[stomp]\nenabled = true\ntls = false\ntls_client_key = \"definitely/not/here.pem\"\n",
+        )
+        .unwrap();
+        let err = load(&config).unwrap_err();
+        assert!(err.contains("stomp.tls_client_key"), "{err}");
+        assert!(err.contains("stomp.tls"), "{err}");
+    }
+
+    #[test]
+    fn a_disabled_stomp_adapter_is_not_checked_for_a_client_cert() {
+        let config: Config = toml::from_str(
+            "[stomp]\nenabled = false\ntls_client_cert = \"definitely/not/here.pem\"\n",
+        )
+        .unwrap();
+        assert!(load(&config).unwrap().stomp.is_none());
+    }
+
+    #[test]
+    fn a_stomp_client_cert_and_key_load_with_tls_on() {
+        let rcgen::CertifiedKey { cert, key_pair } =
+            rcgen::generate_simple_self_signed(vec!["127.0.0.1".to_string()]).unwrap();
+
+        let dir = std::env::temp_dir().join("oa-gateway-stomp-mtls-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let cert_path = dir.join("client-cert.pem");
+        let key_path = dir.join("client-key.pem");
+        std::fs::write(&cert_path, cert.pem()).unwrap();
+        std::fs::write(&key_path, key_pair.serialize_pem()).unwrap();
+
+        let config: Config = toml::from_str(&format!(
+            "[stomp]\nenabled = true\ntls = true\nbroker = \"127.0.0.1:61612\"\ntls_client_cert = {:?}\ntls_client_key = {:?}\n",
+            cert_path.display().to_string(),
+            key_path.display().to_string(),
+        ))
+        .unwrap();
+        assert!(load(&config).unwrap().stomp.is_some());
+
+        std::fs::remove_file(&cert_path).ok();
+        std::fs::remove_file(&key_path).ok();
     }
 }

@@ -8,7 +8,7 @@ The host takes one TOML file as its only argument. Every section in that file is
 
 Paths in the file are relative to the process working directory, normally the repository root. Hostnames (`owp.bind`, `stomp.broker`) are resolved once at startup. A name that does not resolve fails then, not later in a retry loop.
 
-TLS is off unless configured. `owp.tls_cert` / `owp.tls_key` make the OWP listener serve `wss://`; `stomp.tls` makes the STOMP client dial the broker over TLS instead of plaintext. DDS has neither — its transport is UDP, not a TCP stream. Either way the gateway does not authenticate its peers — a TLS connection is encrypted, not trusted. Bind loopback, or keep both ends on a trusted segment. [SECURITY.md](../SECURITY.md) states the assumptions.
+TLS is off unless configured. `owp.tls_cert` / `owp.tls_key` make the OWP listener serve `wss://`; `stomp.tls` makes the STOMP client dial the broker over TLS instead of plaintext. DDS has neither — its transport is UDP, not a TCP stream. A plain TLS connection is encrypted, not trusted; `owp.tls_client_ca` (a client authenticating to OWP) and `stomp.tls_client_cert`/`stomp.tls_client_key` (the gateway authenticating to a broker) are further, separate opt-in steps for that. There is still no authorization anywhere in this build — an authenticated peer is not treated any differently from one that was not. Bind loopback, or keep both ends on a trusted segment. [SECURITY.md](../SECURITY.md) states the assumptions.
 
 ## Shipped files
 
@@ -101,8 +101,10 @@ STOMP is a client toward an ActiveMQ or other broker. It is off unless this tabl
 | `tls` | `false` | Wrap the broker connection in TLS. ActiveMQ Classic's SSL transport connector conventionally listens on `61612`, not `61613`. |
 | `tls_ca` | `""` | PEM bundle of the certificate authorities the broker's certificate must chain to. Empty uses the operating system trust store, which is where an organizational CA normally lives. |
 | `tls_server_name` | `""` | Name checked against the broker's certificate. Empty uses the host part of `broker`; a bare IP address there requires an IP SAN in the certificate, which most do not have. |
+| `tls_client_cert` | `""` | PEM certificate chain presented to the broker, leaf certificate first. Empty presents nothing. Requires `tls_client_key` and `tls = true`. |
+| `tls_client_key` | `""` | PEM private key for `tls_client_cert`, in PKCS#8, PKCS#1, or SEC1 form. Empty presents nothing. |
 
-`login` and `passcode` are the broker's credentials. They are sent in the clear unless `tls` is on, which is the reason to turn it on.
+`login` and `passcode` are the broker's credentials. They are sent in the clear unless `tls` is on, which is the reason to turn it on. `tls_client_cert`/`tls_client_key` are a separate, further step: presenting a certificate to a broker whose SSL transport connector requires one (ActiveMQ's `needClientAuth`), independent of whatever `login`/`passcode` also send.
 
 ## `[dds]`
 

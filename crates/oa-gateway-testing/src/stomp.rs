@@ -21,7 +21,7 @@ use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 
-use crate::tls::TestCerts;
+use crate::tls::{TestCa, TestCerts};
 
 /// In-process STOMP 1.2 broker on an ephemeral port.
 ///
@@ -47,6 +47,15 @@ pub async fn start_mini_broker() -> MiniBroker {
 /// carrying a [`ClientTls`].
 pub async fn start_mini_broker_tls(certs: &TestCerts) -> MiniBroker {
     start_mini_broker_with(Some(crate::tls::server_tls(certs))).await
+}
+
+/// As [`start_mini_broker_tls`], but the broker also requires and verifies
+/// a client certificate issued by `client_ca` from every connection.
+pub async fn start_mini_broker_mtls(certs: &TestCerts, client_ca: &TestCa) -> MiniBroker {
+    start_mini_broker_with(Some(crate::tls::server_tls_with_client_ca(
+        certs, client_ca,
+    )))
+    .await
 }
 
 async fn start_mini_broker_with(tls: Option<ServerTls>) -> MiniBroker {

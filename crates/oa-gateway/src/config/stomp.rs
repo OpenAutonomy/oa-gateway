@@ -83,6 +83,16 @@ pub(crate) struct StompSection {
     /// default) uses the host part of `broker`.
     #[serde(default)]
     pub(crate) tls_server_name: String,
+    /// PEM certificate chain presented to the broker, leaf certificate
+    /// first. Empty (the default) presents nothing. Requires
+    /// `tls_client_key` and `tls = true`.
+    #[serde(default)]
+    pub(crate) tls_client_cert: String,
+    /// PEM private key for `tls_client_cert`, in PKCS#8, PKCS#1, or SEC1
+    /// form. Empty (the default) presents nothing. Requires
+    /// `tls_client_cert`.
+    #[serde(default)]
+    pub(crate) tls_client_key: String,
 }
 
 impl Default for StompSection {
@@ -106,6 +116,8 @@ impl Default for StompSection {
             tls: false,
             tls_ca: String::new(),
             tls_server_name: String::new(),
+            tls_client_cert: String::new(),
+            tls_client_key: String::new(),
         }
     }
 }
