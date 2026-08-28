@@ -37,6 +37,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Off by default, requires `tls_cert`/`tls_key`, and stops at the
   handshake: an authenticated client is not treated any differently from
   before, since there is still no authorization.
+- `stomp.tls_client_cert`, `stomp.tls_client_key`: the STOMP client can
+  present a certificate to the broker, for a broker whose SSL transport
+  connector requires one (ActiveMQ's `needClientAuth`). This authenticates
+  the gateway to the broker, the same role `login`/`passcode` already play.
+  Off by default, requires `tls = true`.
 
 ### Fixed
 

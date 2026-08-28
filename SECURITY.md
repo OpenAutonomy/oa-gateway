@@ -33,13 +33,22 @@ the separate standard for that, and this build does not configure it.
 OWP's TLS listener has one further, opt-in step past that: setting
 `owp.tls_client_ca` requires and verifies a client certificate from that CA
 on every connection, refusing anything else at the handshake. This is the
-one real exception to "no authentication" — off by default, and when off the
-posture above is unchanged. Turning it on still does not turn on
-authorization: a client that presents a valid certificate is not treated any
-differently from one that connected before `owp.tls_client_ca` was set. It
-may publish and subscribe exactly as any peer could before, and the gateway
-does not record or act on which certificate it was — the verification happens
-once, at the handshake, and nothing about the identity survives past it.
+one real exception to "no authentication" for a peer connecting *to* this
+gateway — off by default, and when off the posture above is unchanged.
+Turning it on still does not turn on authorization: a client that presents a
+valid certificate is not treated any differently from one that connected
+before `owp.tls_client_ca` was set. It may publish and subscribe exactly as
+any peer could before, and the gateway does not record or act on which
+certificate it was — the verification happens once, at the handshake, and
+nothing about the identity survives past it.
+
+STOMP's `tls_client_cert`/`tls_client_key` run the other direction: the
+gateway presenting its own certificate to the broker, so a broker whose SSL
+transport connector requires one (ActiveMQ's `needClientAuth`) accepts the
+connection. This authenticates the gateway *to* the broker — the same role
+`login`/`passcode` already play, just via TLS instead of a STOMP header — and
+has no bearing on whether a peer can authenticate to this gateway. Off by
+default, and requires `tls = true` to matter at all.
 
 Bind loopback, or put a reverse proxy in front that authenticates callers and
 decides what they may do. In-process TLS covers encryption and, for OWP with
