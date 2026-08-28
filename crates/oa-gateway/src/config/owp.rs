@@ -55,6 +55,12 @@ pub(crate) struct OwpSection {
     /// `tls_cert`.
     #[serde(default)]
     pub(crate) tls_key: String,
+    /// PEM bundle of certificate authorities a client certificate must
+    /// chain to. Empty (the default) accepts a client with or without one.
+    /// Requires `tls_cert`/`tls_key`; once set, a client that cannot
+    /// present a certificate from this bundle is refused at the handshake.
+    #[serde(default)]
+    pub(crate) tls_client_ca: String,
     /// Largest frame accepted from a client, in bytes. Oversized frames
     /// end that session. Defaults to the adapter crate's limit.
     #[serde(default = "default_owp_max_frame_size")]
@@ -93,6 +99,7 @@ impl Default for OwpSection {
             xml_baseline: false,
             tls_cert: String::new(),
             tls_key: String::new(),
+            tls_client_ca: String::new(),
             max_frame_size: default_owp_max_frame_size(),
             max_connections: default_owp_max_connections(),
             max_subscriptions: default_owp_max_subscriptions(),
