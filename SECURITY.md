@@ -117,7 +117,7 @@ correctness rather than resources:
 
 ## Supported versions
 
-`0.1.0` on `main` is the supported line. The API may still change. There is no
+`0.2.0` on `main` is the supported line. The API may still change. There is no
 backport branch.
 
 ## Dependencies

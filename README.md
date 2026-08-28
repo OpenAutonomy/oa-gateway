@@ -9,7 +9,7 @@
 
 OA-Gateway is a multi-protocol message gateway written in Rust. It bridges WebSocket, ActiveMQ (STOMP), and DDS traffic through one protocol-agnostic routing core, and speaks OMS (Open Mission Systems), UCI (Universal Command and Control Interface), and A-GRA well enough to sit next to systems built on those standards — without being one of them, and without being an [Open Arsenal](https://gitlab.com/open-arsenal/) project itself.
 
-It is an independent prototype, open source under the MIT License. That status is not just a label: there is no authentication or authorization, and TLS is off unless you configure it — see [SECURITY.md](SECURITY.md) before you point it at anything but loopback.
+It is an independent prototype, open source under the MIT License. That status is not just a label: there is no authorization, and authentication exists only as an opt-in exception on one adapter — see [SECURITY.md](SECURITY.md) before you point it at anything but loopback.
 
 ## What it does
 
@@ -17,6 +17,7 @@ It is an independent prototype, open source under the MIT License. That status i
 - **Routes by name, not by peer.** Traffic is addressed by topic and message type the same way across every protocol, so adding a subscriber never means telling a publisher about it.
 - **Adds a protocol without touching the core.** Each adapter owns its own framing, handshake, and schema logic. The routing core doesn't change to gain one.
 - **Converts and checks UCI traffic.** Compile a UCI XSD catalog and the gateway converts OMS JSON ↔ UCI XML at the edge and checks payloads against the schema, from `warn` to `reject`.
+- **Encrypts and can authenticate connections.** OWP and STOMP can terminate or originate TLS, and OWP can require a client certificate from a trusted CA. Both are opt-in and off by default, so an existing deployment is unaffected until configured.
 
 ## Getting started
 
@@ -34,7 +35,7 @@ Start the process with a configuration file. The host starts an adapter for each
 ./target/release/oa-gateway config/default.toml
 ```
 
-There is no authentication or authorization. TLS is available on the OWP listener and the STOMP client, off by default on both. Bind loopback, as `config/default.toml` does, or put a reverse proxy in front. See [SECURITY.md](SECURITY.md).
+There is no authorization anywhere in this build. TLS is available on the OWP listener and the STOMP client, off by default on both; OWP can also require a client certificate, and STOMP can present one to the broker. Bind loopback, as `config/default.toml` does, or put a reverse proxy in front. See [SECURITY.md](SECURITY.md).
 
 In another terminal, send one message through the engine:
 
