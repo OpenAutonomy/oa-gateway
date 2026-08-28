@@ -11,8 +11,9 @@ Fixes land on `main`; there is no backport branch to wait for.
 ## What this software assumes
 
 OA-Gateway is a prototype, and its security posture is the honest consequence of
-that: **there is no authentication and no authorization.** Any peer that can
-open a connection to an adapter port can publish under any service identity,
+that: **there is no authorization, and authentication exists only as an
+opt-in exception on one adapter.** By default, any peer that can open a
+connection to an adapter port can publish under any service identity,
 subscribe to any topic, and be believed.
 
 TLS is available on OWP and STOMP, and off by default on both. `owp.tls_cert`
@@ -21,22 +22,34 @@ with `wss://` instead of plaintext `ws://`. `stomp.tls` makes the STOMP client
 dial the broker over TLS instead of plaintext, verifying the broker's
 certificate against `stomp.tls_ca` or the operating system trust store.
 Unset (the default for both), each is exactly what it always was. Encryption
-is not authentication: a peer or broker that completes a TLS handshake is
-still believed about who it is and what it may do, the same as a plaintext
-one — and `login`/`passcode` remain what authenticates the gateway to the
-broker, not the TLS handshake itself. DDS has no TLS — its RTPS transport is
-UDP, not a TCP stream, so the TLS available to OWP and STOMP could never
-apply to it as-is; DDS Security is the separate standard for that, and this
-build does not configure it.
+is not authentication by itself: a peer or broker that completes a TLS
+handshake with nothing further configured is still believed about who it is
+and what it may do, the same as a plaintext one — and `login`/`passcode`
+remain what authenticates the gateway to the broker, not the TLS handshake
+itself. DDS has no TLS — its RTPS transport is UDP, not a TCP stream, so the
+TLS available to OWP and STOMP could never apply to it as-is; DDS Security is
+the separate standard for that, and this build does not configure it.
 
-Bind loopback, or put a reverse proxy in front that authenticates callers.
-In-process TLS covers encryption and proves the gateway's identity to a
-client; it does not prove the client's identity to the gateway, and it does
-not decide what a connected peer may do. The host-oriented configs in
-`config/` bind to loopback for this reason. A compose launch mounts whatever
-path you pass in `OAG_CONFIG`; `config/compose.toml` listens on all interfaces
-inside the container so Docker can publish the port, and the compose file
-still maps that port to `127.0.0.1` on the host.
+OWP's TLS listener has one further, opt-in step past that: setting
+`owp.tls_client_ca` requires and verifies a client certificate from that CA
+on every connection, refusing anything else at the handshake. This is the
+one real exception to "no authentication" — off by default, and when off the
+posture above is unchanged. Turning it on still does not turn on
+authorization: a client that presents a valid certificate is not treated any
+differently from one that connected before `owp.tls_client_ca` was set. It
+may publish and subscribe exactly as any peer could before, and the gateway
+does not record or act on which certificate it was — the verification happens
+once, at the handshake, and nothing about the identity survives past it.
+
+Bind loopback, or put a reverse proxy in front that authenticates callers and
+decides what they may do. In-process TLS covers encryption and, for OWP with
+`tls_client_ca` set, proof that a connecting client holds a certificate this
+gateway was told to trust — it does not decide what that client may do once
+connected, which is what "no authorization" means here. The host-oriented
+configs in `config/` bind to loopback for this reason. A compose launch mounts
+whatever path you pass in `OAG_CONFIG`; `config/compose.toml` listens on all
+interfaces inside the container so Docker can publish the port, and the
+compose file still maps that port to `127.0.0.1` on the host.
 
 That assumption is what makes the rest of this document coherent. A finding is
 interesting here if it lets a peer do something the posture above does *not*
