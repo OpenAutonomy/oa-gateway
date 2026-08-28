@@ -31,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dial a broker over TLS, so `login` and `passcode` no longer have to cross
   in the clear. The broker's certificate is verified against `tls_ca`, or
   the operating system trust store when that is empty. Off by default.
+- `owp.tls_client_ca`: the OWP listener can require and verify a client
+  certificate from that CA, refusing anything else at the handshake —
+  mutual TLS, and the one form of peer authentication this gateway has.
+  Off by default, requires `tls_cert`/`tls_key`, and stops at the
+  handshake: an authenticated client is not treated any differently from
+  before, since there is still no authorization.
 
 ### Fixed
 

@@ -145,6 +145,8 @@ Conversion (JSON ↔ XML) runs only in OWP. Validation runs in OWP and DDS; the 
 
 TLS terminates at the socket, in the adapter, and is opt-in per adapter. OWP terminates it as a server when `owp.tls_cert`/`owp.tls_key` are set; STOMP originates it as a client when `stomp.tls` is set, verifying the broker against `stomp.tls_ca` or the operating system trust store. Neither the engine nor the codecs ever see a wrapped stream: `oa-gateway-adapter`'s `MaybeTlsStream` is what OWP's `Session` and STOMP's `FrameReader`/`FrameWriter` hold instead of a bare `TcpStream`, and its plaintext variant is exactly what a deployment with no certificate/CA configured uses. DDS is not a candidate for this — RTPS runs on UDP, not a TCP stream — so its equivalent is DDS Security, which this build does not configure.
 
+`owp.tls_client_ca` goes one step further: `oa_gateway_adapter::tls::server_tls` builds a `rustls::server::WebPkiClientVerifier` from that bundle and requires a matching client certificate on every connection, refusing anything else at the handshake — mutual TLS, and the one place this build authenticates a peer at all. It stops at the handshake: nothing about which certificate connected is threaded into `Session` or the engine, so this is authentication without authorization, by design. [SECURITY.md](../SECURITY.md) covers what that does and does not mean.
+
 ## Host
 
 The binary owns process lifetime. It does not implement a protocol.
@@ -172,7 +174,7 @@ If `run` returns `Err`, that adapter is down. The host logs the error and leaves
 - **The core does not parse payloads and does not name a protocol.** Logic that depends on the meaning of the bytes belongs in an adapter or a codec crate.
 - **Adapters do not call each other.** They share an `Engine`, which is what makes them independently testable and removable.
 - **Echo suppression is the bridging adapter's responsibility.** A new bus adapter must stamp origin and skip its own id the same way STOMP does. The engine will not do it.
-- **The gateway can terminate TLS but does not authenticate its own peers.** TLS covers encryption and proving the gateway's identity to a peer, nothing about the peer's identity or what it may do — OWP frame, connection, and subscription limits are still what isolate one client from the others. [SECURITY.md](../SECURITY.md) states the assumptions.
+- **The gateway can terminate TLS, and OWP can optionally authenticate a peer's certificate, but there is no authorization.** Both are opt-in and off by default. Verifying the *peer's* identity (`owp.tls_client_ca`) is a further opt-in step past plain TLS, and stops at the handshake — nothing decides what an authenticated peer may do. OWP frame, connection, and subscription limits are still what isolate one client from the others. [SECURITY.md](../SECURITY.md) states the assumptions.
 
 ## Further reading
 

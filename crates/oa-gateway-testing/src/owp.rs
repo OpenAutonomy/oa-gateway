@@ -10,6 +10,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
+use oa_gateway_adapter::tls::ServerTls;
 use oa_gateway_core::Engine;
 use oa_gateway_owp::{parse_server, OwpAdapter, OwpConfig, ServerOp};
 use tokio::net::TcpListener;
@@ -19,7 +20,7 @@ use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{Connector, WebSocketStream};
 use tokio_util::sync::CancellationToken;
 
-use crate::tls::TestCerts;
+use crate::tls::{TestCa, TestCerts};
 
 /// Client WebSocket after the `owp` subprotocol handshake.
 pub type OwpWs = WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
@@ -93,7 +94,30 @@ pub async fn start_owp_tls_with(
     certs: &TestCerts,
     edit: impl FnOnce(&mut OwpConfig),
 ) -> (String, CancellationToken) {
-    let tls = crate::tls::server_tls(certs);
+    start_owp_with_tls(engine, crate::tls::server_tls(certs), edit).await
+}
+
+/// As [`start_owp_tls_with`], but the listener also requires and verifies
+/// a client certificate issued by `client_ca`.
+pub async fn start_owp_mtls_with(
+    engine: Arc<Engine>,
+    certs: &TestCerts,
+    client_ca: &TestCa,
+    edit: impl FnOnce(&mut OwpConfig),
+) -> (String, CancellationToken) {
+    start_owp_with_tls(
+        engine,
+        crate::tls::server_tls_with_client_ca(certs, client_ca),
+        edit,
+    )
+    .await
+}
+
+async fn start_owp_with_tls(
+    engine: Arc<Engine>,
+    tls: ServerTls,
+    edit: impl FnOnce(&mut OwpConfig),
+) -> (String, CancellationToken) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let shutdown = CancellationToken::new();

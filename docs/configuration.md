@@ -60,6 +60,7 @@ OWP is the WebSocket server. It is off unless this table is in the file.
 | `bind` | `"127.0.0.1:9000"` | Listen address, `host:port`. |
 | `tls_cert` | `""` | PEM certificate chain served to clients, leaf certificate first. Empty leaves the listener plaintext. Requires `tls_key`; setting one without the other is a startup error. |
 | `tls_key` | `""` | PEM private key for `tls_cert`, in PKCS#8, PKCS#1, or SEC1 form. Empty leaves the listener plaintext. |
+| `tls_client_ca` | `""` | PEM bundle of certificate authorities a client certificate must chain to. Empty accepts a client with or without one. Requires `tls_cert`/`tls_key`; a client that cannot present a certificate from this bundle is refused at the handshake. |
 | `server_id` | `"oa-gateway-0"` | Identity sent on INIT. |
 | `system_label` | `"OA-Gateway Prototype"` | Human-readable label sent on INIT. |
 | `schema` | `"002.5.0"` | Protocol version string a client INIT must match exactly. This is not `[uci].schema`. Empty disables the check. |
@@ -74,7 +75,7 @@ OWP is the WebSocket server. It is off unless this table is in the file.
 
 A client is not authenticated, so these three limits isolate one peer from the memory of the others. The subscription default is larger than the UCI catalog, so a client can still subscribe to every message type in the standard.
 
-With `tls_cert` and `tls_key` set, the listener speaks `wss://` and nothing else; a plaintext client is refused at the handshake. Clients are still not authenticated — TLS proves the server's identity to them, not theirs to it. Mutual TLS is not implemented.
+With `tls_cert` and `tls_key` set, the listener speaks `wss://` and nothing else; a plaintext client is refused at the handshake. Set `tls_client_ca` too, and a client that cannot present a certificate from that bundle is refused as well — the one form of peer authentication this gateway has. It stops there: a client that connects with a valid certificate is not treated any differently from one that connected without `tls_client_ca` set at all. It may publish and subscribe exactly as before, and the gateway does not record or act on which certificate it was.
 
 ## `[stomp]`
 

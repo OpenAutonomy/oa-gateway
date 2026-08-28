@@ -23,15 +23,17 @@ pub(crate) struct HostTls {
 /// # Errors
 ///
 /// Returns an error if `owp.tls_cert`/`owp.tls_key` is set without its
-/// pair, if a cert/key/CA file cannot be read, if a certificate does not
-/// parse or does not match its key, or if `stomp.tls_server_name` (or the
-/// host part of `stomp.broker`, when that is empty) is not a usable DNS
-/// name or IP address.
+/// pair, if `owp.tls_client_ca` is set without both of those, if a
+/// cert/key/CA file cannot be read, if a certificate does not parse or
+/// does not match its key, or if `stomp.tls_server_name` (or the host part
+/// of `stomp.broker`, when that is empty) is not a usable DNS name or IP
+/// address.
 pub(crate) fn load(config: &Config) -> Result<HostTls, String> {
     let owp = if config.owp.enabled {
         let cert = non_empty_path(&config.owp.tls_cert);
         let key = non_empty_path(&config.owp.tls_key);
-        server_tls("owp.tls", cert, key)?
+        let client_ca = non_empty_path(&config.owp.tls_client_ca);
+        server_tls("owp.tls", cert, key, client_ca)?
     } else {
         None
     };
@@ -42,7 +44,7 @@ pub(crate) fn load(config: &Config) -> Result<HostTls, String> {
         } else {
             &config.stomp.tls_server_name
         };
-        Some(client_tls("stomp.tls", ca, name)?)
+        Some(client_tls("stomp.tls", ca, name, None, None)?)
     } else {
         None
     };
@@ -118,6 +120,46 @@ mod tests {
 
         std::fs::remove_file(&cert_path).ok();
         std::fs::remove_file(&key_path).ok();
+    }
+
+    #[test]
+    fn a_client_ca_without_a_cert_or_key_is_refused_at_startup() {
+        let config: Config =
+            toml::from_str("[owp]\nenabled = true\ntls_client_ca = \"definitely/not/here.pem\"\n")
+                .unwrap();
+        let err = load(&config).unwrap_err();
+        assert!(err.contains("owp.tls_client_ca"), "{err}");
+    }
+
+    #[test]
+    fn a_cert_key_and_client_ca_load_together() {
+        let rcgen::CertifiedKey { cert, key_pair } =
+            rcgen::generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
+
+        let dir = std::env::temp_dir().join("oa-gateway-mtls-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let cert_path = dir.join("cert.pem");
+        let key_path = dir.join("key.pem");
+        let client_ca_path = dir.join("client-ca.pem");
+        std::fs::write(&cert_path, cert.pem()).unwrap();
+        std::fs::write(&key_path, key_pair.serialize_pem()).unwrap();
+        // The server's own cert doubles as the "trusted CA" bundle here —
+        // this test only checks that the wiring reaches server_tls, not
+        // that a particular chain verifies.
+        std::fs::write(&client_ca_path, cert.pem()).unwrap();
+
+        let config: Config = toml::from_str(&format!(
+            "[owp]\nenabled = true\ntls_cert = {:?}\ntls_key = {:?}\ntls_client_ca = {:?}\n",
+            cert_path.display().to_string(),
+            key_path.display().to_string(),
+            client_ca_path.display().to_string(),
+        ))
+        .unwrap();
+        assert!(load(&config).unwrap().owp.is_some());
+
+        std::fs::remove_file(&cert_path).ok();
+        std::fs::remove_file(&key_path).ok();
+        std::fs::remove_file(&client_ca_path).ok();
     }
 
     #[test]
