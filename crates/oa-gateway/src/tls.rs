@@ -31,7 +31,7 @@ pub(crate) fn load(config: &Config) -> Result<HostTls, String> {
     let owp = if config.owp.enabled {
         let cert = non_empty_path(&config.owp.tls_cert);
         let key = non_empty_path(&config.owp.tls_key);
-        server_tls("owp.tls", cert, key)?
+        server_tls("owp.tls", cert, key, None)?
     } else {
         None
     };
@@ -42,7 +42,7 @@ pub(crate) fn load(config: &Config) -> Result<HostTls, String> {
         } else {
             &config.stomp.tls_server_name
         };
-        Some(client_tls("stomp.tls", ca, name)?)
+        Some(client_tls("stomp.tls", ca, name, None, None)?)
     } else {
         None
     };

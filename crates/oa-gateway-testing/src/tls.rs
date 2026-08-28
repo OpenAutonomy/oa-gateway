@@ -41,8 +41,13 @@ pub fn self_signed(names: &[&str]) -> TestCerts {
 /// from [`self_signed`].
 #[must_use]
 pub fn server_tls(certs: &TestCerts) -> ServerTls {
-    server_tls_from_pem("test", certs.cert_pem.as_bytes(), certs.key_pem.as_bytes())
-        .expect("test certificate should parse")
+    server_tls_from_pem(
+        "test",
+        certs.cert_pem.as_bytes(),
+        certs.key_pem.as_bytes(),
+        None,
+    )
+    .expect("test certificate should parse")
 }
 
 /// A [`ClientTls`] that trusts `certs` and checks the peer's certificate
@@ -54,8 +59,14 @@ pub fn server_tls(certs: &TestCerts) -> ServerTls {
 /// name or IP address.
 #[must_use]
 pub fn client_tls(certs: &TestCerts, server_name: &str) -> ClientTls {
-    client_tls_from_pem("test", Some(certs.cert_pem.as_bytes()), server_name)
-        .expect("test certificate and server name should be usable")
+    client_tls_from_pem(
+        "test",
+        Some(certs.cert_pem.as_bytes()),
+        server_name,
+        None,
+        None,
+    )
+    .expect("test certificate and server name should be usable")
 }
 
 /// A [`ClientTls`] that trusts a *different* self-signed authority than
