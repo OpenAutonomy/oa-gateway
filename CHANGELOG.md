@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-28
+
 ### Added
 
 - The `docs/*.md` guide is now published to GitHub Pages alongside rustdoc,
@@ -77,5 +79,6 @@ crates.io. Canonical home is
 - rustdoc on GitHub Pages:
   [openautonomy.github.io/oa-gateway](https://openautonomy.github.io/oa-gateway/).
 
-[Unreleased]: https://github.com/OpenAutonomy/oa-gateway/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/OpenAutonomy/oa-gateway/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/OpenAutonomy/oa-gateway/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/OpenAutonomy/oa-gateway/releases/tag/v0.1.0
