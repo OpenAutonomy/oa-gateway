@@ -1,0 +1,37 @@
+{
+  "folders": [
+    {
+      "path": ".",
+    },
+  ],
+  "settings": {
+    "files.exclude": {
+      "target": true,
+      ".cargo": true,
+      "schema": true,
+      "bench": true,
+      "mermaid.min.js": true,
+      "mermaid-init.js": true,
+      "**/*.rs.bk": true,
+      "Cargo.*": true,
+      "*.toml": true,
+      ".claude": true,
+      ".gitignore": true,
+      ".dockerignore": true,
+    },
+    "rust-analyzer.check.command": "clippy",
+    "rust-analyzer.check.extraArgs": ["--workspace", "--all-targets"],
+    "rust-analyzer.check.workspace": true,
+    "editor.formatOnSave": true,
+    "[rust]": {
+      "editor.defaultFormatter": "rust-lang.rust-analyzer",
+    },
+    "files.watcherExclude": {
+      "**/target/**": true,
+    },
+    "search.exclude": {
+      "**/target": true,
+      "**/Cargo.lock": true,
+    },
+  },
+}
