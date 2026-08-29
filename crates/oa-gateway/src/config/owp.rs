@@ -80,6 +80,11 @@ pub(crate) struct OwpSection {
     /// before it is closed. `0` disables. Defaults to `600`.
     #[serde(default = "default_owp_idle_timeout_secs")]
     pub(crate) idle_timeout_secs: u64,
+    /// Exact `Origin` header values accepted at the WebSocket handshake.
+    /// Empty (the default) accepts any origin; a non-empty list refuses a
+    /// handshake whose `Origin` is not one of these with `403`.
+    #[serde(default)]
+    pub(crate) allowed_origins: Vec<String>,
     /// Rebind and accept again after the accept loop ends or panics.
     /// Defaults to `false`: an existing deployment sees no behavior
     /// change until it opts in.
@@ -113,6 +118,7 @@ impl Default for OwpSection {
             max_subscriptions: default_owp_max_subscriptions(),
             init_timeout_secs: default_owp_init_timeout_secs(),
             idle_timeout_secs: default_owp_idle_timeout_secs(),
+            allowed_origins: Vec::new(),
             reconnect: false,
             reconnect_delay_secs: default_owp_reconnect_delay_secs(),
             on_panic: default_owp_on_panic(),

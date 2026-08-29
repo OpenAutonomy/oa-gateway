@@ -70,6 +70,11 @@ pub struct OwpConfig {
     /// `None` disables it. Any client frame and any server frame resets it,
     /// so an active publisher or subscriber is never closed for being idle.
     pub idle_timeout: Option<Duration>,
+    /// Exact `Origin` header values accepted at the WebSocket handshake.
+    /// Empty (the default) accepts any origin, including none, which is the
+    /// behavior before this list existed. When non-empty, a handshake whose
+    /// `Origin` is not listed verbatim is refused with `403`.
+    pub allowed_origins: Vec<String>,
     /// What to do about a payload that does not follow the loaded schema.
     /// Has no effect without one: there is nothing to check against.
     pub validate: ValidateMode,
@@ -97,6 +102,7 @@ impl Default for OwpConfig {
             max_subscriptions: DEFAULT_MAX_SUBSCRIPTIONS,
             init_timeout: Some(Duration::from_secs(DEFAULT_INIT_TIMEOUT_SECS)),
             idle_timeout: Some(Duration::from_secs(DEFAULT_IDLE_TIMEOUT_SECS)),
+            allowed_origins: Vec::new(),
             validate: ValidateMode::default(),
             on_panic: OnPanic::Abort,
             reconnect: false,

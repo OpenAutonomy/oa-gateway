@@ -46,6 +46,10 @@ max_subscriptions = 1024
 # Any client or server frame resets the idle clock; 0 disables either timeout.
 init_timeout_secs = 30
 idle_timeout_secs = 600
+# Restrict the browser origins that may open a WebSocket. Empty (the default)
+# accepts any; listing one or more refuses a handshake whose Origin is not an
+# exact match, a missing Origin included.
+# allowed_origins = ["https://app.example"]
 # Rebind and accept again if the accept loop ends or panics, instead of
 # leaving the adapter stopped until the whole process is restarted.
 # reconnect = true

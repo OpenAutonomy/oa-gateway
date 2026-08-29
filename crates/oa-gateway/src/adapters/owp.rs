@@ -63,6 +63,7 @@ pub(crate) fn start(
                 .then(|| std::time::Duration::from_secs(section.init_timeout_secs)),
             idle_timeout: (section.idle_timeout_secs > 0)
                 .then(|| std::time::Duration::from_secs(section.idle_timeout_secs)),
+            allowed_origins: section.allowed_origins.clone(),
             validate,
             on_panic: section.on_panic_mode()?,
             reconnect: section.reconnect,

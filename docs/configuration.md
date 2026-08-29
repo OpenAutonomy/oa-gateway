@@ -71,6 +71,7 @@ OWP is the WebSocket server. It is off unless this table is in the file.
 | `max_subscriptions` | `1024` | Subscriptions one connection may hold. A SUB past the limit is refused and the session continues. |
 | `init_timeout_secs` | `30` | Seconds from an accepted connection to a successful INIT before it is closed. Measured from the handshake, not reset by traffic. `0` disables. |
 | `idle_timeout_secs` | `600` | Seconds with no frame in either direction on an active session before it is closed. Any client frame and any server frame (including a delivered MSG) resets it, so an active publisher or subscriber is never closed for being idle. `0` disables. |
+| `allowed_origins` | `[]` | Exact `Origin` header values accepted at the WebSocket handshake. Empty accepts any origin, including none. A non-empty list refuses a handshake whose `Origin` is not one of these — a missing `Origin` included — with `403`. Match is verbatim: list every scheme, host, and port a browser client connects from. |
 | `reconnect` | `false` | Rebind and accept again after the accept loop ends or panics, instead of leaving the adapter stopped until the whole process restarts. Defaults off so an existing deployment sees no behavior change until it opts in. |
 | `reconnect_delay_secs` | `1` | Seconds to wait between rebind attempts. |
 | `on_panic` | `"abort"` | `"abort"` ends the adapter when the accept loop panics; `"reconnect"` treats the panic as a failed session and then follows `reconnect`. A typo is refused as `owp.on_panic: …`. |

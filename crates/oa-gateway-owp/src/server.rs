@@ -203,14 +203,16 @@ impl OwpAdapter {
         let ws_config = WebSocketConfig::default()
             .max_message_size(Some(self.config.max_frame_size))
             .max_frame_size(Some(self.config.max_frame_size));
-        let ws =
-            match accept_hdr_async_with_config(stream, check_subprotocol, Some(ws_config)).await {
-                Ok(ws) => ws,
-                Err(err) => {
-                    debug!(%peer, error = %err, "websocket handshake failed");
-                    return Ok(());
-                }
-            };
+        let allowed_origins = &self.config.allowed_origins;
+        let check =
+            |req: &Request, response: Response| handshake_check(allowed_origins, req, response);
+        let ws = match accept_hdr_async_with_config(stream, check, Some(ws_config)).await {
+            Ok(ws) => ws,
+            Err(err) => {
+                debug!(%peer, error = %err, "websocket handshake failed");
+                return Ok(());
+            }
+        };
         session::run(Session {
             adapter_id: self.id.clone(),
             config: self.config.clone(),
@@ -225,11 +227,18 @@ impl OwpAdapter {
 }
 
 #[allow(clippy::result_large_err)]
-/// Requires the `owp` WebSocket subprotocol (case-insensitive).
+/// Vets one WebSocket handshake: the `owp` subprotocol, then the `Origin`.
 ///
-/// Missing or unmatched `Sec-WebSocket-Protocol` is `400`. On success
+/// Missing or unmatched `Sec-WebSocket-Protocol` is `400`. When
+/// `allowed_origins` is non-empty, an `Origin` header that is not one of
+/// its entries verbatim (a missing `Origin` included) is `403`; an empty
+/// `allowed_origins` skips the check and accepts any origin. On success
 /// the response echoes `owp`.
-fn check_subprotocol(req: &Request, mut response: Response) -> Result<Response, ErrorResponse> {
+fn handshake_check(
+    allowed_origins: &[String],
+    req: &Request,
+    mut response: Response,
+) -> Result<Response, ErrorResponse> {
     let has_owp = req
         .headers()
         .get("Sec-WebSocket-Protocol")
@@ -240,12 +249,28 @@ fn check_subprotocol(req: &Request, mut response: Response) -> Result<Response, 
                 .any(|p| p.eq_ignore_ascii_case("owp"))
         });
     if !has_owp {
-        let mut err = ErrorResponse::new(Some("missing owp subprotocol".into()));
-        *err.status_mut() = StatusCode::BAD_REQUEST;
-        return Err(err);
+        return Err(error_response(
+            StatusCode::BAD_REQUEST,
+            "missing owp subprotocol",
+        ));
     }
+
+    if !allowed_origins.is_empty() {
+        let origin = req.headers().get("Origin").and_then(|v| v.to_str().ok());
+        if !origin.is_some_and(|o| allowed_origins.iter().any(|a| a == o)) {
+            return Err(error_response(StatusCode::FORBIDDEN, "origin not allowed"));
+        }
+    }
+
     response
         .headers_mut()
         .insert("Sec-WebSocket-Protocol", HeaderValue::from_static("owp"));
     Ok(response)
+}
+
+/// A handshake rejection with `status` and a short reason line.
+fn error_response(status: StatusCode, reason: &'static str) -> ErrorResponse {
+    let mut err = ErrorResponse::new(Some(reason.into()));
+    *err.status_mut() = status;
+    err
 }
