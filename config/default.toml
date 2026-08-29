@@ -41,6 +41,11 @@ xml_baseline = false
 max_frame_size = 16777216
 max_connections = 256
 max_subscriptions = 1024
+# Close a connection that never completes INIT, and an active session that goes
+# silent in both directions, so neither holds a connection slot for nothing.
+# Any client or server frame resets the idle clock; 0 disables either timeout.
+init_timeout_secs = 30
+idle_timeout_secs = 600
 # Rebind and accept again if the accept loop ends or panics, instead of
 # leaving the adapter stopped until the whole process is restarted.
 # reconnect = true

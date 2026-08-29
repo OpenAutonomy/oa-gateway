@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `owp.init_timeout_secs` (default `30`) and `owp.idle_timeout_secs` (default
+  `600`): the OWP listener closes a connection that never completes INIT, and
+  an active session that goes silent in both directions, so a peer cannot hold
+  a connection slot without making progress. The INIT deadline is measured from
+  the handshake; the idle deadline resets on any client or server frame. `0`
+  disables either timeout, which is the pre-existing behavior.
+
 ## [0.2.0] - 2026-08-28
 
 ### Added

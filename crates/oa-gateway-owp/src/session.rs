@@ -19,10 +19,13 @@ use oa_gateway_uci::Schema;
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
+use tokio::time::Instant;
+use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
+use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::WebSocketStream;
 use tokio_util::sync::CancellationToken;
-use tracing::warn;
+use tracing::{debug, warn};
 
 use crate::codec::{
     parse_client, type_hint_from_json, ClientOp, Identifiers, InfoPayload, InitPayload, OwpError,
@@ -130,11 +133,44 @@ pub(crate) async fn run(mut session: Session) -> Result<(), AdapterError> {
     let mut subs: HashMap<String, LiveSub> = HashMap::new();
     let mut warnings = RouteWarnings::default();
 
+    let started = Instant::now();
+    let mut last_frame = started;
+
     loop {
+        // While awaiting INIT the deadline is fixed from the handshake, so a
+        // peer cannot keep the slot by dribbling junk frames without ever
+        // completing INIT. Once active it slides forward on every frame in
+        // either direction, so a live publisher or subscriber is never closed.
+        let deadline = match state {
+            State::AwaitingInit => session.config.init_timeout.map(|d| started + d),
+            State::Active { .. } => session.config.idle_timeout.map(|d| last_frame + d),
+        };
+
         tokio::select! {
             () = session.shutdown.cancelled() => break,
+            () = deadline_elapsed(deadline) => {
+                let reason = match state {
+                    State::AwaitingInit => "no INIT before the init timeout",
+                    State::Active { .. } => "no frames before the idle timeout",
+                };
+                debug!(
+                    adapter = %session.adapter_id,
+                    conn_id = session.conn_id,
+                    reason,
+                    "closing owp session on timeout"
+                );
+                let _ = session
+                    .ws
+                    .send(Message::Close(Some(CloseFrame {
+                        code: CloseCode::Policy,
+                        reason: reason.into(),
+                    })))
+                    .await;
+                break;
+            }
             outgoing = out_rx.recv() => {
                 let Some(op) = outgoing else { break };
+                last_frame = Instant::now();
                 if session.ws.send(Message::Text(op.to_string().into())).await.is_err() {
                     break;
                 }
@@ -142,6 +178,7 @@ pub(crate) async fn run(mut session: Session) -> Result<(), AdapterError> {
             incoming = session.ws.next() => {
                 let Some(frame) = incoming else { break };
                 let Ok(msg) = frame else { break };
+                last_frame = Instant::now();
                 match msg {
                     Message::Text(text) => {
                         if handle_text(
@@ -779,6 +816,15 @@ fn err_op(error: OwpError, details: Option<&str>) -> ServerOp {
 /// a slow client cannot stall the read loop.
 async fn send(tx: &mpsc::Sender<ServerOp>, op: ServerOp) {
     let _ = tx.send(op).await;
+}
+
+/// Resolves once `deadline` passes, or never when it is `None` (the timeout
+/// disabled). Used as one arm of the session `select!`.
+async fn deadline_elapsed(deadline: Option<Instant>) {
+    match deadline {
+        Some(at) => tokio::time::sleep_until(at).await,
+        None => std::future::pending().await,
+    }
 }
 
 #[cfg(test)]

@@ -25,6 +25,16 @@ pub const DEFAULT_MAX_CONNECTIONS: usize = 256;
 /// subscribing to every type in the standard still fits.
 pub const DEFAULT_MAX_SUBSCRIPTIONS: usize = 1024;
 
+/// Seconds from an accepted WebSocket to a successful INIT before the
+/// session is closed. Without it a peer can hold a connection slot forever
+/// by connecting and never speaking OWP.
+pub const DEFAULT_INIT_TIMEOUT_SECS: u64 = 30;
+
+/// Seconds with no frame in either direction on an active session before it
+/// is closed. Generous, since a subscriber to a low-rate topic is legitimately
+/// quiet on the inbound side and the server's own MSG frames keep it alive.
+pub const DEFAULT_IDLE_TIMEOUT_SECS: u64 = 600;
+
 /// Settings for one OWP listener.
 ///
 /// [`Self::schema`] is the INIT protocol version, not a UCI catalog.
@@ -52,6 +62,14 @@ pub struct OwpConfig {
     pub max_connections: usize,
     /// Subscriptions one connection may hold.
     pub max_subscriptions: usize,
+    /// Deadline from an accepted WebSocket to a successful INIT. `None`
+    /// disables it. Measured from the handshake, not reset by traffic: a
+    /// peer that connects and never INITs is closed when this elapses.
+    pub init_timeout: Option<Duration>,
+    /// Longest gap with no frame in either direction on an active session.
+    /// `None` disables it. Any client frame and any server frame resets it,
+    /// so an active publisher or subscriber is never closed for being idle.
+    pub idle_timeout: Option<Duration>,
     /// What to do about a payload that does not follow the loaded schema.
     /// Has no effect without one: there is nothing to check against.
     pub validate: ValidateMode,
@@ -77,6 +95,8 @@ impl Default for OwpConfig {
             max_frame_size: DEFAULT_MAX_FRAME_SIZE,
             max_connections: DEFAULT_MAX_CONNECTIONS,
             max_subscriptions: DEFAULT_MAX_SUBSCRIPTIONS,
+            init_timeout: Some(Duration::from_secs(DEFAULT_INIT_TIMEOUT_SECS)),
+            idle_timeout: Some(Duration::from_secs(DEFAULT_IDLE_TIMEOUT_SECS)),
             validate: ValidateMode::default(),
             on_panic: OnPanic::Abort,
             reconnect: false,
