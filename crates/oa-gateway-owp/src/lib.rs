@@ -82,8 +82,8 @@ impl Adapter for OwpAdapter {
                 }
             }
             tokio::select! {
-                _ = shutdown.cancelled() => return Ok(()),
-                _ = tokio::time::sleep(self.config().reconnect_delay) => {}
+                () = shutdown.cancelled() => return Ok(()),
+                () = tokio::time::sleep(self.config().reconnect_delay) => {}
             }
         }
     }

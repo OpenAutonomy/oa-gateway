@@ -16,3 +16,6 @@ thiserror.workspace = true
 [dev-dependencies]
 oa-gateway-testing = { workspace = true, default-features = false }
 serde_json.workspace = true
+
+[lints]
+workspace = true

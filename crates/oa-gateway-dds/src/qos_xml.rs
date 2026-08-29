@@ -116,7 +116,7 @@ fn first_entity_qos<'a, 'input>(node: Node<'a, 'input>) -> Option<Node<'a, 'inpu
 }
 
 fn apply_entity(spec: &mut QosSpec, qos: Node<'_, '_>) -> Result<(), String> {
-    for child in qos.children().filter(|n| n.is_element()) {
+    for child in qos.children().filter(roxmltree::Node::is_element) {
         match child.tag_name().name() {
             "reliability" => spec.reliability = parse_reliability(child)?,
             "durability" => spec.durability = parse_durability(child)?,

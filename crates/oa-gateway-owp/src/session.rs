@@ -132,7 +132,7 @@ pub(crate) async fn run(mut session: Session) -> Result<(), AdapterError> {
 
     loop {
         tokio::select! {
-            _ = session.shutdown.cancelled() => break,
+            () = session.shutdown.cancelled() => break,
             outgoing = out_rx.recv() => {
                 let Some(op) = outgoing else { break };
                 if session.ws.send(Message::Text(op.to_string().into())).await.is_err() {
@@ -141,10 +141,7 @@ pub(crate) async fn run(mut session: Session) -> Result<(), AdapterError> {
             }
             incoming = session.ws.next() => {
                 let Some(frame) = incoming else { break };
-                let msg = match frame {
-                    Ok(m) => m,
-                    Err(_) => break,
-                };
+                let Ok(msg) = frame else { break };
                 match msg {
                     Message::Text(text) => {
                         if handle_text(
@@ -214,9 +211,10 @@ async fn handle_text(
     };
 
     match state {
-        State::AwaitingInit => match op {
-            ClientOp::Init(init) => handle_init(session, state, out_tx, init).await,
-            _ => {
+        State::AwaitingInit => {
+            if let ClientOp::Init(init) = op {
+                handle_init(session, state, out_tx, init).await
+            } else {
                 send(
                     out_tx,
                     err_op(
@@ -227,7 +225,7 @@ async fn handle_text(
                 .await;
                 Err(Fatal::Close)
             }
-        },
+        }
         State::Active {
             verbose,
             service_id,

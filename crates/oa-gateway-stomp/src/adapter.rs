@@ -128,8 +128,8 @@ impl StompAdapter {
                 }
             }
             tokio::select! {
-                _ = shutdown.cancelled() => return Ok(()),
-                _ = tokio::time::sleep(self.config.reconnect_delay) => {}
+                () = shutdown.cancelled() => return Ok(()),
+                () = tokio::time::sleep(self.config.reconnect_delay) => {}
             }
         }
     }
@@ -227,7 +227,7 @@ impl StompAdapter {
     ) -> Result<(), AdapterError> {
         loop {
             tokio::select! {
-                _ = shutdown.cancelled() => {
+                () = shutdown.cancelled() => {
                     info!(adapter = %self.id, "stomp shutting down");
                     return Ok(());
                 }

@@ -183,9 +183,10 @@ async fn inbound_does_not_echo_duplicate() {
         Err(_) => {}
         Ok(dup) => {
             let body = String::from_utf8_lossy(&dup.body);
-            if body.contains(&token) {
-                panic!("oa-gateway echoed inbound XML back onto the broker: {body}");
-            }
+            assert!(
+                !body.contains(&token),
+                "oa-gateway echoed inbound XML back onto the broker: {body}"
+            );
         }
     }
 

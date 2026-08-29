@@ -55,3 +55,6 @@ oa-gateway-uci.workspace = true
 rcgen.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["full", "test-util"] }
+
+[lints]
+workspace = true

@@ -303,7 +303,7 @@ fn parse_shared(args: Vec<String>) -> Result<SharedArgs, String> {
             "--warmup" => out.warmup = parse_duration(&next(&mut args, "--warmup")?)?,
             "--rate" => out.rate = parse_u64(&next(&mut args, "--rate")?)?,
             "--payload-bytes" => {
-                out.payload_bytes = parse_nonzero(next(&mut args, "--payload-bytes")?)?
+                out.payload_bytes = parse_nonzero(next(&mut args, "--payload-bytes")?)?;
             }
             "--json" => out.json = Some(PathBuf::from(next(&mut args, "--json")?)),
             other => {

@@ -246,8 +246,7 @@ fn rustc_version() -> String {
         .output()
         .ok()
         .and_then(|out| String::from_utf8(out.stdout).ok())
-        .map(|s| s.trim().to_owned())
-        .unwrap_or_else(|| "unknown".into())
+        .map_or_else(|| "unknown".into(), |s| s.trim().to_owned())
 }
 
 #[cfg(test)]

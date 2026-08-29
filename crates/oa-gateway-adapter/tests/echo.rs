@@ -40,7 +40,7 @@ impl Adapter for Echo {
 
         loop {
             tokio::select! {
-                _ = shutdown.cancelled() => {
+                () = shutdown.cancelled() => {
                     engine.drop_adapter(self.id.clone()).await;
                     return Ok(());
                 }

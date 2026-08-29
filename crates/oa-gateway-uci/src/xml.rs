@@ -182,10 +182,7 @@ fn read_element(
         return Ok(Node::Simple(parse_text(schema.primitive(type_name), text)));
     }
 
-    let xsi = node
-        .attribute((XSI, "type"))
-        .map(local_name)
-        .unwrap_or(type_name);
+    let xsi = node.attribute((XSI, "type")).map_or(type_name, local_name);
     let actual = if schema.is_complex(xsi) {
         xsi
     } else {
@@ -195,7 +192,7 @@ fn read_element(
 
     let mut groups: BTreeMap<String, Vec<XmlNode<'_, '_>>> = BTreeMap::new();
     let mut order: Vec<String> = Vec::new();
-    for child in node.children().filter(|c| c.is_element()) {
+    for child in node.children().filter(roxmltree::Node::is_element) {
         let n = child.tag_name().name().to_string();
         if !groups.contains_key(&n) {
             order.push(n.clone());
@@ -207,7 +204,7 @@ fn read_element(
     for name in order {
         let kids = groups.remove(&name).unwrap_or_default();
         let decl = decls.iter().copied().find(|e| e.name == name);
-        let child_type = decl.map(|e| e.type_name.as_str()).unwrap_or("xs:string");
+        let child_type = decl.map_or("xs:string", |e| e.type_name.as_str());
         let array = decl.is_some_and(|e| e.max_occurs.is_array()) || kids.len() > 1;
         let child_path = format!("{path}.{name}");
         let nodes = kids
@@ -233,10 +230,10 @@ fn read_element(
         }
     }
 
-    let type_name = if actual != type_name {
-        Some(actual.to_owned())
-    } else {
+    let type_name = if actual == type_name {
         None
+    } else {
+        Some(actual.to_owned())
     };
     Ok(Node::Complex(Complex { type_name, fields }))
 }
@@ -265,8 +262,7 @@ fn parse_text(type_name: &str, text: &str) -> Simple {
             .parse::<f64>()
             .ok()
             .and_then(Number::from_f64)
-            .map(Simple::Number)
-            .unwrap_or_else(|| Simple::String(text.to_owned())),
+            .map_or_else(|| Simple::String(text.to_owned()), Simple::Number),
         _ => Simple::String(text.to_owned()),
     }
 }
@@ -330,7 +326,7 @@ fn write_element(
             };
             for (fname, field) in &c.fields {
                 let decl = decls.iter().copied().find(|e| e.name == *fname);
-                let child_type = decl.map(|e| e.type_name.as_str()).unwrap_or("xs:string");
+                let child_type = decl.map_or("xs:string", |e| e.type_name.as_str());
                 match field {
                     Field::One(n) => {
                         write_element(out, fname, n, schema, child_type, false, depth + 1)?;
@@ -473,7 +469,7 @@ mod tests {
         // could nest without ever appearing to.
         assert_eq!(depth_of(r#"<a x="/>"><b x="/>"><c/></b></a>"#), 3);
         assert_eq!(depth_of(r#"<a x=">"><b x=">"><c/></b></a>"#), 3);
-        assert_eq!(depth_of(r#"<a x='/>'><b/></a>"#), 2);
+        assert_eq!(depth_of(r"<a x='/>'><b/></a>"), 2);
 
         let hidden: String = (0..500)
             .map(|_| r#"<n x="/>">"#)
