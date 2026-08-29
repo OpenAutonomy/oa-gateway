@@ -1,0 +1,3 @@
+# Default reviewer for every change. Refine per-directory if more
+# maintainers join.
+* @jburns3141
