@@ -53,6 +53,8 @@ After the unit job, CI runs [`scripts/ci-bench.sh`](scripts/ci-bench.sh) and upl
 
 A `coverage` job runs `cargo llvm-cov` and uploads an lcov + HTML report as a `coverage` artifact. It has no threshold and does not gate anything — it is there to see line coverage per crate. Run it locally with `cargo install cargo-llvm-cov --locked` then `cargo llvm-cov --workspace --html --open`.
 
+The [`fuzz/`](fuzz/) workspace holds `cargo-fuzz` harnesses for the peer-facing parsers. The `fuzz` workflow runs each for 60 s on every change and 5 min weekly. Run one locally with a nightly toolchain: `./fuzz/seed-corpus.sh` then `cargo +nightly fuzz run uci_instance`. See [fuzz/README.md](fuzz/README.md).
+
 ## Notes
 
 - Do not compile against or commit `repos/` — those clones are reference only. The schema the gateway loads comes from `scripts/fetch-uci-schema.sh`, which lands in a gitignored `schema/`.
