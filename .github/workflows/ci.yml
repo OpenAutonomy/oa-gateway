@@ -142,3 +142,28 @@ jobs:
         run: cargo test -p oa-gateway-testing --test live_activemq --locked -- --ignored --nocapture --test-threads=1
         env:
           OAG_ACTIVEMQ_STOMP: 127.0.0.1:61613
+
+  coverage:
+    # Visibility only: uploads an lcov + HTML report as a build artifact.
+    # No threshold and no gate on the other jobs; a `--fail-under` can be
+    # added once a baseline is known.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.85.0
+          components: llvm-tools-preview
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: Swatinem/rust-cache@v2
+      - name: coverage
+        run: |
+          cargo llvm-cov --workspace --locked --lcov --output-path lcov.info
+          cargo llvm-cov report --html
+      - uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: |
+            lcov.info
+            target/llvm-cov/html
+          retention-days: 14
