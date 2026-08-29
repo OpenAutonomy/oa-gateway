@@ -69,11 +69,13 @@ OWP is the WebSocket server. It is off unless this table is in the file.
 | `max_frame_size` | `16777216` | Largest frame accepted from a client, in bytes. An oversized frame ends that session. |
 | `max_connections` | `256` | Connections served at once. Further connections are closed on accept. |
 | `max_subscriptions` | `1024` | Subscriptions one connection may hold. A SUB past the limit is refused and the session continues. |
+| `init_timeout_secs` | `30` | Seconds from an accepted connection to a successful INIT before it is closed. Measured from the handshake, not reset by traffic. `0` disables. |
+| `idle_timeout_secs` | `600` | Seconds with no frame in either direction on an active session before it is closed. Any client frame and any server frame (including a delivered MSG) resets it, so an active publisher or subscriber is never closed for being idle. `0` disables. |
 | `reconnect` | `false` | Rebind and accept again after the accept loop ends or panics, instead of leaving the adapter stopped until the whole process restarts. Defaults off so an existing deployment sees no behavior change until it opts in. |
 | `reconnect_delay_secs` | `1` | Seconds to wait between rebind attempts. |
 | `on_panic` | `"abort"` | `"abort"` ends the adapter when the accept loop panics; `"reconnect"` treats the panic as a failed session and then follows `reconnect`. A typo is refused as `owp.on_panic: …`. |
 
-A client is not authenticated, so these three limits isolate one peer from the memory of the others. The subscription default is larger than the UCI catalog, so a client can still subscribe to every message type in the standard.
+A client is not authenticated, so `max_frame_size`, `max_connections`, and `max_subscriptions` isolate one peer from the memory of the others, and `init_timeout_secs` / `idle_timeout_secs` keep a peer from holding a connection slot without making progress. The subscription default is larger than the UCI catalog, so a client can still subscribe to every message type in the standard.
 
 With `tls_cert` and `tls_key` set, the listener speaks `wss://` and nothing else; a plaintext client is refused at the handshake. Set `tls_client_ca` too, and a client that cannot present a certificate from that bundle is refused as well — the one form of peer authentication this gateway has. It stops there: a client that connects with a valid certificate is not treated any differently from one that connected without `tls_client_ca` set at all. It may publish and subscribe exactly as before, and the gateway does not record or act on which certificate it was.
 

@@ -72,6 +72,14 @@ pub(crate) struct OwpSection {
     /// refused and the session continues.
     #[serde(default = "default_owp_max_subscriptions")]
     pub(crate) max_subscriptions: usize,
+    /// Seconds from an accepted connection to a successful INIT before it
+    /// is closed. `0` disables. Defaults to `30`.
+    #[serde(default = "default_owp_init_timeout_secs")]
+    pub(crate) init_timeout_secs: u64,
+    /// Seconds with no frame in either direction on an active session
+    /// before it is closed. `0` disables. Defaults to `600`.
+    #[serde(default = "default_owp_idle_timeout_secs")]
+    pub(crate) idle_timeout_secs: u64,
     /// Rebind and accept again after the accept loop ends or panics.
     /// Defaults to `false`: an existing deployment sees no behavior
     /// change until it opts in.
@@ -103,6 +111,8 @@ impl Default for OwpSection {
             max_frame_size: default_owp_max_frame_size(),
             max_connections: default_owp_max_connections(),
             max_subscriptions: default_owp_max_subscriptions(),
+            init_timeout_secs: default_owp_init_timeout_secs(),
+            idle_timeout_secs: default_owp_idle_timeout_secs(),
             reconnect: false,
             reconnect_delay_secs: default_owp_reconnect_delay_secs(),
             on_panic: default_owp_on_panic(),
@@ -146,6 +156,12 @@ fn default_owp_max_connections() -> usize {
 }
 fn default_owp_max_subscriptions() -> usize {
     oa_gateway_owp::DEFAULT_MAX_SUBSCRIPTIONS
+}
+fn default_owp_init_timeout_secs() -> u64 {
+    oa_gateway_owp::DEFAULT_INIT_TIMEOUT_SECS
+}
+fn default_owp_idle_timeout_secs() -> u64 {
+    oa_gateway_owp::DEFAULT_IDLE_TIMEOUT_SECS
 }
 fn default_owp_reconnect_delay_secs() -> u64 {
     1

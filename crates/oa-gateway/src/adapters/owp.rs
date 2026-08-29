@@ -59,6 +59,10 @@ pub(crate) fn start(
             max_frame_size: section.max_frame_size,
             max_connections: section.max_connections,
             max_subscriptions: section.max_subscriptions,
+            init_timeout: (section.init_timeout_secs > 0)
+                .then(|| std::time::Duration::from_secs(section.init_timeout_secs)),
+            idle_timeout: (section.idle_timeout_secs > 0)
+                .then(|| std::time::Duration::from_secs(section.idle_timeout_secs)),
             validate,
             on_panic: section.on_panic_mode()?,
             reconnect: section.reconnect,
