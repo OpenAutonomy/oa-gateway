@@ -49,6 +49,8 @@ CI also runs the ignored ActiveMQ XML round-trip after the unit gate.
 
 After the unit job, CI runs [`scripts/ci-bench.sh`](scripts/ci-bench.sh) and uploads a `bench` artifact (JSON, `summary.txt`, and PNGs when gnuplot is present). That job is a snapshot, not a performance gate. Local long runs and how to read drops are in [docs/benchmarking.md](docs/benchmarking.md).
 
+A `coverage` job runs `cargo llvm-cov` and uploads an lcov + HTML report as a `coverage` artifact. It has no threshold and does not gate anything — it is there to see line coverage per crate. Run it locally with `cargo install cargo-llvm-cov --locked` then `cargo llvm-cov --workspace --html --open`.
+
 ## Notes
 
 - Do not compile against or commit `repos/` — those clones are reference only. The schema the gateway loads comes from `scripts/fetch-uci-schema.sh`, which lands in a gitignored `schema/`.
