@@ -346,7 +346,7 @@ fn check_value(text: &str, schema: &Schema, type_name: &str, path: &str, out: &m
 /// are one octet. Everything else is counted in characters.
 fn value_length(text: &str, primitive: &str) -> (usize, &'static str) {
     if matches!(primitive::kind(primitive), primitive::Kind::HexBinary) {
-        let digits = text.bytes().filter(|b| b.is_ascii_hexdigit()).count();
+        let digits = text.bytes().filter(u8::is_ascii_hexdigit).count();
         (digits / 2, "octets")
     } else {
         (text.chars().count(), "characters")

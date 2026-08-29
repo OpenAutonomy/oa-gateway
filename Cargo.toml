@@ -24,6 +24,42 @@ rust-version = "1.85"
 # only a defensible `*` requirement while they are unpublished.
 publish = false
 
+# Inherited by every member crate via `[lints] workspace = true`. CI already
+# runs `cargo clippy -- -D warnings`, so a `warn` here is a hard gate there.
+[workspace.lints.rust]
+# SECURITY.md states there is no `unsafe` in the workspace. `forbid` (not
+# `deny`) makes that enforceable: it cannot be re-enabled with a local
+# `#[allow(unsafe_code)]`. Introducing `unsafe` becomes a deliberate change
+# to this line.
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+# `pedantic` as the baseline standard. The entries below opt back out of the
+# lints that are high-noise and low-value for this codebase specifically:
+# heavy doc prose, deliberate numeric casts in the engine, and stylistic
+# naming choices. Anything not listed here is expected to be fixed, not
+# silenced.
+pedantic = { level = "warn", priority = -1 }
+doc_markdown = "allow"
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_panics_doc = "allow"
+similar_names = "allow"
+too_many_lines = "allow"
+cast_possible_truncation = "allow"
+cast_precision_loss = "allow"
+cast_sign_loss = "allow"
+cast_possible_wrap = "allow"
+# The parsers and QoS/JSON dispatch tables spell out every match arm on
+# purpose, even where two share a body; merging them for the linter would
+# cost more in readability than it saves.
+match_same_arms = "allow"
+# Several codec and adapter entry points take owned arguments deliberately
+# (ownership handed on, or a signature kept uniform across an interface).
+needless_pass_by_value = "allow"
+# The adapter config structs are flat bags of independent on/off switches.
+struct_excessive_bools = "allow"
+
 [workspace.dependencies]
 async-trait = "0.1"
 bytes = "1"

@@ -282,7 +282,7 @@ async fn drain_pending(ws: &mut OwpWs, errors: &AtomicU64) {
                     errors.fetch_add(1, Ordering::Relaxed);
                 }
             }
-            Ok(Some(Ok(_))) | Ok(None) | Err(_) | Ok(Some(Err(_))) => break,
+            Ok(Some(Ok(_) | Err(_)) | None) | Err(_) => break,
         }
     }
 }

@@ -101,8 +101,8 @@ fn stats_ticker(
         let mut last_dropped = 0u64;
         loop {
             tokio::select! {
-                _ = shutdown.cancelled() => return,
-                _ = tokio::time::sleep(interval) => {
+                () = shutdown.cancelled() => return,
+                () = tokio::time::sleep(interval) => {
                     let stats = engine.stats();
                     let dropped = stats.dropped();
                     info!(

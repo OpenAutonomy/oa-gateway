@@ -376,24 +376,23 @@ pub fn client_tls_from_pem(
     client_cert_pem: Option<&[u8]>,
     client_key_pem: Option<&[u8]>,
 ) -> Result<ClientTls, String> {
-    let roots = match ca_pem {
-        Some(pem) => root_store_from_pem(&format!("{key_prefix}_ca"), pem)?,
-        None => {
-            let found = rustls_native_certs::load_native_certs();
-            let mut roots = RootCertStore::empty();
-            roots.add_parsable_certificates(found.certs);
-            if roots.is_empty() {
-                let detail = found
-                    .errors
-                    .first()
-                    .map_or_else(String::new, |err| format!(": {err}"));
-                return Err(format!(
-                    "cannot read the operating system trust store for {key_prefix}{detail}. \
-                     Set {key_prefix}_ca to a PEM bundle instead."
-                ));
-            }
-            roots
+    let roots = if let Some(pem) = ca_pem {
+        root_store_from_pem(&format!("{key_prefix}_ca"), pem)?
+    } else {
+        let found = rustls_native_certs::load_native_certs();
+        let mut roots = RootCertStore::empty();
+        roots.add_parsable_certificates(found.certs);
+        if roots.is_empty() {
+            let detail = found
+                .errors
+                .first()
+                .map_or_else(String::new, |err| format!(": {err}"));
+            return Err(format!(
+                "cannot read the operating system trust store for {key_prefix}{detail}. \
+                 Set {key_prefix}_ca to a PEM bundle instead."
+            ));
         }
+        roots
     };
 
     let name = ServerName::try_from(server_name.to_owned()).map_err(|err| {

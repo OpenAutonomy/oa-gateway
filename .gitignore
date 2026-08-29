@@ -10,3 +10,5 @@ repos/
 # Vendored by `mdbook-mermaid install .`, not redistributed here.
 /mermaid.min.js
 /mermaid-init.js
+# Per-developer local tooling config, never project configuration.
+/.claude/settings.local.json

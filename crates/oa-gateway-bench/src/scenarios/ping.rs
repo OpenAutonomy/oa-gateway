@@ -51,7 +51,9 @@ pub(crate) async fn run(args: PingArgs) -> Result<(), String> {
                     None => format!("owp -ERR {error}"),
                 });
             }
-            other => return Err(format!("expected MSG after PUB, got {other}")),
+            other @ ServerOp::Info(_) => {
+                return Err(format!("expected MSG after PUB, got {other}"))
+            }
         }
     }
 

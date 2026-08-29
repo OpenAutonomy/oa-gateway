@@ -118,7 +118,7 @@ impl DdsAdapter {
         let mut tick = interval(Duration::from_millis(20));
         loop {
             tokio::select! {
-                _ = shutdown.cancelled() => {
+                () = shutdown.cancelled() => {
                     info!(adapter = %self.id, "dds shutting down");
                     return Ok(());
                 }
@@ -315,8 +315,8 @@ impl Adapter for DdsAdapter {
                 }
             }
             tokio::select! {
-                _ = shutdown.cancelled() => return Ok(()),
-                _ = tokio::time::sleep(self.config.reconnect_delay) => {}
+                () = shutdown.cancelled() => return Ok(()),
+                () = tokio::time::sleep(self.config.reconnect_delay) => {}
             }
         }
     }

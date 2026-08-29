@@ -124,7 +124,7 @@ impl OwpAdapter {
 
         loop {
             tokio::select! {
-                _ = shutdown.cancelled() => {
+                () = shutdown.cancelled() => {
                     info!(adapter = %self.id, "owp shutting down");
                     return Ok(());
                 }

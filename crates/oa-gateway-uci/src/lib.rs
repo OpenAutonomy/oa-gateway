@@ -264,7 +264,7 @@ mod tests {
         assert!(xml.contains("<OwnerProducer>"));
         let owners = match &msg.body {
             Node::Complex(c) => c.get("SecurityInformation"),
-            _ => None,
+            Node::Simple(_) => None,
         };
         assert!(owners.is_some());
         let back = Message::from_xml(&xml, schema()).unwrap();

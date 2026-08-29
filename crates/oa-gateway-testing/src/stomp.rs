@@ -81,7 +81,7 @@ impl MiniBroker {
 #[derive(Clone)]
 struct Sub {
     conn_id: u64,
-    sub_id: String,
+    id: String,
     tx: mpsc::Sender<Frame>,
 }
 
@@ -100,7 +100,7 @@ async fn run_broker(listener: TcpListener, shutdown: CancellationToken, tls: Opt
     let mut conn_seq = 1u64;
     loop {
         tokio::select! {
-            _ = shutdown.cancelled() => break,
+            () = shutdown.cancelled() => break,
             accepted = listener.accept() => {
                 let Ok((stream, _)) = accepted else { continue };
                 let conn_id = conn_seq;
@@ -143,7 +143,7 @@ async fn handle_conn(
     let mut tmp = [0u8; 8192];
     loop {
         tokio::select! {
-            _ = shutdown.cancelled() => break,
+            () = shutdown.cancelled() => break,
             n = read.read(&mut tmp) => {
                 let n = n.map_err(|_| ())?;
                 if n == 0 {
@@ -192,7 +192,7 @@ async fn dispatch(
             let mut guard = state.lock().await;
             guard.subs.entry(dest).or_default().push(Sub {
                 conn_id,
-                sub_id,
+                id: sub_id,
                 tx: out_tx.clone(),
             });
         }
@@ -200,7 +200,7 @@ async fn dispatch(
             let sub_id = frame.header("id").ok_or(())?.to_owned();
             let mut guard = state.lock().await;
             for subs in guard.subs.values_mut() {
-                subs.retain(|s| !(s.conn_id == conn_id && s.sub_id == sub_id));
+                subs.retain(|s| !(s.conn_id == conn_id && s.id == sub_id));
             }
         }
         "SEND" => {
@@ -212,7 +212,7 @@ async fn dispatch(
             for sub in targets {
                 let mut msg = Frame::new("MESSAGE")
                     .with_header("destination", dest.clone())
-                    .with_header("subscription", sub.sub_id.clone())
+                    .with_header("subscription", sub.id.clone())
                     .with_header("message-id", mid.to_string());
                 for (k, v) in &frame.headers {
                     if k == "destination" {
@@ -220,7 +220,7 @@ async fn dispatch(
                     }
                     msg.headers.push((k.clone(), v.clone()));
                 }
-                msg.body = frame.body.clone();
+                msg.body.clone_from(&frame.body);
                 let _ = sub.tx.send(msg).await;
             }
         }

@@ -164,25 +164,19 @@ pub fn decode_one_with_limit(
         max: max_frame_size,
     };
 
-    let start = match buf.iter().position(|&b| b != b'\n' && b != b'\r' && b != 0) {
-        Some(i) => i,
-        None => {
-            buf.clear();
-            return Ok(None);
-        }
+    let Some(start) = buf.iter().position(|&b| b != b'\n' && b != b'\r' && b != 0) else {
+        buf.clear();
+        return Ok(None);
     };
     if start > 0 {
         buf.drain(..start);
     }
 
-    let header_end = match find_header_end(buf) {
-        Some(end) => end,
-        None => {
-            if buf.len() > max_frame_size {
-                return Err(too_large());
-            }
-            return Ok(None);
+    let Some(header_end) = find_header_end(buf) else {
+        if buf.len() > max_frame_size {
+            return Err(too_large());
         }
+        return Ok(None);
     };
     if header_end > max_frame_size {
         return Err(too_large());
@@ -230,16 +224,13 @@ pub fn decode_one_with_limit(
             return Err(CodecError::MissingNull);
         }
         (end, end + 1)
+    } else if let Some(rel) = buf[body_start..].iter().position(|&b| b == 0) {
+        (body_start + rel, body_start + rel + 1)
     } else {
-        match buf[body_start..].iter().position(|&b| b == 0) {
-            Some(rel) => (body_start + rel, body_start + rel + 1),
-            None => {
-                if buf.len() > max_frame_size {
-                    return Err(too_large());
-                }
-                return Ok(None);
-            }
+        if buf.len() > max_frame_size {
+            return Err(too_large());
         }
+        return Ok(None);
     };
 
     let body = buf[body_start..body_end].to_vec();

@@ -101,7 +101,7 @@ fn read_node(
             continue;
         }
         let decl = decls.iter().copied().find(|e| e.name == *key);
-        let child_type = decl.map(|e| e.type_name.as_str()).unwrap_or("xs:string");
+        let child_type = decl.map_or("xs:string", |e| e.type_name.as_str());
         let array = decl.is_some_and(|e| e.max_occurs.is_array());
         let child_path = format!("{path}.{key}");
         if array {
@@ -136,10 +136,10 @@ fn read_node(
         }
     }
 
-    let type_name = if actual != type_name {
-        Some(actual.to_owned())
-    } else {
+    let type_name = if actual == type_name {
         None
+    } else {
+        Some(actual.to_owned())
     };
     Ok(Node::Complex(Complex { type_name, fields }))
 }
@@ -216,7 +216,7 @@ fn write_node(
             }
             for (name, field) in &c.fields {
                 let decl = decls.iter().copied().find(|e| e.name == *name);
-                let child_type = decl.map(|e| e.type_name.as_str()).unwrap_or("xs:string");
+                let child_type = decl.map_or("xs:string", |e| e.type_name.as_str());
                 let child_path = format!("{path}.{name}");
                 let value = match field {
                     Field::One(n) => write_node(n, schema, child_type, &child_path, depth + 1)?,

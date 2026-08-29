@@ -19,3 +19,6 @@ uuid.workspace = true
 
 [dev-dependencies]
 oa-gateway-core.workspace = true
+
+[lints]
+workspace = true

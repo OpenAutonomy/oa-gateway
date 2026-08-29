@@ -171,6 +171,11 @@ fn minimal_wrapper_json(meta: &WrapperMeta, inner: &[u8]) -> Result<Bytes, AgraE
 }
 
 /// Unwrap OMS JSON or XML Rx/Tx envelopes into wrapper + inner envelopes.
+///
+/// # Errors
+///
+/// Returns [`AgraError`] if `payload` is not UTF-8, is neither a JSON object
+/// nor an XML element, or is missing a field an Rx/Tx wrapper requires.
 pub fn unwrap(topic: &str, payload: &[u8]) -> Result<Unwrapped, AgraError> {
     let text = std::str::from_utf8(payload)
         .map_err(|_| AgraError::Json("wrapper payload is not UTF-8".into()))?;
@@ -324,6 +329,10 @@ pub struct WrapRequest {
 }
 
 /// Wrap an inner UCI payload (XML or OMS JSON bytes) as hexBinary inside Rx/Tx OMS JSON.
+///
+/// # Errors
+///
+/// Returns [`AgraError::Json`] if the assembled wrapper cannot be serialized.
 pub fn wrap(req: WrapRequest) -> Result<Envelope, AgraError> {
     let encoded = hex::encode_upper(&req.inner);
     let ranking = json!({
@@ -918,9 +927,7 @@ mod tests {
     /// document could nest without ever appearing to.
     #[test]
     fn a_tag_cannot_hide_depth_in_an_attribute_value() {
-        let hidden: String = (0..MAX_WRAPPER_DEPTH + 1)
-            .map(|_| r#"<n x="/>">"#)
-            .collect();
+        let hidden: String = (0..=MAX_WRAPPER_DEPTH).map(|_| r#"<n x="/>">"#).collect();
         assert!(
             nesting_exceeds(&hidden, MAX_WRAPPER_DEPTH),
             "nesting behind a quoted attribute value must still count"
