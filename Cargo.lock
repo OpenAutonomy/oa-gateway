@@ -890,7 +890,7 @@ dependencies = [
 
 [[package]]
 name = "oa-gateway"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "oa-gateway-adapter",
  "oa-gateway-core",
@@ -911,7 +911,7 @@ dependencies = [
 
 [[package]]
 name = "oa-gateway-adapter"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "oa-gateway-core",
@@ -928,7 +928,7 @@ dependencies = [
 
 [[package]]
 name = "oa-gateway-agra"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bytes",
  "hex",
@@ -942,7 +942,7 @@ dependencies = [
 
 [[package]]
 name = "oa-gateway-bench"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bytes",
  "futures-util",
@@ -959,7 +959,7 @@ dependencies = [
 
 [[package]]
 name = "oa-gateway-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bytes",
  "thiserror 2.0.20",
@@ -969,7 +969,7 @@ dependencies = [
 
 [[package]]
 name = "oa-gateway-dds"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -988,7 +988,7 @@ dependencies = [
 
 [[package]]
 name = "oa-gateway-loopback"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1000,7 +1000,7 @@ dependencies = [
 
 [[package]]
 name = "oa-gateway-owp"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1021,7 +1021,7 @@ dependencies = [
 
 [[package]]
 name = "oa-gateway-stomp"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1038,7 +1038,7 @@ dependencies = [
 
 [[package]]
 name = "oa-gateway-testing"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bytes",
  "futures-util",
@@ -1059,7 +1059,7 @@ dependencies = [
 
 [[package]]
 name = "oa-gateway-uci"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "oa-gateway-testing",
  "regex",
