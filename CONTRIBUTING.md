@@ -2,6 +2,8 @@
 
 OA-Gateway is an independent prototype under the MIT License. Pull requests are welcome.
 
+By participating in this project you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
+
 Start with [docs/glossary.md](docs/glossary.md) for the acronyms, [docs/architecture.md](docs/architecture.md) for the crate graph, and [docs/writing-an-adapter.md](docs/writing-an-adapter.md) if you are adding a protocol.
 
 Found a vulnerability? Do not open a PR for it first — [SECURITY.md](SECURITY.md)
