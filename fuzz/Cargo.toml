@@ -1,0 +1,57 @@
+# Fuzz harnesses for the peer-facing parsers. Its own workspace on purpose:
+# `cargo fuzz` uses a nightly toolchain and the `libfuzzer-sys` runtime, neither
+# of which the main workspace wants. Build from the repo root with
+# `cargo +nightly fuzz run <target>`.
+
+[package]
+name = "oa-gateway-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+oa-gateway-stomp = { path = "../crates/oa-gateway-stomp" }
+oa-gateway-owp = { path = "../crates/oa-gateway-owp" }
+oa-gateway-agra = { path = "../crates/oa-gateway-agra" }
+oa-gateway-uci = { path = "../crates/oa-gateway-uci" }
+
+[[bin]]
+name = "stomp_codec"
+path = "fuzz_targets/stomp_codec.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "owp_codec"
+path = "fuzz_targets/owp_codec.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "agra_wrapper"
+path = "fuzz_targets/agra_wrapper.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "uci_instance"
+path = "fuzz_targets/uci_instance.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "uci_xsd"
+path = "fuzz_targets/uci_xsd.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]

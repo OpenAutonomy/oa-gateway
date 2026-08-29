@@ -1,0 +1,50 @@
+name: fuzz
+
+# Its own workflow, not a job in ci.yml: it needs a nightly toolchain and the
+# libfuzzer runtime, and it runs a short smoke on every change plus a longer
+# sweep on a weekly schedule.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "23 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [stomp_codec, owp_codec, agra_wrapper, uci_instance, uci_xsd]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+      - uses: taiki-e/install-action@cargo-fuzz
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz
+      - name: seed corpus
+        run: ./fuzz/seed-corpus.sh
+      - name: fuzz ${{ matrix.target }}
+        # 60 s per target on a change, 5 min on the weekly schedule.
+        run: >-
+          cargo fuzz run ${{ matrix.target }} --
+          -max_total_time=${{ github.event_name == 'schedule' && 300 || 60 }}
+          -timeout=15 -rss_limit_mb=2048
+      - name: upload crash input
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-${{ matrix.target }}-artifacts
+          path: fuzz/artifacts/
+          retention-days: 14
