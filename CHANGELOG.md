@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a connection slot without making progress. The INIT deadline is measured from
   the handshake; the idle deadline resets on any client or server frame. `0`
   disables either timeout, which is the pre-existing behavior.
+- `owp.allowed_origins`: an opt-in allowlist of exact `Origin` header values
+  for the WebSocket handshake. Empty (the default) accepts any origin, as
+  before; a non-empty list refuses a handshake whose `Origin` is not listed
+  verbatim — a missing `Origin` included — with `403`, closing the
+  cross-site-WebSocket path for browser clients.
 
 ## [0.2.0] - 2026-08-28
 

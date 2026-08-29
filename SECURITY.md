@@ -60,6 +60,13 @@ whatever path you pass in `OAG_CONFIG`; `config/compose.toml` listens on all
 interfaces inside the container so Docker can publish the port, and the
 compose file still maps that port to `127.0.0.1` on the host.
 
+The OWP listener does not check the `Origin` header by default, so a browser
+on any page can open a WebSocket to it wherever it is reachable. `owp.allowed_origins`
+is an opt-in allowlist that refuses a handshake from an unlisted origin; it is
+not a substitute for the proxy, since a non-browser client sets whatever
+`Origin` it likes, but it closes the cross-site-WebSocket path for browser
+clients. Empty by default, so the posture above is unchanged until it is set.
+
 That assumption is what makes the rest of this document coherent. A finding is
 interesting here if it lets a peer do something the posture above does *not*
 already permit.
