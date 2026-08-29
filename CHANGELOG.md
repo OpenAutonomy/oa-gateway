@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-29
+
 ### Added
 
 - `owp.init_timeout_secs` (default `30`) and `owp.idle_timeout_secs` (default
@@ -20,6 +22,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   before; a non-empty list refuses a handshake whose `Origin` is not listed
   verbatim — a missing `Origin` included — with `403`, closing the
   cross-site-WebSocket path for browser clients.
+- `fuzz/`: `cargo-fuzz` harnesses for the STOMP and OWP codecs, the A-GRA
+  wrapper, and UCI JSON/XML conversion and XSD compilation, run on every
+  change and weekly on a longer schedule.
+- Tag-triggered release workflow: a `vX.Y.Z` push now builds a checksummed
+  binary, a CycloneDX SBOM, a GitHub Release, and a `ghcr.io` image. See
+  [RELEASING.md](RELEASING.md).
+
+### Changed
+
+- The STOMP client's `passcode` is held as a redacting `Secret` type, so it
+  can no longer appear in a `Debug` of the adapter or host config.
+- `[workspace.lints]` now forbids `unsafe` and enforces a curated
+  `clippy::pedantic` set across every crate.
 
 ## [0.2.0] - 2026-08-28
 
@@ -93,6 +108,7 @@ crates.io. Canonical home is
 - rustdoc on GitHub Pages:
   [openautonomy.github.io/oa-gateway](https://openautonomy.github.io/oa-gateway/).
 
-[Unreleased]: https://github.com/OpenAutonomy/oa-gateway/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/OpenAutonomy/oa-gateway/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/OpenAutonomy/oa-gateway/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/OpenAutonomy/oa-gateway/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/OpenAutonomy/oa-gateway/releases/tag/v0.1.0
