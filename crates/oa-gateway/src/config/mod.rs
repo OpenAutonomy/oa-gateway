@@ -151,6 +151,17 @@ mod tests {
     }
 
     #[test]
+    fn a_debug_of_the_config_does_not_leak_the_stomp_passcode() {
+        let config: Config =
+            toml::from_str("[stomp]\nlogin = \"user\"\npasscode = \"s3cr3t-passphrase\"\n")
+                .unwrap();
+        assert_eq!(config.stomp.passcode.expose(), "s3cr3t-passphrase");
+        let shown = format!("{config:?}");
+        assert!(!shown.contains("s3cr3t-passphrase"), "{shown}");
+        assert!(shown.contains("redacted"), "{shown}");
+    }
+
+    #[test]
     fn dds_provider_and_qos_are_checked() {
         let config: Config =
             toml::from_str("[dds]\nprovider = \"rustdds\"\nqos = \"config/dds-qos.xml\"\n")

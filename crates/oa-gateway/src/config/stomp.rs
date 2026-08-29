@@ -5,6 +5,7 @@
 //! unless `enabled = false`. Java CAL/OpenWire peers share the same
 //! destinations when the topic names match.
 
+use oa_gateway_stomp::Secret;
 use serde::Deserialize;
 
 use super::default_true;
@@ -32,9 +33,10 @@ pub(crate) struct StompSection {
     /// CONNECT login. Empty (the default) omits the header.
     #[serde(default)]
     pub(crate) login: String,
-    /// CONNECT passcode. Empty (the default) omits the header.
+    /// CONNECT passcode. Empty (the default) omits the header. Held as a
+    /// [`Secret`] so a `Debug` of the parsed config cannot print it.
     #[serde(default)]
-    pub(crate) passcode: String,
+    pub(crate) passcode: Secret,
     /// Prefix prepended to each topic to form a STOMP destination.
     /// Defaults to `"/topic/"`.
     #[serde(default = "default_stomp_prefix")]
@@ -103,7 +105,7 @@ impl Default for StompSection {
             broker: default_stomp_broker(),
             host: default_stomp_host(),
             login: String::new(),
-            passcode: String::new(),
+            passcode: Secret::default(),
             destination_prefix: default_stomp_prefix(),
             topics: default_stomp_topics(),
             unwrap_ma_payloads: true,

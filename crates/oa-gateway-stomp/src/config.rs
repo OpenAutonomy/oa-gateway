@@ -5,6 +5,7 @@ use oa_gateway_adapter::tls::ClientTls;
 use oa_gateway_adapter::OnPanic;
 
 use crate::codec::DEFAULT_MAX_FRAME_SIZE;
+use crate::Secret;
 
 /// Runtime settings for a STOMP client session.
 ///
@@ -15,7 +16,8 @@ use crate::codec::DEFAULT_MAX_FRAME_SIZE;
 ///
 /// [`Self::login`] and [`Self::passcode`] are `None` to omit those
 /// CONNECT headers, not to send blanks. [`Self::passcode`] is sent only
-/// when [`Self::login`] is set.
+/// when [`Self::login`] is set, and is a [`Secret`] so it cannot be
+/// printed by a `Debug` of this struct.
 #[derive(Debug, Clone)]
 pub struct StompConfig {
     pub broker: SocketAddr,
@@ -24,7 +26,7 @@ pub struct StompConfig {
     /// CONNECT `login`. `None` omits the header.
     pub login: Option<String>,
     /// CONNECT `passcode`. Sent only when [`Self::login`] is `Some`.
-    pub passcode: Option<String>,
+    pub passcode: Option<Secret>,
     /// Prepended to each topic to form a STOMP destination. A missing
     /// trailing slash is added by [`crate::DestinationMap`].
     pub destination_prefix: String,

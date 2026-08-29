@@ -22,6 +22,7 @@ mod client;
 mod codec;
 mod config;
 mod dest;
+mod secret;
 
 pub use adapter::StompAdapter;
 pub use codec::{decode_one, decode_one_with_limit, CodecError, Frame, DEFAULT_MAX_FRAME_SIZE};
@@ -31,3 +32,4 @@ pub use dest::{
     HDR_STOMP_DEST, HDR_TOPIC, HDR_TYPE_HINT,
 };
 pub use oa_gateway_adapter::OnPanic;
+pub use secret::Secret;

@@ -13,6 +13,7 @@ bytes.workspace = true
 oa-gateway-adapter.workspace = true
 oa-gateway-agra.workspace = true
 oa-gateway-core.workspace = true
+serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true

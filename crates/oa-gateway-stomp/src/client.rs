@@ -110,7 +110,7 @@ pub async fn connect(config: &StompConfig) -> Result<(FrameReader, FrameWriter),
     if let Some(login) = &config.login {
         connect = connect.with_header("login", login);
         if let Some(passcode) = &config.passcode {
-            connect = connect.with_header("passcode", passcode);
+            connect = connect.with_header("passcode", passcode.expose());
         }
     }
     writer.send(&connect).await?;
