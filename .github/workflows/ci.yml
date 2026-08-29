@@ -50,6 +50,27 @@ jobs:
           path: target/doc
           retention-days: 14
 
+  msrv:
+    # Builds the workspace on exactly the toolchain named by `rust-version`
+    # in Cargo.toml. The other jobs pin 1.85.0 by hand, so today the floor is
+    # only exercised as a side effect; this asserts it, and reads the version
+    # from Cargo.toml so the two cannot drift.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: read MSRV from Cargo.toml
+        id: msrv
+        run: |
+          version=$(grep -m1 '^rust-version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "MSRV is $version"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.msrv.outputs.version }}
+      - uses: Swatinem/rust-cache@v2
+      - name: check
+        run: cargo check --workspace --all-targets --locked
+
   pages:
     # HTML is already built in `test`: rustdoc at the root, the docs/*.md
     # guide under guide/. This job only publishes it. Private repos, fork
