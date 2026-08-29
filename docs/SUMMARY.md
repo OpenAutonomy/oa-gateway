@@ -7,6 +7,7 @@
 - [Configuration](configuration.md)
 - [Writing an Adapter](writing-an-adapter.md)
 - [Using a Custom XSD](using-custom-xsd.md)
+- [Connecting a WebSocket Client](connecting-websocket.md)
 - [Connecting ActiveMQ](connecting-active-mq.md)
 - [Connecting DDS](connecting-dds.md)
 - [Benchmarking](benchmarking.md)
