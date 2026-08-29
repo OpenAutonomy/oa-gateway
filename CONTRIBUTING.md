@@ -62,3 +62,4 @@ The [`fuzz/`](fuzz/) workspace holds `cargo-fuzz` harnesses for the peer-facing 
 - New behavior needs a test that asserts observable routing or codec output, not source layout.
 - Commit messages: why, not how.
 - User-facing changes belong under `[Unreleased]` in [CHANGELOG.md](CHANGELOG.md).
+- Cutting a release is in [RELEASING.md](RELEASING.md): bump the version, date the changelog, tag, and a workflow builds the binary, checksums, SBOM, GitHub Release, and `ghcr.io` image.
