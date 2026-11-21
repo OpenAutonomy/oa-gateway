@@ -5,9 +5,12 @@
 //! carries the first of those as hex. `Message::from_json` plus an empty
 //! violation list is the bar — conversion without a schema check is not.
 //!
-//! The XSDs live on the sibling `open-ma` tree (`third_party/a-gra/Schema`)
-//! in the demo checkout. CI only has this repo, so the tests return when
-//! those files are absent rather than panic.
+//! CI fetches the real XSDs with `scripts/fetch-agra-schema.sh` (pinned to
+//! the public `open-arsenal/a-gra/standard` v5.0a tag — not `main`, which has
+//! since moved to 6.0a) and points `AGRA_SCHEMA_DIR` at the result. A local
+//! run without that env var falls back to the sibling `open-ma` tree
+//! (`third_party/a-gra/Schema`) in the demo checkout; if neither has the
+//! files, the tests return rather than panic.
 
 use std::fs;
 use std::path::PathBuf;

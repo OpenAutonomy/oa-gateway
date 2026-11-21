@@ -26,8 +26,12 @@ jobs:
         run: cargo fmt --all --check
       - name: clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: fetch A-GRA 5.0a schema
+        run: ./scripts/fetch-agra-schema.sh
       - name: test
         run: cargo test --workspace --locked
+        env:
+          AGRA_SCHEMA_DIR: ${{ github.workspace }}/schema/a-gra
       - name: docs
         run: cargo doc --workspace --no-deps --locked --document-private-items
         env:
