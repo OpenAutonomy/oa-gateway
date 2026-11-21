@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `scripts/fetch-agra-schema.sh`, pinned by checksum to the public
+  `open-arsenal/a-gra/standard` `v5.0a` tag (not `main`, which has since moved
+  to A-GRA 6.0a). CI now runs `oa-gateway-uci`'s `tests/agra_schema.rs` against
+  the real fetched schema instead of silently skipping it for lack of a
+  sibling `open-ma` checkout.
+
 ## [0.3.0] - 2026-08-29
 
 ### Added

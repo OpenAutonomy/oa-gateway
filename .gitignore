@@ -3,7 +3,8 @@
 .DS_Store
 .cargo/
 repos/
-# Standards fetched by scripts/fetch-uci-schema.sh, not redistributed here.
+# Standards fetched by scripts/fetch-uci-schema.sh and
+# scripts/fetch-agra-schema.sh, not redistributed here.
 /schema/
 # Local output of scripts/ci-bench.sh
 /bench/

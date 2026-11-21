@@ -47,7 +47,7 @@ Docker, ActiveMQ, DDS, and the full configuration reference are in the [guide](h
 
 ## Standards
 
-UCI, OMS, and A-GRA XSD documents are not in the tree. [`scripts/fetch-uci-schema.sh`](scripts/fetch-uci-schema.sh) writes a gitignored `schema/`. Tests use a fixture schema. The [Dockerfile](Dockerfile) fetches UCI 2.5 at image build. See [docs/using-custom-xsd.md](docs/using-custom-xsd.md).
+UCI, OMS, and A-GRA XSD documents are not in the tree. [`scripts/fetch-uci-schema.sh`](scripts/fetch-uci-schema.sh) and [`scripts/fetch-agra-schema.sh`](scripts/fetch-agra-schema.sh) each write a gitignored `schema/` subdirectory, pinned by checksum to a known revision (UCI 2.5, A-GRA 5.0a — the `open-arsenal/a-gra/standard` `main` branch has since moved to 6.0a, which this project does not target). Tests use a fixture schema by default; `oa-gateway-uci`'s `tests/agra_schema.rs` validates golden fixtures against the real fetched A-GRA 5.0a catalog, and CI runs it for real. The [Dockerfile](Dockerfile) fetches UCI 2.5 at image build. See [docs/using-custom-xsd.md](docs/using-custom-xsd.md).
 
 ## Documentation
 
