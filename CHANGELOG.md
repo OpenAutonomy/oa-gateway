@@ -70,6 +70,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   longer exists there, so every fresh fetch (a clean `docker build` included)
   404'd. Re-pinned to the `v2.5` tag, where that directory still lives
   byte-identical to what `scripts/uci-schema.sha256` already pinned.
+- A broken intra-doc link in `oa-gateway-uci`'s `Mode::is_on` doc comment,
+  left over from deleting `validate::validate` — `cargo doc -D warnings`
+  failed on it in CI.
+- `rustls` (0.23.43 → 0.23.46), `rustls-webpki` (0.103.15 → 0.103.17), and
+  `tokio` (1.53.1 → 1.54.1), each one patch release behind a RustSec
+  advisory published since this repo's last successful `cargo-deny` run
+  (RUSTSEC-2026-0285, -0346, -0348, -0349, -0382, -0386) — pre-existing and
+  unrelated to this change, caught only because this PR's CI run was the
+  first to check advisories since they were published. All six are fixed by
+  an in-range `cargo update`, in both `Cargo.lock` and `fuzz/Cargo.lock`.
 
 ## [0.3.0] - 2026-08-29
 

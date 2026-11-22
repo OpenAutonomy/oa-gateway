@@ -18,7 +18,9 @@ pub enum Mode {
 }
 
 impl Mode {
-    /// Whether this mode will run [`super::validate`].
+    /// Whether this mode will check a payload at all, rather than carry it
+    /// through untouched. The check itself is not in this crate; see
+    /// `oa-gateway-xsd-libxml`.
     #[must_use]
     pub fn is_on(self) -> bool {
         !matches!(self, Self::Off)
