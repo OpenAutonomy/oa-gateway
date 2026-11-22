@@ -28,8 +28,10 @@ use crate::tls::HostTls;
 /// logged inside its task; the handle still completes so shutdown can join
 /// it.
 ///
-/// `schema` and `validate` are handed to OWP and DDS. STOMP and loopback
-/// do not convert or check payloads.
+/// `schema` and `validate` are handed to OWP, STOMP, and DDS, checking
+/// both directions on each. Loopback does not convert or check payloads —
+/// it is an in-process adapter with no external trust boundary to close a
+/// gap on.
 ///
 /// # Errors
 ///
@@ -84,6 +86,9 @@ pub(crate) async fn start(
             &config.stomp,
             broker,
             tls.stomp,
+            schema.as_ref(),
+            xsd_validator.as_ref(),
+            validate,
             Arc::clone(&engine),
             shutdown.clone(),
         )?);

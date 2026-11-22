@@ -21,6 +21,7 @@ mod adapter;
 mod client;
 mod codec;
 mod config;
+mod convert;
 mod dest;
 mod secret;
 

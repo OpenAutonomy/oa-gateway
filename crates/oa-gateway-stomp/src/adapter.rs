@@ -13,6 +13,8 @@ use oa_gateway_agra::{unwrap as unwrap_ma, wrapper_kind};
 use oa_gateway_core::{
     AdapterId, Delivery, Engine, Envelope, RouteKey, SubId, DEFAULT_CHANNEL_CAPACITY,
 };
+use oa_gateway_uci::validate::Mode as ValidateMode;
+use oa_gateway_xsd_libxml::summarize;
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
@@ -22,6 +24,7 @@ use crate::client::{
 };
 use crate::codec::Frame;
 use crate::config::StompConfig;
+use crate::convert::violations_of;
 use crate::dest::{
     inbound_route, sniff_content_type, sniff_type_hint, DestinationMap, HDR_ID, HDR_ORIGIN,
     HDR_STOMP_DEST, HDR_TOPIC, HDR_TYPE_HINT,
@@ -293,7 +296,9 @@ impl StompAdapter {
 /// Topic comes from `oag.topic` or by stripping the destination prefix.
 /// Type hint comes from `oag.type_hint` or by sniffing the body. The
 /// envelope is stamped with this adapter's id so the outbound path can
-/// skip it. A-GRA wrappers publish wrapper and inner as two envelopes.
+/// skip it. A-GRA wrappers publish wrapper and inner as two envelopes,
+/// each checked against [`StompConfig::schema`] on its own via
+/// [`publish_checked`].
 ///
 /// # Errors
 ///
@@ -333,15 +338,51 @@ async fn inbound_publish(
 
     if adapter.config.unwrap_ma_payloads && wrapper_kind(&frame.body).is_some() {
         let peeled = unwrap_ma(&topic, &frame.body).map_err(|e| e.to_string())?;
-        log_drops(adapter, engine.publish(stamp(peeled.wrapper)).await);
-        log_drops(adapter, engine.publish(stamp(peeled.inner)).await);
+        publish_checked(adapter, engine, stamp(peeled.wrapper)).await;
+        publish_checked(adapter, engine, stamp(peeled.inner)).await;
         return Ok(());
     }
 
     let envelope = Envelope::new(route, bytes::Bytes::copy_from_slice(&frame.body))
         .with_content_type(content_type);
-    log_drops(adapter, engine.publish(stamp(envelope)).await);
+    publish_checked(adapter, engine, stamp(envelope)).await;
     Ok(())
+}
+
+/// Checks `env`'s payload against [`StompConfig::schema`], then publishes
+/// it — or drops it, when [`StompConfig::validate`] is
+/// [`ValidateMode::Reject`].
+///
+/// STOMP has no peer connection to notify the way OWP's WebSocket session
+/// does, so a rejected message is dropped and logged rather than answered;
+/// there is no STOMP equivalent of OWP's error frame.
+async fn publish_checked(adapter: &StompAdapter, engine: &Arc<Engine>, env: Envelope) {
+    let violations = violations_of(
+        &env.payload,
+        adapter.config.schema.as_deref(),
+        adapter.config.xsd_validator.as_deref(),
+        adapter.config.validate,
+    )
+    .await;
+    if !violations.is_empty() {
+        let summary = summarize(&violations);
+        if adapter.config.validate == ValidateMode::Reject {
+            warn!(
+                adapter = %adapter.id,
+                topic = %env.route.topic,
+                violations = %summary,
+                "dropping a stomp message that does not follow the UCI schema"
+            );
+            return;
+        }
+        warn!(
+            adapter = %adapter.id,
+            topic = %env.route.topic,
+            violations = %summary,
+            "stomp message does not follow the UCI schema; forwarding it anyway"
+        );
+    }
+    log_drops(adapter, engine.publish(env).await);
 }
 
 /// Writes a SEND for one engine delivery.
@@ -349,6 +390,14 @@ async fn inbound_publish(
 /// Skips envelopes whose `oag.origin_adapter` is this adapter, so a
 /// MESSAGE just taken from the broker is not sent back. `stomp.*`
 /// headers and `oag.origin_adapter` are not copied onto the wire.
+///
+/// Checked against [`StompConfig::schema`] before it is written: the
+/// engine does not transform payloads, so a non-conforming delivery here
+/// did not necessarily enter through this adapter's own, already-checked
+/// inbound path — it may have come from another adapter under `Warn`
+/// mode, which still lets it cross. There is no peer connection to answer
+/// the way OWP's WebSocket session can, so a rejected send is dropped and
+/// logged rather than answered.
 ///
 /// # Errors
 ///
@@ -361,6 +410,32 @@ async fn forward_outbound(
 ) -> Result<(), String> {
     if adapter.config.suppress_echo && delivery.envelope.is_echo_of(&adapter.id) {
         return Ok(());
+    }
+
+    let violations = violations_of(
+        &delivery.envelope.payload,
+        adapter.config.schema.as_deref(),
+        adapter.config.xsd_validator.as_deref(),
+        adapter.config.validate,
+    )
+    .await;
+    if !violations.is_empty() {
+        let summary = summarize(&violations);
+        if adapter.config.validate == ValidateMode::Reject {
+            warn!(
+                adapter = %adapter.id,
+                topic = %delivery.envelope.route.topic,
+                violations = %summary,
+                "dropping an outbound send that does not follow the UCI schema"
+            );
+            return Ok(());
+        }
+        warn!(
+            adapter = %adapter.id,
+            topic = %delivery.envelope.route.topic,
+            violations = %summary,
+            "outbound send does not follow the UCI schema; forwarding it anyway"
+        );
     }
 
     let dest = map.to_stomp(&delivery.envelope.route.topic);

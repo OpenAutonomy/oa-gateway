@@ -92,6 +92,7 @@ classDiagram
     OwpAdapter ..> Uci : convert
     OwpAdapter ..> XsdLibxml : validate
     OwpAdapter ..> Agra : unwrap
+    StompAdapter ..> XsdLibxml : validate
     StompAdapter ..> Agra : unwrap
     DdsAdapter ..> XsdLibxml : validate
     DdsAdapter ..> Agra : unwrap
@@ -107,7 +108,7 @@ classDiagram
 | `oa-gateway-agra` | Peel and wrap `MA_RxDataPayload` / `MA_TxDataPayloadCommand`. A library. | core |
 | `oa-gateway-loopback` | In-process peer with no socket. | adapter and core |
 | `oa-gateway-owp` | WebSocket server: framing, per-connection subscriptions, optional convert/validate, and reconnect. | adapter, core, uci, agra, and xsd-libxml |
-| `oa-gateway-stomp` | STOMP 1.2 client toward a broker, including echo skip and reconnect. | adapter, core, and agra |
+| `oa-gateway-stomp` | STOMP 1.2 client toward a broker, including echo skip and reconnect. | adapter, core, agra, uci, and xsd-libxml |
 | `oa-gateway-dds` | DDS participant: engine topic equals DDS topic, A-GRA Rx/Tx samples, rustdds provider, optional validate and reconnect. | adapter, core, uci, agra, and xsd-libxml |
 | `oa-gateway` | Composition root: load TOML, compile the schema, resolve addresses, and spawn `run`. | every runtime crate |
 | `oa-gateway-testing` | Cross-engine tests and harnesses. Adapter crates must not depend on it. | optional and one-way |
@@ -138,10 +139,11 @@ sequenceDiagram
   Note over OWP: optional unwrap, convert, validate
   OWP->>Eng: publish Envelope
   Eng->>STOMP: Delivery on matching sub
-  Note over STOMP: skip if is_echo_of(stomp)
+  Note over STOMP: skip if is_echo_of(stomp), else validate
   STOMP->>AMQ: SEND /topic/{name}
 
   AMQ->>STOMP: MESSAGE
+  Note over STOMP: validate before publish
   STOMP->>Eng: publish with_origin(stomp)
   Eng->>OWP: Delivery
   OWP->>WS: MSG
@@ -149,7 +151,7 @@ sequenceDiagram
 
 Inbound MESSAGE frames are stamped with `oag.origin_adapter`. When `suppress_echo` is on, outbound SEND skips envelopes that originated on this adapter. The engine does not skip by origin. OWP uses one adapter id for every WebSocket, so a core-level origin skip would hide a message from other clients on the same server.
 
-Conversion (JSON ↔ XML) runs only in OWP, via `oa-gateway-uci`. Validation runs in OWP and DDS, via `oa-gateway-xsd-libxml`; the host compiles one XSD entry file with libxml2 and hands the compiled validator and `validate`'s mode to both. STOMP forwards bytes to ActiveMQ; Java CAL peers already speak XML on that bus. With `xml_baseline`, the WebSocket side is OMS JSON while the engine and the broker see UCI XML.
+Conversion (JSON ↔ XML) runs only in OWP, via `oa-gateway-uci`. Validation runs in OWP, STOMP, and DDS, via `oa-gateway-xsd-libxml`; the host compiles one XSD entry file with libxml2 and hands the compiled validator and `validate`'s mode to all three. STOMP checks whatever XML already crosses it without converting — Java CAL peers already speak XML on that bus, so there is nothing to convert, only something to check, in both directions: an inbound MESSAGE before it reaches the engine, and an outbound SEND before it reaches the broker. The outbound check matters because the engine does not transform payloads: under `uci.validate = "warn"` (the default once a schema is loaded), a non-conforming payload from any other adapter still crosses the engine and would otherwise reach the real broker unchecked. With `xml_baseline`, the WebSocket side is OMS JSON while the engine and the broker see UCI XML.
 
 TLS terminates at the socket, in the adapter, and is opt-in per adapter. OWP terminates it as a server when `owp.tls_cert`/`owp.tls_key` are set; STOMP originates it as a client when `stomp.tls` is set, verifying the broker against `stomp.tls_ca` or the operating system trust store. Neither the engine nor the codecs ever see a wrapped stream: `oa-gateway-adapter`'s `MaybeTlsStream` is what OWP's `Session` and STOMP's `FrameReader`/`FrameWriter` hold instead of a bare `TcpStream`, and its plaintext variant is exactly what a deployment with no certificate/CA configured uses. DDS is not a candidate for this — RTPS runs on UDP, not a TCP stream — so its equivalent is DDS Security, which this build does not configure.
 

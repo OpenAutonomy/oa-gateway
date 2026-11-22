@@ -321,6 +321,28 @@ impl StompPeer {
             self.buf.extend_from_slice(&tmp[..n]);
         }
     }
+
+    /// As [`Self::recv`], but returns `None` instead of panicking if no
+    /// complete frame arrives within `window`. For asserting that nothing
+    /// arrives — for example, a dropped-and-logged rejection with no
+    /// error frame to wait for instead.
+    ///
+    /// Panics on a clean close within `window`.
+    pub async fn try_recv(&mut self, window: Duration) -> Option<Frame> {
+        timeout(window, async {
+            let mut tmp = [0u8; 8192];
+            loop {
+                if let Some(frame) = decode_one(&mut self.buf).unwrap() {
+                    return frame;
+                }
+                let n = self.stream.read(&mut tmp).await.unwrap();
+                assert!(n > 0, "peer connection closed");
+                self.buf.extend_from_slice(&tmp[..n]);
+            }
+        })
+        .await
+        .ok()
+    }
 }
 
 /// Starts [`StompAdapter`] toward `broker` and waits until it is
@@ -344,6 +366,12 @@ pub async fn start_stomp_adapter(
 
 /// As [`start_stomp_adapter`], with the config open for editing first —
 /// for example to set [`StompConfig::tls`].
+///
+/// The fixture schema ([`oa_gateway_uci::slice::v25`]) and the
+/// libxml2-backed [`crate::xsd_fixtures::ping_validator`] are always
+/// attached, the same way [`crate::owp::start_owp_with`] and
+/// [`crate::dds::start_dds_adapter_with`] attach them — `edit` only needs
+/// to set [`StompConfig::validate`] to turn checking on.
 pub async fn start_stomp_adapter_with(
     engine: Arc<Engine>,
     id: impl Into<String>,
@@ -357,6 +385,8 @@ pub async fn start_stomp_adapter_with(
         broker,
         topics,
         reconnect: false,
+        schema: Some(Arc::new(oa_gateway_uci::slice::v25().clone())),
+        xsd_validator: Some(Arc::new(crate::xsd_fixtures::ping_validator())),
         ..StompConfig::default()
     };
     edit(&mut config);
