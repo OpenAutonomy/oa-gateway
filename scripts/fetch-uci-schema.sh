@@ -6,6 +6,9 @@
 # is gitignored, and are checked against the digests pinned in
 # scripts/uci-schema.sha256 so you always know which revision you are running.
 #
+# Pinned at the v2.5 tag, not main: open-arsenal/uci/standard has since moved
+# main to UCI 2.6, with a reorganized tree this script does not target.
+#
 # Override the source with OAG_UCI_SCHEMA_URL or the destination with
 # OAG_UCI_SCHEMA_DIR, for a program-specific Message Set or an offline mirror.
 set -euo pipefail
@@ -13,7 +16,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-BASE="${OAG_UCI_SCHEMA_URL:-https://gitlab.com/open-arsenal/uci/standard/-/raw/main/OAC-STD-UCI_V2.5}"
+BASE="${OAG_UCI_SCHEMA_URL:-https://gitlab.com/open-arsenal/uci/standard/-/raw/v2.5/OAC-STD-UCI_V2.5}"
 DEST="${OAG_UCI_SCHEMA_DIR:-schema/uci}"
 DIGESTS="$ROOT/scripts/uci-schema.sha256"
 
