@@ -22,3 +22,5 @@ pub mod stomp;
 pub mod tls;
 #[cfg(feature = "harness")]
 pub mod util;
+#[cfg(feature = "harness")]
+pub mod xsd_fixtures;

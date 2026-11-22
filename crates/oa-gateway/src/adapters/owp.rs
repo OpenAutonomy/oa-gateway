@@ -12,6 +12,7 @@ use oa_gateway_adapter::Adapter;
 use oa_gateway_core::Engine;
 use oa_gateway_owp::{OwpAdapter, OwpConfig};
 use oa_gateway_uci::{Schema, ValidateMode};
+use oa_gateway_xsd_libxml::XsdLibxmlValidator;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
@@ -33,10 +34,12 @@ use crate::config::OwpSection;
 /// # Errors
 ///
 /// Returns an error if `on_panic` is not `abort` or `reconnect`.
+#[allow(clippy::too_many_arguments)] // every parameter is an independent, host-owned input; bundling them would just move the count into a struct literal at the one call site.
 pub(crate) fn start(
     section: &OwpSection,
     bind: SocketAddr,
     schema: Option<&Arc<Schema>>,
+    xsd_validator: Option<&Arc<XsdLibxmlValidator>>,
     validate: ValidateMode,
     tls: Option<ServerTls>,
     engine: Arc<Engine>,
@@ -72,6 +75,9 @@ pub(crate) fn start(
     );
     if let Some(schema) = schema {
         adapter = adapter.with_schema(Arc::clone(schema));
+    }
+    if let Some(validator) = xsd_validator {
+        adapter = adapter.with_xsd_validator(Arc::clone(validator));
     }
     let tls_on = tls.is_some();
     if let Some(tls) = tls {

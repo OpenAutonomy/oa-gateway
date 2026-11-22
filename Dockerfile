@@ -11,6 +11,7 @@ WORKDIR /src
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl ca-certificates \
+       libxml2-dev pkg-config libclang-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
@@ -26,7 +27,7 @@ RUN cargo build --release -p oa-gateway --locked
 FROM debian:bookworm-slim AS runtime
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
+    && apt-get install -y --no-install-recommends ca-certificates libxml2 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --uid 10001 --home /app --shell /usr/sbin/nologin oag
 

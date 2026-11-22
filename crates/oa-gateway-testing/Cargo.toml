@@ -20,6 +20,7 @@ harness = [
     "dep:oa-gateway-stomp",
     "dep:oa-gateway-dds",
     "dep:oa-gateway-uci",
+    "dep:oa-gateway-xsd-libxml",
     "dep:rcgen",
     "dep:tokio",
     "dep:tokio-tungstenite",
@@ -37,6 +38,7 @@ oa-gateway-owp = { workspace = true, optional = true }
 oa-gateway-stomp = { workspace = true, optional = true }
 oa-gateway-dds = { workspace = true, optional = true }
 oa-gateway-uci = { workspace = true, optional = true }
+oa-gateway-xsd-libxml = { workspace = true, optional = true }
 rcgen = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 tokio-tungstenite = { workspace = true, optional = true, features = ["rustls-tls-native-roots"] }
@@ -52,6 +54,7 @@ oa-gateway-owp.workspace = true
 oa-gateway-stomp.workspace = true
 oa-gateway-dds.workspace = true
 oa-gateway-uci.workspace = true
+oa-gateway-xsd-libxml.workspace = true
 rcgen.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["full", "test-util"] }

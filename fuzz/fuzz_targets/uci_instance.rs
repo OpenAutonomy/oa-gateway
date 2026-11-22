@@ -1,7 +1,10 @@
 //! OMS JSON / UCI XML parsing and conversion against the fixture schema:
 //! the largest peer-facing parser in the tree. A malformed document must
-//! fail cleanly, and a document that parses must convert and validate
-//! without panicking or looping.
+//! fail cleanly, and a document that parses must convert without
+//! panicking or looping. Validation moved to `oa-gateway-xsd-libxml` and
+//! is not exercised here — fuzzing a libxml2 FFI boundary through
+//! `cargo-fuzz`'s nightly toolchain needs its own sanitizer-instrumented
+//! build of libxml2, which this target does not attempt.
 
 #![no_main]
 
@@ -16,10 +19,8 @@ fuzz_target!(|data: &[u8]| {
 
     if let Ok(msg) = Message::from_json(text, schema) {
         let _ = msg.to_xml(schema);
-        let _ = msg.violations(schema);
     }
     if let Ok(msg) = Message::from_xml(text, schema) {
         let _ = msg.to_json(schema);
-        let _ = msg.violations(schema);
     }
 });

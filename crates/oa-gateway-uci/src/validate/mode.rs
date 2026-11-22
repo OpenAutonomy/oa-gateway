@@ -18,7 +18,9 @@ pub enum Mode {
 }
 
 impl Mode {
-    /// Whether this mode will run [`super::validate`].
+    /// Whether this mode will check a payload at all, rather than carry it
+    /// through untouched. The check itself is not in this crate; see
+    /// `oa-gateway-xsd-libxml`.
     #[must_use]
     pub fn is_on(self) -> bool {
         !matches!(self, Self::Off)
@@ -52,5 +54,21 @@ impl std::str::FromStr for Mode {
                 "unknown validation mode '{other}'; expected off, warn, or reject"
             )),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn a_mode_reads_back_the_way_it_is_written() {
+        for mode in [Mode::Off, Mode::Warn, Mode::Reject] {
+            assert_eq!(Mode::from_str(&mode.to_string()), Ok(mode));
+        }
+        assert!(Mode::from_str("strict").is_err());
+        // Loaded-schema default: report, do not refuse.
+        assert_eq!(Mode::default(), Mode::Warn);
     }
 }

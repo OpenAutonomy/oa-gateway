@@ -12,6 +12,7 @@ use oa_gateway_adapter::tls::{MaybeTlsStream, ServerTls};
 use oa_gateway_adapter::AdapterError;
 use oa_gateway_core::{AdapterId, Engine};
 use oa_gateway_uci::Schema;
+use oa_gateway_xsd_libxml::XsdLibxmlValidator;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Semaphore;
 use tokio::time::timeout;
@@ -40,6 +41,7 @@ pub struct OwpAdapter {
     config: OwpConfig,
     conn_seq: AtomicU64,
     schema: Option<Arc<Schema>>,
+    xsd_validator: Option<Arc<XsdLibxmlValidator>>,
     tls: Option<ServerTls>,
     /// One permit per allowed connection, held for the life of the session.
     connections: Arc<Semaphore>,
@@ -63,6 +65,7 @@ impl OwpAdapter {
             config,
             conn_seq: AtomicU64::new(1),
             schema: None,
+            xsd_validator: None,
             tls: None,
             connections,
             at_capacity: AtomicBool::new(false),
@@ -78,6 +81,15 @@ impl OwpAdapter {
     #[must_use]
     pub fn with_schema(mut self, schema: Arc<Schema>) -> Self {
         self.schema = Some(schema);
+        self
+    }
+
+    /// Supply the libxml2-backed validator checked against the same UCI
+    /// schema. Without one, `validate` has nothing to check and behaves
+    /// like `off` regardless of its configured mode.
+    #[must_use]
+    pub fn with_xsd_validator(mut self, validator: Arc<XsdLibxmlValidator>) -> Self {
+        self.xsd_validator = Some(validator);
         self
     }
 
@@ -217,6 +229,7 @@ impl OwpAdapter {
             adapter_id: self.id.clone(),
             config: self.config.clone(),
             schema: self.schema.clone(),
+            xsd_validator: self.xsd_validator.clone(),
             conn_id,
             ws,
             engine,

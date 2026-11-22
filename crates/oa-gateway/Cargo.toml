@@ -19,6 +19,7 @@ oa-gateway-owp.workspace = true
 oa-gateway-stomp.workspace = true
 oa-gateway-dds.workspace = true
 oa-gateway-uci.workspace = true
+oa-gateway-xsd-libxml.workspace = true
 serde.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true

@@ -324,17 +324,54 @@ fn write_element(
             } else {
                 Vec::new()
             };
-            for (fname, field) in &c.fields {
-                let decl = decls.iter().copied().find(|e| e.name == *fname);
-                let child_type = decl.map_or("xs:string", |e| e.type_name.as_str());
+            // `c.fields`' own order is whatever the source format produced —
+            // JSON in particular comes through `serde_json`'s `BTreeMap`-backed
+            // `Value::Object`, i.e. alphabetical, not declaration order. An
+            // `xs:sequence` requires its declared order, so emit every
+            // declared element first, in `decls`' order, looking each one up
+            // in `c.fields` by name rather than iterating `c.fields` directly.
+            for decl in &decls {
+                let Some((_, field)) = c.fields.iter().find(|(fname, _)| *fname == decl.name)
+                else {
+                    continue;
+                };
+                let child_type = decl.type_name.as_str();
                 match field {
                     Field::One(n) => {
-                        write_element(out, fname, n, schema, child_type, false, depth + 1)?;
+                        write_element(out, &decl.name, n, schema, child_type, false, depth + 1)?;
                         out.push('\n');
                     }
                     Field::Many(items) => {
                         for n in items {
-                            write_element(out, fname, n, schema, child_type, false, depth + 1)?;
+                            write_element(
+                                out,
+                                &decl.name,
+                                n,
+                                schema,
+                                child_type,
+                                false,
+                                depth + 1,
+                            )?;
+                            out.push('\n');
+                        }
+                    }
+                }
+            }
+            // An undeclared field has no position the schema assigns it;
+            // validation is where it is named, not conversion. Write it after
+            // every declared one, in whatever order it arrived.
+            for (fname, field) in &c.fields {
+                if decls.iter().any(|d| d.name == *fname) {
+                    continue;
+                }
+                match field {
+                    Field::One(n) => {
+                        write_element(out, fname, n, schema, "xs:string", false, depth + 1)?;
+                        out.push('\n');
+                    }
+                    Field::Many(items) => {
+                        for n in items {
+                            write_element(out, fname, n, schema, "xs:string", false, depth + 1)?;
                             out.push('\n');
                         }
                     }

@@ -14,6 +14,7 @@ oa-gateway-adapter.workspace = true
 oa-gateway-agra.workspace = true
 oa-gateway-core.workspace = true
 oa-gateway-uci.workspace = true
+oa-gateway-xsd-libxml.workspace = true
 roxmltree.workspace = true
 rustdds.workspace = true
 serde = { workspace = true, features = ["derive"] }

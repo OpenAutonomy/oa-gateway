@@ -14,6 +14,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to A-GRA 6.0a). CI now runs `oa-gateway-uci`'s `tests/agra_schema.rs` against
   the real fetched schema instead of silently skipping it for lack of a
   sibling `open-ma` checkout.
+- `oa-gateway-xsd-libxml`, a new crate that validates converted UCI/A-GRA XML
+  against a real XSD using libxml2 (via the `libxml` crate), compiled once at
+  startup on its own OS thread and called from `oa-gateway-owp` and
+  `oa-gateway-dds`. This is the one place `unsafe` enters the dependency tree
+  — libxml2's own FFI, not this workspace's code, which still forbids
+  `unsafe` outright. `oa-gateway`, the Dockerfile's builder stage, and CI all
+  now need `libxml2-dev`, `pkg-config`, and `libclang-dev` to build; the
+  Dockerfile's runtime stage needs `libxml2`.
+
+### Changed
+
+- UCI/A-GRA schema validation moved from a hand-rolled, from-scratch
+  validator to libxml2, a mature, independently-maintained XSD 1.0 engine.
+  It is strictly more complete: it enforces the full facet and pattern
+  language rather than a recognized subset, and checks identity constraints
+  (`xs:unique`, `xs:key`) the hand-rolled validator never read at all.
+  `uci.validate`'s `off`/`warn`/`reject` modes are unchanged and now gate the
+  libxml2 result directly. Conversion (`oa-gateway-uci`'s `Schema`/
+  `xsd::compile`/JSON ↔ XML) is untouched — libxml2 has no JSON capability of
+  any kind, so this bespoke mapping stays exactly as it was.
+
+### Removed
+
+- `oa-gateway-uci`'s hand-rolled validator (`validate::validate`,
+  `Violation`, `ViolationKind`, and `Message::violations()`) and its ~600
+  lines of validation logic plus ~638 lines of tests, replaced by
+  `oa-gateway-xsd-libxml` above. `oa-gateway-uci` keeps only `Mode`
+  (`ValidateMode`) and the schema-aware codec; it has no validator of its
+  own anymore and is purely a conversion library.
+- The two startup warnings `values of these types will not be checked
+  beyond the facets on them` and `some schema patterns cannot be checked and
+  will not be enforced`. Both described gaps in the deleted hand-rolled
+  validator specifically; libxml2 validates directly against the real XSD
+  text and was never subject to either gap, so the warnings no longer
+  corresponded to anything true about this build's actual validation
+  behavior.
+
+### Fixed
+
+- `oa-gateway-uci`'s XML writer (`Message::to_xml`) emitted a complex
+  type's child elements in whatever order they happened to arrive in —
+  alphabetical for JSON-origin messages, since `serde_json`'s
+  `Value::Object` is `BTreeMap`-backed — instead of the schema's declared
+  `xs:sequence` order. The hand-rolled validator never caught this (it
+  checks presence and cardinality, not order), so a message could convert,
+  report zero violations, and still be invalid XML per a real XSD
+  validator. Found via libxml2 correctly rejecting all four golden A-GRA
+  fixtures on this exact ground. Elements are now written in schema-declared
+  order; an undeclared field (which validation, not conversion, is where
+  that is named) is still written, just after every declared one.
+- `scripts/fetch-uci-schema.sh` pointed at `main` on
+  `open-arsenal/uci/standard`, which has since moved to UCI 2.6 with a
+  reorganized tree — the `OAC-STD-UCI_V2.5/` directory it fetched from no
+  longer exists there, so every fresh fetch (a clean `docker build` included)
+  404'd. Re-pinned to the `v2.5` tag, where that directory still lives
+  byte-identical to what `scripts/uci-schema.sha256` already pinned.
+- A broken intra-doc link in `oa-gateway-uci`'s `Mode::is_on` doc comment,
+  left over from deleting `validate::validate` — `cargo doc -D warnings`
+  failed on it in CI.
+- `rustls` (0.23.43 → 0.23.46), `rustls-webpki` (0.103.15 → 0.103.17), and
+  `tokio` (1.53.1 → 1.54.1), each one patch release behind a RustSec
+  advisory published since this repo's last successful `cargo-deny` run
+  (RUSTSEC-2026-0285, -0346, -0348, -0349, -0382, -0386) — pre-existing and
+  unrelated to this change, caught only because this PR's CI run was the
+  first to check advisories since they were published. All six are fixed by
+  an in-range `cargo update`, in both `Cargo.lock` and `fuzz/Cargo.lock`.
 
 ## [0.3.0] - 2026-08-29
 

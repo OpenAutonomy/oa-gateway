@@ -1,0 +1,23 @@
+[package]
+name = "oa-gateway-xsd-libxml"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+description = "XSD instance validation via libxml2, independent of oa-gateway-uci's conversion"
+
+[dependencies]
+# Pinned, not latest (0.3.24): 0.3.15+ declare rust-version = "1.88", this
+# workspace pins 1.85. 0.3.14 declares no MSRV and was confirmed to build
+# clean under rustc 1.85.0; its `schemas` module API is identical to latest.
+libxml = "=0.3.14"
+thiserror.workspace = true
+tokio = { workspace = true, features = ["sync", "rt"] }
+
+[dev-dependencies]
+oa-gateway-uci.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+[lints]
+workspace = true

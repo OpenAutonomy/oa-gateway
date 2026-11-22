@@ -8,6 +8,7 @@ members = [
     "crates/oa-gateway-stomp",
     "crates/oa-gateway-dds",
     "crates/oa-gateway-uci",
+    "crates/oa-gateway-xsd-libxml",
     "crates/oa-gateway-testing",
     "crates/oa-gateway-bench",
     "crates/oa-gateway",
@@ -88,6 +89,7 @@ oa-gateway-core = { path = "crates/oa-gateway-core" }
 oa-gateway-adapter = { path = "crates/oa-gateway-adapter" }
 oa-gateway-agra = { path = "crates/oa-gateway-agra" }
 oa-gateway-uci = { path = "crates/oa-gateway-uci" }
+oa-gateway-xsd-libxml = { path = "crates/oa-gateway-xsd-libxml" }
 oa-gateway-loopback = { path = "crates/oa-gateway-loopback" }
 oa-gateway-owp = { path = "crates/oa-gateway-owp" }
 oa-gateway-stomp = { path = "crates/oa-gateway-stomp" }

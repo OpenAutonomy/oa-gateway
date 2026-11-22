@@ -61,6 +61,10 @@ classDiagram
             <<library>>
             oa-gateway-agra
         }
+        class XsdLibxml {
+            <<library>>
+            oa-gateway-xsd-libxml
+        }
     }
 
     namespace Core {
@@ -84,9 +88,12 @@ classDiagram
     Gateway ..> DdsAdapter : starts
     Gateway ..> Engine
     Gateway ..> Uci : compiles
+    Gateway ..> XsdLibxml : compiles
     OwpAdapter ..> Uci : convert
+    OwpAdapter ..> XsdLibxml : validate
     OwpAdapter ..> Agra : unwrap
     StompAdapter ..> Agra : unwrap
+    DdsAdapter ..> XsdLibxml : validate
     DdsAdapter ..> Agra : unwrap
     Agra --> Engine : Envelope
 ```
@@ -95,12 +102,13 @@ classDiagram
 |---|---|---|
 | `oa-gateway-core` | Payload-blind pub/sub: `Envelope`, `RouteKey`, and `Engine`. | tokio |
 | `oa-gateway-adapter` | The `Adapter` trait: `id` and `run(engine, shutdown)`. | core |
-| `oa-gateway-uci` | XSD compilation, JSON ↔ XML conversion, and validation. A library, not an adapter. | none of the workspace crates at runtime |
+| `oa-gateway-uci` | XSD compilation and JSON ↔ XML conversion. A library, not an adapter. No validation of its own — see `oa-gateway-xsd-libxml`. | none of the workspace crates at runtime |
+| `oa-gateway-xsd-libxml` | XSD validation of converted XML, backed by libxml2 (the `libxml` crate). Owns the one FFI boundary in this workspace. A library, not an adapter. | none of the workspace crates at runtime |
 | `oa-gateway-agra` | Peel and wrap `MA_RxDataPayload` / `MA_TxDataPayloadCommand`. A library. | core |
 | `oa-gateway-loopback` | In-process peer with no socket. | adapter and core |
-| `oa-gateway-owp` | WebSocket server: framing, per-connection subscriptions, optional convert/validate, and reconnect. | adapter, core, uci, and agra |
+| `oa-gateway-owp` | WebSocket server: framing, per-connection subscriptions, optional convert/validate, and reconnect. | adapter, core, uci, agra, and xsd-libxml |
 | `oa-gateway-stomp` | STOMP 1.2 client toward a broker, including echo skip and reconnect. | adapter, core, and agra |
-| `oa-gateway-dds` | DDS participant: engine topic equals DDS topic, A-GRA Rx/Tx samples, rustdds provider, optional validate and reconnect. | adapter, core, uci, and agra |
+| `oa-gateway-dds` | DDS participant: engine topic equals DDS topic, A-GRA Rx/Tx samples, rustdds provider, optional validate and reconnect. | adapter, core, uci, agra, and xsd-libxml |
 | `oa-gateway` | Composition root: load TOML, compile the schema, resolve addresses, and spawn `run`. | every runtime crate |
 | `oa-gateway-testing` | Cross-engine tests and harnesses. Adapter crates must not depend on it. | optional and one-way |
 
@@ -141,7 +149,7 @@ sequenceDiagram
 
 Inbound MESSAGE frames are stamped with `oag.origin_adapter`. When `suppress_echo` is on, outbound SEND skips envelopes that originated on this adapter. The engine does not skip by origin. OWP uses one adapter id for every WebSocket, so a core-level origin skip would hide a message from other clients on the same server.
 
-Conversion (JSON ↔ XML) runs only in OWP. Validation runs in OWP and DDS; the host hands `[uci].schema` and `validate` to both. STOMP forwards bytes to ActiveMQ; Java CAL peers already speak XML on that bus. With `xml_baseline`, the WebSocket side is OMS JSON while the engine and the broker see UCI XML.
+Conversion (JSON ↔ XML) runs only in OWP, via `oa-gateway-uci`. Validation runs in OWP and DDS, via `oa-gateway-xsd-libxml`; the host compiles one XSD entry file with libxml2 and hands the compiled validator and `validate`'s mode to both. STOMP forwards bytes to ActiveMQ; Java CAL peers already speak XML on that bus. With `xml_baseline`, the WebSocket side is OMS JSON while the engine and the broker see UCI XML.
 
 TLS terminates at the socket, in the adapter, and is opt-in per adapter. OWP terminates it as a server when `owp.tls_cert`/`owp.tls_key` are set; STOMP originates it as a client when `stomp.tls` is set, verifying the broker against `stomp.tls_ca` or the operating system trust store. Neither the engine nor the codecs ever see a wrapped stream: `oa-gateway-adapter`'s `MaybeTlsStream` is what OWP's `Session` and STOMP's `FrameReader`/`FrameWriter` hold instead of a bare `TcpStream`, and its plaintext variant is exactly what a deployment with no certificate/CA configured uses. DDS is not a candidate for this — RTPS runs on UDP, not a TCP stream — so its equivalent is DDS Security, which this build does not configure.
 
@@ -153,7 +161,7 @@ The binary owns process lifetime. It does not implement a protocol.
 
 1. Parse the command line: one config path, or `--help` / `--version`.
 2. Load the TOML file. An unknown key is a startup error. A named adapter table is on; an omitted table is off.
-3. Compile `[uci].schema` before any adapter listens.
+3. Compile `[uci].schema` before any adapter listens, and separately compile its first entry file with libxml2 for `oa-gateway-xsd-libxml`.
 4. Resolve `owp.bind` and `stomp.broker`. DDS has no hostname; `[dds] qos` is checked as a path.
 5. Spawn each enabled adapter's `run` on the shared `Engine` and a cancellation token.
 6. Log engine counters until Ctrl-C, then cancel and join every task.
@@ -164,9 +172,10 @@ If `run` returns `Err`, that adapter is down. The host logs the error and leaves
 
 ## Libraries
 
-`oa-gateway-uci` and `oa-gateway-agra` are codecs. Adapters depend on them; they are not adapters and they do not own a socket.
+`oa-gateway-uci`, `oa-gateway-xsd-libxml`, and `oa-gateway-agra` are codecs. Adapters depend on them; they are not adapters and they do not own a socket.
 
-- **UCI** compiles XSD, converts JSON ↔ XML, and reports schema violations. Conversion is forgiving; validation is a separate pass. See [using-custom-xsd.md](using-custom-xsd.md).
+- **UCI** compiles XSD and converts JSON ↔ XML. Conversion is forgiving — it does not refuse a payload the schema disallows — and does not check the result itself. See [using-custom-xsd.md](using-custom-xsd.md).
+- **XSD-libxml** is the separate validation pass: it compiles one XSD entry file with libxml2 and checks converted XML against it, on a dedicated thread (`SchemaValidationContext` is `!Send`). This is where `validate`'s `warn`/`reject` mode actually takes effect.
 - **A-GRA** unwraps an Rx/Tx hex payload so subscribers can route on the inner message type. OWP, STOMP, and DDS call it when `unwrap_ma_payloads` is on. DDS samples carry the inner bytes already decoded; `unwrapped_from_parts` builds the same wrapper and inner envelopes without serializing to XML first. Platform-facing A-GRA interfaces use native message types and do not use this crate.
 
 ## Design constraints

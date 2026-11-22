@@ -2,9 +2,12 @@
 //!
 //! [`start_owp`] binds an ephemeral port and serves
 //! [`oa_gateway_owp::OwpAdapter`] with the UCI fixture schema
-//! ([`oa_gateway_uci::slice::v25`]), not a compiled XSD. That is
-//! enough for the messages in [`crate::fixtures`]. Helpers panic on
-//! timeout or a surprising frame; they are not a public client API.
+//! ([`oa_gateway_uci::slice::v25`]), which drives conversion, and the
+//! libxml2-backed [`crate::xsd_fixtures::ping_validator`], which drives
+//! validation — the two are kept in sync by hand for `Ping`, the message
+//! the validation tests actually exercise. That is enough for the
+//! messages in [`crate::fixtures`]. Helpers panic on timeout or a
+//! surprising frame; they are not a public client API.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -77,7 +80,11 @@ pub async fn start_owp_with_schema(
     };
     edit(&mut config);
 
-    let adapter = Arc::new(OwpAdapter::new("owp-test", config).with_schema(Arc::new(schema)));
+    let adapter = Arc::new(
+        OwpAdapter::new("owp-test", config)
+            .with_schema(Arc::new(schema))
+            .with_xsd_validator(Arc::new(crate::xsd_fixtures::ping_validator())),
+    );
     let token = shutdown.clone();
     tokio::spawn(async move {
         adapter.serve(listener, engine, token).await.unwrap();

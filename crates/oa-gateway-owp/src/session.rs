@@ -14,8 +14,9 @@ use oa_gateway_agra::{unwrap as unwrap_ma, wrapper_kind, xml_root_local_name};
 use oa_gateway_core::{
     AdapterId, ContentType, Delivery, Engine, Envelope, RouteKey, SubId, DEFAULT_CHANNEL_CAPACITY,
 };
-use oa_gateway_uci::validate::{summarize, Mode as ValidateMode};
+use oa_gateway_uci::validate::Mode as ValidateMode;
 use oa_gateway_uci::Schema;
+use oa_gateway_xsd_libxml::{summarize, XsdError, XsdLibxmlValidator};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -45,6 +46,7 @@ pub(crate) struct Session {
     pub(crate) adapter_id: AdapterId,
     pub(crate) config: OwpConfig,
     pub(crate) schema: Option<Arc<Schema>>,
+    pub(crate) xsd_validator: Option<Arc<XsdLibxmlValidator>>,
     pub(crate) conn_id: u64,
     pub(crate) ws: WebSocketStream<MaybeTlsStream<TcpStream>>,
     pub(crate) engine: Arc<Engine>,
@@ -406,6 +408,7 @@ async fn handle_sub(
     let local_sid = sid.clone();
     let xml_baseline = session.config.xml_baseline;
     let schema = session.schema.clone();
+    let xsd_validator = session.xsd_validator.clone();
     let adapter_id = session.adapter_id.clone();
     let validate = session.config.validate;
     let forwarder = tokio::spawn(async move {
@@ -414,7 +417,6 @@ async fn handle_sub(
         // cause is the same for every payload on this route.
         let mut logged = false;
         let mut logged_invalid = false;
-        let mut logged_conversion_invalid = false;
         while let Some(delivery) = rx.recv().await {
             let Ok(raw) = String::from_utf8(delivery.envelope.payload.to_vec()) else {
                 warn!("dropping non-utf8 payload destined for OWP");
@@ -423,7 +425,13 @@ async fn handle_sub(
 
             // What arrived off the bus, before any conversion of ours,
             // so a violation is attributed to the producer.
-            let violations = violations_of(raw.as_bytes(), schema.as_deref(), validate);
+            let violations = violations_of(
+                raw.as_bytes(),
+                schema.as_deref(),
+                xsd_validator.as_deref(),
+                validate,
+            )
+            .await;
             match handle_violations(
                 &violations,
                 validate,
@@ -431,7 +439,6 @@ async fn handle_sub(
                 &local_sid,
                 &forward_tx,
                 &mut logged_invalid,
-                ViolationWording::PRODUCER,
             )
             .await
             {
@@ -439,38 +446,15 @@ async fn handle_sub(
                 Verdict::Closed => break,
                 Verdict::Forward => {}
             }
+            // There used to be a second check here, on the JSON
+            // xml_to_oms_json just produced, to catch a bug in conversion
+            // itself. libxml2 validates XML instances and has no opinion
+            // about JSON, and re-converting that JSON back to XML just to
+            // check it again would only repeat the producer check above —
+            // so that recheck is gone along with the validator it used.
             let payload = if xml_baseline {
                 match xml_to_oms_json(&raw, schema.as_deref()) {
-                    Ok(json) => {
-                        // Conversion is a no-op when the bus payload was not XML
-                        // to begin with (xml_to_oms_json returns it unchanged),
-                        // in which case re-checking here would just repeat the
-                        // producer check above and misattribute its violation to
-                        // conversion. Only worth checking when bytes may have
-                        // actually changed: conversion is best-effort, and a bug
-                        // in it can produce JSON that no longer follows the
-                        // schema even though the bus payload did.
-                        if oa_gateway_uci::looks_like_xml(raw.as_bytes()) {
-                            let violations =
-                                violations_of(json.as_bytes(), schema.as_deref(), validate);
-                            match handle_violations(
-                                &violations,
-                                validate,
-                                &adapter_id,
-                                &local_sid,
-                                &forward_tx,
-                                &mut logged_conversion_invalid,
-                                ViolationWording::CONVERSION,
-                            )
-                            .await
-                            {
-                                Verdict::Drop => continue,
-                                Verdict::Closed => break,
-                                Verdict::Forward => {}
-                            }
-                        }
-                        json
-                    }
+                    Ok(json) => json,
                     Err(err) => {
                         if !logged {
                             logged = true;
@@ -621,8 +605,10 @@ async fn publish_owp(
         let violations = violations_of(
             &env.payload,
             session.schema.as_deref(),
+            session.xsd_validator.as_deref(),
             session.config.validate,
-        );
+        )
+        .await;
         if !violations.is_empty() {
             let summary = summarize(&violations);
             if session.config.validate == ValidateMode::Reject {
@@ -740,43 +726,16 @@ enum Verdict {
     Closed,
 }
 
-/// The wording that differs between a violation found in what the producer
-/// put on the bus and one found in what `xml_baseline` conversion produced.
-struct ViolationWording {
-    /// Noun phrase completing "delivery on {sid} ...: {summary}".
-    detail: &'static str,
-    reject_log: &'static str,
-    warn_log: &'static str,
-}
-
-impl ViolationWording {
-    const PRODUCER: Self = Self {
-        detail: "does not follow the UCI schema",
-        reject_log: "dropping a delivery that does not follow the UCI schema; later ones on \
-                      this subscription are not logged",
-        warn_log: "delivered payload does not follow the UCI schema; forwarding it anyway, \
-                    and later ones on this subscription are not logged",
-    };
-    const CONVERSION: Self = Self {
-        detail: "converted to a payload that does not follow the UCI schema",
-        reject_log: "dropping a delivery that converted to a payload not following the UCI \
-                      schema; later ones on this subscription are not logged",
-        warn_log: "converted payload does not follow the UCI schema; forwarding it anyway, \
-                    and later ones on this subscription are not logged",
-    };
-}
-
 /// Applies `validate`'s policy to `violations`: in `Reject` mode, sends a
 /// `-ERR` and reports [`Verdict::Drop`]; in `Warn` mode, only logs. Either
 /// way the warning is logged once per subscription, via `logged`.
 async fn handle_violations(
-    violations: &[oa_gateway_uci::validate::Violation],
+    violations: &[XsdError],
     validate: ValidateMode,
     adapter_id: &impl std::fmt::Display,
     local_sid: &str,
     forward_tx: &mpsc::Sender<ServerOp>,
     logged: &mut bool,
-    wording: ViolationWording,
 ) -> Verdict {
     if violations.is_empty() {
         return Verdict::Forward;
@@ -785,9 +744,9 @@ async fn handle_violations(
     if validate == ValidateMode::Reject {
         if !*logged {
             *logged = true;
-            warn!(adapter = %adapter_id, sid = %local_sid, violations = %summary, "{}", wording.reject_log);
+            warn!(adapter = %adapter_id, sid = %local_sid, violations = %summary, "dropping a delivery that does not follow the UCI schema; later ones on this subscription are not logged");
         }
-        let details = format!("delivery on {local_sid} {}: {summary}", wording.detail);
+        let details = format!("delivery on {local_sid} does not follow the UCI schema: {summary}");
         if forward_tx
             .send(err_op(OwpError::InvalidMessage, Some(&details)))
             .await
@@ -799,7 +758,7 @@ async fn handle_violations(
     }
     if !*logged {
         *logged = true;
-        warn!(adapter = %adapter_id, sid = %local_sid, violations = %summary, "{}", wording.warn_log);
+        warn!(adapter = %adapter_id, sid = %local_sid, violations = %summary, "delivered payload does not follow the UCI schema; forwarding it anyway, and later ones on this subscription are not logged");
     }
     Verdict::Forward
 }

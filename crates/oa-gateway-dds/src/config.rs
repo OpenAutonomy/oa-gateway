@@ -9,6 +9,7 @@ use std::time::Duration;
 use oa_gateway_adapter::OnPanic;
 use oa_gateway_uci::validate::Mode as ValidateMode;
 use oa_gateway_uci::Schema;
+use oa_gateway_xsd_libxml::XsdLibxmlValidator;
 
 /// Largest DDS sample accepted from the domain, in bytes, before it is
 /// unwrapped or converted.
@@ -79,9 +80,13 @@ pub struct DdsConfig {
     pub reconnect: bool,
     /// Sleep between rejoin attempts.
     pub reconnect_delay: Duration,
-    /// Compiled UCI schema used to check inbound samples. `None` skips
-    /// the check: there is nothing to check against.
+    /// Compiled UCI schema used to convert an inbound sample to XML
+    /// before checking it. `None` skips the check: there is nothing to
+    /// convert or check against.
     pub schema: Option<Arc<Schema>>,
+    /// Compiled libxml2 validator checked against the same schema.
+    /// `None` skips the check the same way `schema: None` does.
+    pub xsd_validator: Option<Arc<XsdLibxmlValidator>>,
     /// What to do about an inbound sample that does not follow
     /// [`Self::schema`]. Has no effect without one.
     pub validate: ValidateMode,
@@ -103,6 +108,7 @@ impl Default for DdsConfig {
             reconnect: false,
             reconnect_delay: Duration::from_secs(1),
             schema: None,
+            xsd_validator: None,
             validate: ValidateMode::default(),
             max_sample_size: DEFAULT_MAX_SAMPLE_SIZE,
         }

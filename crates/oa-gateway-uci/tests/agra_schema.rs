@@ -1,9 +1,13 @@
-//! Golden OMS JSON against the A-GRA 5.0a schema compose mounts.
+//! Golden OMS JSON against the real A-GRA 5.0a catalog — conversion only.
 //!
 //! These instances are the C2→MA contract: a RoutePlan, a MissionPlan that
 //! references it, an activation of that mission, and the Rx wrapper that
-//! carries the first of those as hex. `Message::from_json` plus an empty
-//! violation list is the bar — conversion without a schema check is not.
+//! carries the first of those as hex. This crate has no schema *validator*
+//! any more (that moved to `oa-gateway-xsd-libxml`, which has its own copy
+//! of this same test asserting these same fixtures are actually A-GRA-valid
+//! via libxml2) — what's proven here is narrower: that `xsd::compile`
+//! compiles the real catalog and `Message::from_json`/`to_xml` convert
+//! these fixtures without error.
 //!
 //! CI fetches the real XSDs with `scripts/fetch-agra-schema.sh` (pinned to
 //! the public `open-arsenal/a-gra/standard` v5.0a tag — not `main`, which has
@@ -43,7 +47,7 @@ fn agra_schema() -> Option<&'static Schema> {
         .as_ref()
 }
 
-fn assert_schema_valid(name: &str, json: &str) {
+fn assert_converts(name: &str, json: &str) {
     let Some(schema) = agra_schema() else {
         eprintln!(
             "skipping {name}: A-GRA XSDs not present at {}",
@@ -54,49 +58,42 @@ fn assert_schema_valid(name: &str, json: &str) {
     let message =
         Message::from_json(json, schema).unwrap_or_else(|e| panic!("{name} should convert: {e}"));
     assert_eq!(message.type_hint(), name);
-    let reported: Vec<String> = message
-        .violations(schema)
-        .iter()
-        .map(ToString::to_string)
-        .collect();
-    assert!(
-        reported.is_empty(),
-        "{name} departed from A-GRA:\n  {}",
-        reported.join("\n  ")
-    );
+    message
+        .to_xml(schema)
+        .unwrap_or_else(|e| panic!("{name} should convert to xml: {e}"));
 }
 
 #[test]
-fn golden_route_plan_is_schema_valid() {
-    assert_schema_valid("MA_RoutePlan", ROUTE_PLAN);
+fn golden_route_plan_converts() {
+    assert_converts("MA_RoutePlan", ROUTE_PLAN);
 }
 
 #[test]
-fn golden_mission_plan_is_schema_valid() {
-    assert_schema_valid("MA_MissionPlan", MISSION_PLAN);
+fn golden_mission_plan_converts() {
+    assert_converts("MA_MissionPlan", MISSION_PLAN);
 }
 
 #[test]
-fn golden_activation_command_is_schema_valid() {
-    assert_schema_valid("MA_MissionPlanActivationCommand", ACTIVATION);
+fn golden_activation_command_converts() {
+    assert_converts("MA_MissionPlanActivationCommand", ACTIVATION);
 }
 
 #[test]
-fn golden_rx_wrapper_is_schema_valid() {
-    assert_schema_valid("MA_RxDataPayload", RX_WRAPPER);
+fn golden_rx_wrapper_converts() {
+    assert_converts("MA_RxDataPayload", RX_WRAPPER);
 }
 
 /// The wrapper's hex payload is the RoutePlan fixture, compacted — so peeling
-/// it yields the same schema-valid inner the C2 path publishes first.
+/// it yields the same inner the C2 path publishes first.
 #[test]
 fn rx_wrapper_carries_the_golden_route_plan() {
-    let Some(schema) = agra_schema() else {
+    if agra_schema().is_none() {
         eprintln!(
             "skipping rx_wrapper_carries_the_golden_route_plan: A-GRA XSDs not present at {}",
             agra_schema_dir().display()
         );
         return;
-    };
+    }
     let wrapper: serde_json::Value =
         serde_json::from_str(RX_WRAPPER).expect("the wrapper fixture is JSON");
     let hex = wrapper
@@ -110,21 +107,11 @@ fn rx_wrapper_carries_the_golden_route_plan() {
 
     let inner_bytes = decode_hex(hex);
     let inner_text = std::str::from_utf8(&inner_bytes).expect("inner is UTF-8 JSON");
-    assert_schema_valid("MA_RoutePlan", inner_text);
+    assert_converts("MA_RoutePlan", inner_text);
 
     let expected = serde_json::from_str::<serde_json::Value>(ROUTE_PLAN).unwrap();
     let got = serde_json::from_str::<serde_json::Value>(inner_text).unwrap();
     assert_eq!(got, expected);
-
-    // A 32-character A-GRA UUID must not be reported as the wrong length.
-    let message = Message::from_json(inner_text, schema).unwrap();
-    assert!(
-        !message
-            .violations(schema)
-            .iter()
-            .any(|v| v.to_string().contains("characters")),
-        "hexBinary UUIDs must be counted in octets"
-    );
 }
 
 fn decode_hex(s: &str) -> Vec<u8> {
