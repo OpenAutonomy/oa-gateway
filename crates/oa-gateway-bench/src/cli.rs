@@ -11,14 +11,13 @@ Usage:
   oa-gateway-bench engine   [options]
   oa-gateway-bench loopback [options]
   oa-gateway-bench owp      [options]
-  oa-gateway-bench uci      [options]
   oa-gateway-bench ping     [options]
 
 Shared options:
   --duration DUR       How long to publish (default 10s). 200ms, 10s, 1m, or seconds.
   --warmup DUR         Discard latency samples sent in this prefix of --duration (default 1s).
   --rate N             Publishes per second. 0 means as-fast-as-possible (default 0).
-  --payload-bytes N    Minimum JSON payload size (default 64).
+  --payload-bytes N    Minimum payload size (default 64).
   --json PATH          Write the same numbers as one JSON object.
   -h, --help           Print this help and exit.
 
@@ -29,13 +28,9 @@ engine options:
 owp options:
   --publishers N       WebSocket publishers (default 1).
   --subscribers N      WebSocket subscribers (default 1).
-  --xml-baseline       Embedded OWP converts OMS JSON ↔ UCI XML (fixture schema).
+  --xml-baseline       Send the larger PositionReport document instead of the minimal Ping one.
   --url URL            Attach to a running gateway instead of starting OWP.
   --ack-latency        Also time PUB → +OK on the publisher socket.
-
-uci options:
-  --iterations N       Convert this many times (default 2000).
-  --direction DIR      json-to-xml (default) or xml-to-json.
 
 ping options:
   --url URL            Attach to a running gateway instead of starting OWP.
@@ -45,7 +40,6 @@ Examples:
   oa-gateway-bench engine --capacity 64
   oa-gateway-bench owp --xml-baseline --duration 5s
   oa-gateway-bench owp --url ws://127.0.0.1:9000/
-  oa-gateway-bench uci --iterations 2000
   oa-gateway-bench ping --url ws://127.0.0.1:9000/
 ";
 
@@ -55,7 +49,6 @@ pub(crate) enum Command {
     Engine(EngineArgs),
     Loopback(LoopbackArgs),
     Owp(OwpArgs),
-    Uci(UciArgs),
     Ping(PingArgs),
     Help,
 }
@@ -130,35 +123,10 @@ impl Default for OwpArgs {
     }
 }
 
-/// Convert direction for `uci`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum UciDirection {
-    JsonToXml,
-    XmlToJson,
-}
-
 /// One-shot INIT / SUB / PUB / MSG against OWP.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub(crate) struct PingArgs {
     pub url: Option<String>,
-}
-
-/// `uci` scenario.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct UciArgs {
-    pub iterations: u64,
-    pub direction: UciDirection,
-    pub json: Option<PathBuf>,
-}
-
-impl Default for UciArgs {
-    fn default() -> Self {
-        Self {
-            iterations: 2000,
-            direction: UciDirection::JsonToXml,
-            json: None,
-        }
-    }
 }
 
 /// Parses arguments after the program name.
@@ -180,7 +148,6 @@ where
         "engine" => Ok(Command::Engine(parse_engine(&mut args)?)),
         "loopback" => Ok(Command::Loopback(parse_loopback(&mut args)?)),
         "owp" => Ok(Command::Owp(parse_owp(&mut args)?)),
-        "uci" => Ok(Command::Uci(parse_uci(&mut args)?)),
         "ping" => Ok(Command::Ping(parse_ping(&mut args)?)),
         other if other.starts_with('-') => Err(format!(
             "unknown option `{other}`. Try `oa-gateway-bench --help`."
@@ -240,38 +207,6 @@ where
         }
     }
     out.shared = parse_shared(rest)?;
-    Ok(out)
-}
-
-fn parse_uci<I>(args: &mut I) -> Result<UciArgs, String>
-where
-    I: Iterator<Item = String>,
-{
-    let mut out = UciArgs::default();
-    let mut args = args.peekable();
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "-h" | "--help" => return Err(USAGE.trim_end().to_owned()),
-            "--iterations" => out.iterations = parse_u64(&next(&mut args, "--iterations")?)?,
-            "--direction" => {
-                out.direction = match next(&mut args, "--direction")?.as_str() {
-                    "json-to-xml" => UciDirection::JsonToXml,
-                    "xml-to-json" => UciDirection::XmlToJson,
-                    other => {
-                        return Err(format!(
-                            "--direction must be json-to-xml or xml-to-json, not `{other}`"
-                        ))
-                    }
-                }
-            }
-            "--json" => out.json = Some(PathBuf::from(next(&mut args, "--json")?)),
-            other => {
-                return Err(format!(
-                    "unknown option `{other}` for uci. Try `oa-gateway-bench --help`."
-                ))
-            }
-        }
-    }
     Ok(out)
 }
 

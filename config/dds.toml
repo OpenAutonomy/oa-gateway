@@ -22,5 +22,5 @@ suppress_echo = true
 #
 # Checked the same way as [owp] traffic, against [uci].schema; validate has
 # no effect without one. An inbound sample over max_sample_size is dropped
-# before it is unwrapped or converted.
+# before it is unwrapped.
 # max_sample_size = 16777216

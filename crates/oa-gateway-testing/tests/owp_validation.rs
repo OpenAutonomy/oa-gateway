@@ -1,22 +1,22 @@
 //! What the two enforcement modes do to a payload the schema does not permit.
 //!
-//! `{"Ping":{"nope":1}}` converts without complaint — an element the type does
-//! not declare is carried as a string — which is exactly the case validation
-//! exists to notice. Checked here against the libxml2-backed validator
-//! (`oa_gateway_testing::xsd_fixtures::ping_validator`), which replaced the
-//! hand-rolled one.
+//! `<Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><nope>1</nope></Ping>` is well-formed XML but `nope` is not a
+//! field `PingType` declares — exactly the case validation exists to
+//! notice. Checked here against the libxml2-backed validator
+//! (`oa_gateway_testing::xsd_fixtures::ping_validator`).
 
 use std::sync::Arc;
 use std::time::Duration;
 
+use oa_gateway_adapter::ValidateMode;
 use oa_gateway_core::{Engine, RouteKey};
 use oa_gateway_loopback::Loopback;
 use oa_gateway_owp::{parse_server, ServerOp};
 use oa_gateway_testing::owp::{connect, handshake, recv_text, send_text, start_owp_with};
-use oa_gateway_uci::ValidateMode;
 use tokio::time::timeout;
 
-const UNDECLARED: &str = r#"PUB demo {"Ping":{"nope":1}}"#;
+const UNDECLARED: &str =
+    r#"PUB demo <Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><nope>1</nope></Ping>"#;
 
 #[tokio::test]
 async fn warn_carries_the_message_and_says_nothing_to_the_client() {
@@ -44,7 +44,10 @@ async fn warn_carries_the_message_and_says_nothing_to_the_client() {
         .await
         .expect("timeout")
         .expect("closed");
-    assert_eq!(got.payload.as_ref(), br#"{"Ping":{"nope":1}}"#);
+    assert_eq!(
+        got.payload.as_ref(),
+        br#"<Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><nope>1</nope></Ping>"#
+    );
 
     shutdown.cancel();
 }
@@ -84,7 +87,11 @@ async fn reject_refuses_the_publish_and_names_the_violation() {
     );
 
     // A payload that does follow the schema still goes through.
-    send_text(&mut ws, r#"PUB demo {"Ping":{"n":7}}"#).await;
+    send_text(
+        &mut ws,
+        r#"PUB demo <Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><n>7</n></Ping>"#,
+    )
+    .await;
     match parse_server(&recv_text(&mut ws).await).unwrap() {
         ServerOp::Ok => {}
         other => panic!("expected +OK for a conforming payload, got {other}"),
@@ -93,7 +100,10 @@ async fn reject_refuses_the_publish_and_names_the_violation() {
         .await
         .expect("timeout")
         .expect("closed");
-    assert_eq!(got.payload.as_ref(), br#"{"Ping":{"n":7}}"#);
+    assert_eq!(
+        got.payload.as_ref(),
+        br#"<Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><n>7</n></Ping>"#
+    );
 
     shutdown.cancel();
 }

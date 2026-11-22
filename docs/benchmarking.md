@@ -1,23 +1,22 @@
 # Benchmarking
 
-`oa-gateway-bench` measures publish-to-delivery latency, throughput, and engine drop counts. It is a client of the public APIs. It does not change routing, framing, or conversion.
+`oa-gateway-bench` measures publish-to-delivery latency, throughput, and engine drop counts. It is a client of the public APIs. It does not change routing or framing.
 
 Shared GitHub runners are noisy. Numbers from CI are a snapshot, not a regression gate. Compare two runs only when the machine and the flags match.
 
 ## Scenarios
 
-Each command isolates one cost layer. In-process runs share a clock, so one-way latency is `Instant` at send minus `Instant` at receive. Sequence numbers live in the JSON payload (`n`), not in engine headers.
+Each command isolates one cost layer. In-process runs share a clock, so one-way latency is `Instant` at send minus `Instant` at receive. Sequence numbers live in the XML payload (`<n>`), not in engine headers.
 
 | Command | Path | What the latency is |
 |---|---|---|
 | `engine` | `Engine::publish` → subscriber channels | One-way to `recv` |
 | `loopback` | Loopback A → engine → Loopback B | One-way, including the extra forwarder task |
 | `owp` | WebSocket `PUB` → `MSG` | One-way; `--ack-latency` also times `PUB` → `+OK` |
-| `uci` | `Message::from_json` / `to_xml` (or the reverse) on the PositionReport fixture | Convert time |
 
 `engine --capacity` is the channel the bench passes to the existing `Engine::subscribe`. The default is 4096 so the run measures routing, not the production 64-slot `try_send` drop policy. `engine --capacity 64` is how you measure backpressure. Loopback keeps its hardcoded 64-slot channels; there is no new parameter on that adapter.
 
-`owp --xml-baseline` starts the same in-process OWP helper the tests use (`oa_gateway_uci::slice::v25`) and sends PositionReport so conversion is on the path. `owp --url ws://127.0.0.1:9000/` attaches two connections to a running host instead. Handshake schema is `002.5.0`.
+`owp --xml-baseline` sends the larger PositionReport document instead of the minimal Ping one, so the run measures a more realistic payload size. `owp --url ws://127.0.0.1:9000/` attaches two connections to a running host instead. Handshake schema is `002.5.0`.
 
 STOMP and DDS are not in this utility. They need a broker or a domain; use the live ActiveMQ script when you want that path.
 
@@ -30,7 +29,6 @@ cargo run -p oa-gateway-bench --release -- loopback --duration 10s
 cargo run -p oa-gateway-bench --release -- owp --duration 10s
 cargo run -p oa-gateway-bench --release -- owp --xml-baseline --duration 10s
 cargo run -p oa-gateway-bench --release -- owp --url ws://127.0.0.1:9000/
-cargo run -p oa-gateway-bench --release -- uci --iterations 2000
 ```
 
 `--rate 0` (the default) means as-fast-as-possible. `--json PATH` writes the same numbers the summary prints, plus `git_sha`, `rustc`, `profile`, `started_unix`, and the flags.
@@ -45,7 +43,7 @@ A run exits non-zero if the binary cannot start, a handshake fails, or nothing i
 
 ## CI
 
-The unit job does not run the long suite. After `test` passes, a `bench` job runs [`scripts/ci-bench.sh`](../scripts/ci-bench.sh): a release build, five short scenarios (5s + 1s warmup, or 2000 UCI iterations), JSON under `bench/`, and `bench/summary.txt`.
+The unit job does not run the long suite. After `test` passes, a `bench` job runs [`scripts/ci-bench.sh`](../scripts/ci-bench.sh): a release build, four short scenarios (5s + 1s warmup each), JSON under `bench/`, and `bench/summary.txt`.
 
 If `jq` and `gnuplot` are available (the script installs them when it can), it also writes `bench/latency.png` and `bench/throughput.png`. A missing plotter does not fail the job.
 

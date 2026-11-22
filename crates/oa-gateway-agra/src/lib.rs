@@ -10,7 +10,6 @@
 use bytes::Bytes;
 use oa_gateway_core::{ContentType, Envelope, RouteKey};
 use roxmltree::{Document, Node};
-use serde_json::{json, Value};
 
 pub const RX_ELEMENT: &str = "MA_RxDataPayload";
 pub const TX_ELEMENT: &str = "MA_TxDataPayloadCommand";
@@ -55,8 +54,8 @@ impl WrapperKind {
 pub enum AgraError {
     #[error("not an MA Rx/Tx data-payload wrapper")]
     NotAWrapper,
-    #[error("invalid OMS JSON: {0}")]
-    Json(String),
+    #[error("malformed wrapper: {0}")]
+    Malformed(String),
     #[error("wrapper missing MessageData.{0}")]
     MissingField(&'static str),
     #[error("EncodedPayload is not hexBinary: {0}")]
@@ -84,43 +83,30 @@ pub struct Unwrapped {
     pub meta: WrapperMeta,
 }
 
-/// Detect whether OMS JSON (or XML document element) is an Rx/Tx wrapper.
+/// Detect whether an XML document element is an Rx/Tx wrapper.
 #[must_use]
 pub fn wrapper_kind(payload: &[u8]) -> Option<WrapperKind> {
-    if let Ok(text) = std::str::from_utf8(payload) {
-        let trimmed = text.trim_start();
-        if trimmed.starts_with('{') {
-            if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
-                if let Some(obj) = value.as_object() {
-                    if obj.len() == 1 {
-                        if let Some(name) = obj.keys().next() {
-                            return WrapperKind::from_element(name);
-                        }
-                    }
-                }
-            }
-        }
-        if trimmed.starts_with('<') {
-            if let Some(name) = xml_root_local_name(trimmed) {
-                return WrapperKind::from_element(&name);
-            }
-        }
-    }
-    None
+    let text = std::str::from_utf8(payload).ok()?;
+    let name = xml_root_local_name(text.trim_start())?;
+    WrapperKind::from_element(&name)
 }
 
 /// Builds wrapper and inner envelopes from structured Rx/Tx fields.
 ///
-/// The DDS adapter's wire type is these fields plus raw
-/// `EncodedPayload` bytes, not XML or JSON text. The wrapper envelope
-/// is a minimal JSON document so [`wrapper_kind`] and [`unwrap`] still
-/// recognize it.
+/// The DDS adapter's wire type is these fields plus raw `EncodedPayload`
+/// bytes, not XML text. The wrapper envelope is a minimal XML document so
+/// [`wrapper_kind`] and [`unwrap`] still recognize it — it carries only
+/// what [`WrapperMeta`] actually has (there is no `SecurityInformation`,
+/// `MessageHeader`, or, for [`WrapperKind::Tx`], `Priority`/`CommandState`
+/// in the DDS wire protocol today), so it is not a fully schema-valid
+/// A-GRA document on its own, only a recognizable one. `Timestamp` is
+/// filled with the time of synthesis, since the DDS wire protocol does
+/// not carry one and the real schema requires it.
 ///
 /// # Errors
 ///
 /// Returns [`AgraError::PayloadTooLarge`] if `encoded` is over
-/// [`MAX_DECODED_PAYLOAD`], or [`AgraError::Json`] if the wrapper
-/// document cannot be serialized.
+/// [`MAX_DECODED_PAYLOAD`].
 pub fn unwrapped_from_parts(
     topic: &str,
     meta: WrapperMeta,
@@ -132,12 +118,12 @@ pub fn unwrapped_from_parts(
     let inner_bytes = encoded.to_vec();
     let inner_ct = sniff_content_type(&inner_bytes);
     let inner_hint = type_hint_from_inner(&inner_bytes, &meta.message_type_enum);
-    let wrapper_json = minimal_wrapper_json(&meta, &inner_bytes)?;
+    let wrapper_xml = minimal_wrapper_xml(&meta, &inner_bytes);
     let wrapper = Envelope::new(
         RouteKey::typed(topic, meta.kind.element_name()),
-        wrapper_json,
+        wrapper_xml,
     )
-    .with_content_type(ContentType::json());
+    .with_content_type(ContentType::xml());
     let inner = inner_envelope(topic, inner_bytes, inner_ct, inner_hint, &meta);
     Ok(Unwrapped {
         wrapper,
@@ -146,101 +132,97 @@ pub fn unwrapped_from_parts(
     })
 }
 
-fn minimal_wrapper_json(meta: &WrapperMeta, inner: &[u8]) -> Result<Bytes, AgraError> {
-    let mut data = json!({
-        "MessageType": meta.message_type_enum,
-        "EncodedPayload": hex::encode_upper(inner),
-    });
-    if let Some(v) = &meta.originator_uuid {
-        data["DataPayloadOriginatorID"] = json!({ "UUID": v });
+/// Builds the `<MessageData>` content in schema-declared order, from
+/// whatever [`WrapperMeta`] fields are present. See
+/// [`unwrapped_from_parts`] for what this deliberately does not include.
+fn minimal_wrapper_xml(meta: &WrapperMeta, inner: &[u8]) -> Bytes {
+    let encoded = hex::encode_upper(inner);
+    let message_type = escape_xml(&meta.message_type_enum);
+    let timestamp = now_utc_iso8601();
+    let mut data = String::new();
+    match meta.kind {
+        WrapperKind::Rx => {
+            if let Some(v) = &meta.rx_payload_id {
+                data.push_str(&el_uuid("RxDataPayloadID", v));
+            }
+            if let Some(v) = &meta.originator_uuid {
+                data.push_str(&el_uuid("DataPayloadOriginatorID", v));
+            }
+            data.push_str(&format!("<EncodedPayload>{encoded}</EncodedPayload>"));
+            data.push_str(&format!("<Timestamp>{timestamp}</Timestamp>"));
+            data.push_str(&format!("<MessageType>{message_type}</MessageType>"));
+            if let Some(v) = &meta.destination_routing {
+                data.push_str(&format!(
+                    "<DestinationRouting>{}</DestinationRouting>",
+                    escape_xml(v)
+                ));
+            }
+        }
+        WrapperKind::Tx => {
+            if let Some(v) = &meta.command_id {
+                data.push_str(&el_uuid("CommandID", v));
+            }
+            data.push_str(&format!("<EncodedPayload>{encoded}</EncodedPayload>"));
+            data.push_str(&format!("<MessageType>{message_type}</MessageType>"));
+            data.push_str(&format!("<Timestamp>{timestamp}</Timestamp>"));
+            if let Some(v) = &meta.destination_routing {
+                data.push_str(&format!(
+                    "<DestinationRouting>{}</DestinationRouting>",
+                    escape_xml(v)
+                ));
+            }
+        }
     }
-    if let Some(v) = &meta.rx_payload_id {
-        data["RxDataPayloadID"] = json!({ "UUID": v });
-    }
-    if let Some(v) = &meta.command_id {
-        data["CommandID"] = json!({ "UUID": v });
-    }
-    if let Some(v) = &meta.destination_routing {
-        data["DestinationRouting"] = json!(v);
-    }
-    let root = json!({
-        meta.kind.element_name(): { "MessageData": data }
-    });
-    let text = serde_json::to_string(&root).map_err(|e| AgraError::Json(e.to_string()))?;
-    Ok(Bytes::from(text))
+    let root = meta.kind.element_name();
+    Bytes::from(format!(
+        r#"<{root} xmlns="https://www.vdl.afrl.af.mil/programs/oam"><MessageData>{data}</MessageData></{root}>"#
+    ))
 }
 
-/// Unwrap OMS JSON or XML Rx/Tx envelopes into wrapper + inner envelopes.
+/// `<{name}><UUID>{value}</UUID></{name}>`, `value` escaped.
+fn el_uuid(name: &str, value: &str) -> String {
+    format!("<{name}><UUID>{}</UUID></{name}>", escape_xml(value))
+}
+
+/// Escapes the three characters that matter inside XML element text:
+/// attribute quoting is never used by this crate's own builders, so `"`
+/// and `'` are not touched.
+fn escape_xml(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+/// Current UTC time as `xs:dateTime` (`uci:DateTimeType`): no fractional
+/// seconds, `Z` offset.
+fn now_utc_iso8601() -> String {
+    let dt = time::OffsetDateTime::now_utc();
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+        dt.year(),
+        u8::from(dt.month()),
+        dt.day(),
+        dt.hour(),
+        dt.minute(),
+        dt.second()
+    )
+}
+
+/// Unwrap an XML Rx/Tx envelope into wrapper + inner envelopes.
 ///
 /// # Errors
 ///
-/// Returns [`AgraError`] if `payload` is not UTF-8, is neither a JSON object
-/// nor an XML element, or is missing a field an Rx/Tx wrapper requires.
+/// Returns [`AgraError`] if `payload` is not UTF-8, is not an XML
+/// element, or is missing a field an Rx/Tx wrapper requires.
 pub fn unwrap(topic: &str, payload: &[u8]) -> Result<Unwrapped, AgraError> {
     let text = std::str::from_utf8(payload)
-        .map_err(|_| AgraError::Json("wrapper payload is not UTF-8".into()))?;
+        .map_err(|_| AgraError::Malformed("wrapper payload is not UTF-8".into()))?;
     let trimmed = text.trim();
-    if trimmed.starts_with('{') {
-        unwrap_json(topic, trimmed)
-    } else if trimmed.starts_with('<') {
+    if trimmed.starts_with('<') {
         unwrap_xml(topic, trimmed)
     } else {
         Err(AgraError::NotAWrapper)
     }
-}
-
-fn unwrap_json(topic: &str, text: &str) -> Result<Unwrapped, AgraError> {
-    let root: Value = serde_json::from_str(text).map_err(|e| AgraError::Json(e.to_string()))?;
-    let obj = root
-        .as_object()
-        .ok_or_else(|| AgraError::Json("root must be an object".into()))?;
-    if obj.len() != 1 {
-        return Err(AgraError::NotAWrapper);
-    }
-    let (name, body) = obj.iter().next().expect("len == 1");
-    let kind = WrapperKind::from_element(name).ok_or(AgraError::NotAWrapper)?;
-    let data = body
-        .get("MessageData")
-        .ok_or(AgraError::MissingField("MessageData"))?;
-
-    let message_type_enum = json_str(data, "MessageType")?;
-    let hex_payload = json_str(data, "EncodedPayload")?;
-    let inner_bytes = decode_hex(hex_payload)?;
-    let inner_ct = sniff_content_type(&inner_bytes);
-    let inner_hint = type_hint_from_inner(&inner_bytes, message_type_enum);
-
-    let meta = WrapperMeta {
-        kind,
-        message_type_enum: message_type_enum.to_owned(),
-        originator_uuid: data
-            .pointer("/DataPayloadOriginatorID/UUID")
-            .and_then(Value::as_str)
-            .map(str::to_owned),
-        rx_payload_id: data
-            .pointer("/RxDataPayloadID/UUID")
-            .and_then(Value::as_str)
-            .map(str::to_owned),
-        command_id: data
-            .pointer("/CommandID/UUID")
-            .and_then(Value::as_str)
-            .map(str::to_owned),
-        destination_routing: data
-            .get("DestinationRouting")
-            .and_then(Value::as_str)
-            .map(str::to_owned),
-    };
-
-    let wrapper = Envelope::new(
-        RouteKey::typed(topic, kind.element_name()),
-        Bytes::copy_from_slice(text.as_bytes()),
-    )
-    .with_content_type(ContentType::json());
-    let inner = inner_envelope(topic, inner_bytes, inner_ct, inner_hint, &meta);
-    Ok(Unwrapped {
-        wrapper,
-        inner,
-        meta,
-    })
 }
 
 fn unwrap_xml(topic: &str, text: &str) -> Result<Unwrapped, AgraError> {
@@ -305,11 +287,15 @@ fn inner_envelope(
     env
 }
 
-/// Classification / header shell supplied by the caller — we do not invent markings.
+/// Classification / header shell supplied by the caller — we do not
+/// invent markings. Each is the already-serialized inner XML for its
+/// element (e.g. `security_information` is what goes inside
+/// `<SecurityInformation>...</SecurityInformation>`), not including the
+/// wrapping tag itself, which [`wrap`] adds.
 #[derive(Debug, Clone)]
 pub struct WrapShell {
-    pub security_information: Value,
-    pub message_header: Value,
+    pub security_information: String,
+    pub message_header: String,
 }
 
 /// Inputs for building an Rx or Tx wrapper around an inner UCI payload.
@@ -328,77 +314,71 @@ pub struct WrapRequest {
     pub precedence: u16,
 }
 
-/// Wrap an inner UCI payload (XML or OMS JSON bytes) as hexBinary inside Rx/Tx OMS JSON.
-///
-/// # Errors
-///
-/// Returns [`AgraError::Json`] if the assembled wrapper cannot be serialized.
-pub fn wrap(req: WrapRequest) -> Result<Envelope, AgraError> {
+/// Wrap an inner UCI payload as hexBinary inside a real Rx/Tx XML
+/// envelope, built in schema-declared element order.
+#[must_use]
+pub fn wrap(req: WrapRequest) -> Envelope {
     let encoded = hex::encode_upper(&req.inner);
-    let ranking = json!({
-        "Priority": req.priority,
-        "PrecedenceWithinPriority": req.precedence,
-    });
-    let destinations: Vec<Value> = req
+    let message_type = escape_xml(&req.message_type_enum);
+    let timestamp = escape_xml(&req.timestamp);
+    let routing = escape_xml(&req.destination_routing);
+    let destinations: String = req
         .specific_destination_uuids
         .iter()
-        .map(|u| json!({ "UUID": u }))
+        .map(|u| el_uuid("SpecificDestinationID", u))
         .collect();
+    let priority = format!(
+        "<Priority>{}</Priority><PrecedenceWithinPriority>{}</PrecedenceWithinPriority>",
+        req.priority, req.precedence
+    );
 
-    let mut data = match req.kind {
+    let data = match req.kind {
         WrapperKind::Rx => {
             let rx_id = uuid::Uuid::new_v4().to_string();
             let originator = req
                 .originator_uuid
                 .clone()
                 .unwrap_or_else(|| uuid::Uuid::nil().to_string());
-            json!({
-                "RxDataPayloadID": { "UUID": rx_id },
-                "DataPayloadOriginatorID": { "UUID": originator },
-                "EncodedPayload": encoded,
-                "Timestamp": req.timestamp,
-                "MessageType": req.message_type_enum,
-                "DestinationRouting": req.destination_routing,
-            })
+            format!(
+                "{rx}{originator}\
+                 <EncodedPayload>{encoded}</EncodedPayload>\
+                 <Timestamp>{timestamp}</Timestamp>\
+                 <MessageType>{message_type}</MessageType>\
+                 {priority}\
+                 <DestinationRouting>{routing}</DestinationRouting>\
+                 {destinations}",
+                rx = el_uuid("RxDataPayloadID", &rx_id),
+                originator = el_uuid("DataPayloadOriginatorID", &originator),
+            )
         }
         WrapperKind::Tx => {
             let command_id = uuid::Uuid::new_v4().to_string();
-            json!({
-                "CommandID": { "UUID": command_id },
-                "CommandState": "NEW",
-                "EncodedPayload": encoded,
-                "MessageType": req.message_type_enum,
-                "Priority": ranking,
-                "Timestamp": req.timestamp,
-                "DestinationRouting": req.destination_routing,
-            })
+            format!(
+                "{command}\
+                 <CommandState>NEW</CommandState>\
+                 <EncodedPayload>{encoded}</EncodedPayload>\
+                 <MessageType>{message_type}</MessageType>\
+                 {priority}\
+                 <Timestamp>{timestamp}</Timestamp>\
+                 {destinations}\
+                 <DestinationRouting>{routing}</DestinationRouting>",
+                command = el_uuid("CommandID", &command_id),
+            )
         }
     };
 
-    if req.kind == WrapperKind::Rx {
-        if let Value::Object(map) = &mut data {
-            map.insert("Priority".into(), ranking);
-        }
-    }
-    if !destinations.is_empty() {
-        if let Value::Object(map) = &mut data {
-            map.insert("SpecificDestinationID".into(), Value::Array(destinations));
-        }
-    }
-
-    let root = json!({
-        req.kind.element_name(): {
-            "SecurityInformation": req.shell.security_information,
-            "MessageHeader": req.shell.message_header,
-            "MessageData": data,
-        }
-    });
-    let text = serde_json::to_string(&root).map_err(|e| AgraError::Json(e.to_string()))?;
-    Ok(Envelope::new(
-        RouteKey::typed(req.topic, req.kind.element_name()),
-        text.into_bytes(),
-    )
-    .with_content_type(ContentType::json()))
+    let root = req.kind.element_name();
+    let security = &req.shell.security_information;
+    let header = &req.shell.message_header;
+    let xml = format!(
+        "<{root} xmlns=\"https://www.vdl.afrl.af.mil/programs/oam\">\
+         <SecurityInformation>{security}</SecurityInformation>\
+         <MessageHeader>{header}</MessageHeader>\
+         <MessageData>{data}</MessageData>\
+         </{root}>"
+    );
+    Envelope::new(RouteKey::typed(req.topic, root), xml.into_bytes())
+        .with_content_type(ContentType::xml())
 }
 
 /// Convert a global element name (`PositionReport`) to `MessageTypeEnum` (`POSITION_REPORT`).
@@ -426,22 +406,8 @@ pub fn element_to_enum(name: &str) -> String {
 
 fn type_hint_from_inner(bytes: &[u8], enum_name: &str) -> String {
     if let Ok(text) = std::str::from_utf8(bytes) {
-        let t = text.trim();
-        if t.starts_with('{') {
-            if let Ok(v) = serde_json::from_str::<Value>(t) {
-                if let Some(obj) = v.as_object() {
-                    if obj.len() == 1 {
-                        if let Some(k) = obj.keys().next() {
-                            return k.clone();
-                        }
-                    }
-                }
-            }
-        }
-        if t.starts_with('<') {
-            if let Some(name) = xml_root_local_name(t) {
-                return name;
-            }
+        if let Some(name) = xml_root_local_name(text.trim()) {
+            return name;
         }
     }
     enum_name.to_owned()
@@ -449,7 +415,6 @@ fn type_hint_from_inner(bytes: &[u8], enum_name: &str) -> String {
 
 fn sniff_content_type(bytes: &[u8]) -> ContentType {
     match std::str::from_utf8(bytes).map(str::trim_start) {
-        Ok(t) if t.starts_with('{') => ContentType::json(),
         Ok(t) if t.starts_with('<') => ContentType::xml(),
         _ => ContentType::octet_stream(),
     }
@@ -510,12 +475,6 @@ fn decode_hex(s: &str) -> Result<Vec<u8>, AgraError> {
         return Err(AgraError::BadHex("odd number of digits".into()));
     }
     Ok(out)
-}
-
-fn json_str<'a>(data: &'a Value, field: &'static str) -> Result<&'a str, AgraError> {
-    data.get(field)
-        .and_then(Value::as_str)
-        .ok_or(AgraError::MissingField(field))
 }
 
 /// Local name of an XML document element, or `None` if there is no element.
@@ -661,19 +620,20 @@ fn nested_uuid(node: Node<'_, '_>, parent_local: &str) -> Option<String> {
 mod tests {
     use super::*;
 
-    fn inner_json() -> &'static str {
-        r#"{"PositionReport":{"SecurityInformation":{"Classification":"U"},"MessageHeader":{"SchemaVersion":"002.5.0"},"MessageData":{"n":1}}}"#
+    fn inner_xml() -> &'static str {
+        r#"<PositionReport xmlns="https://www.vdl.afrl.af.mil/programs/oam"><SecurityInformation><Classification>U</Classification></SecurityInformation><MessageHeader><SchemaVersion>002.5.0</SchemaVersion></MessageHeader><MessageData><n>1</n></MessageData></PositionReport>"#
     }
 
     fn shell() -> WrapShell {
         WrapShell {
-            security_information: json!({"Classification":"U","OwnerProducer":[{"US":true}]}),
-            message_header: json!({
-                "SystemID": {"UUID": "00000000-0000-4000-8000-000000000001"},
-                "Timestamp": "2026-08-09T21:00:00Z",
-                "SchemaVersion": "002.5.0",
-                "Mode": "SIMULATION"
-            }),
+            security_information: "<Classification>U</Classification>\
+                <OwnerProducer><GovernmentIdentifier>USA</GovernmentIdentifier></OwnerProducer>"
+                .into(),
+            message_header:
+                "<SystemID><UUID>00000000-0000-4000-8000-000000000001</UUID></SystemID>\
+                <Timestamp>2026-08-09T21:00:00Z</Timestamp>\
+                <SchemaVersion>002.5.0</SchemaVersion><Mode>SIMULATION</Mode>"
+                    .into(),
         }
     }
 
@@ -688,8 +648,8 @@ mod tests {
     }
 
     #[test]
-    fn wrap_rx_then_unwrap_json() {
-        let inner = Bytes::from(inner_json());
+    fn wrap_rx_then_unwrap_xml() {
+        let inner = Bytes::from(inner_xml());
         let wrapped = wrap(WrapRequest {
             topic: "offboard".into(),
             kind: WrapperKind::Rx,
@@ -702,8 +662,7 @@ mod tests {
             timestamp: "2026-08-09T21:00:00Z".into(),
             priority: 4,
             precedence: 1,
-        })
-        .unwrap();
+        });
 
         assert_eq!(wrapped.route.type_hint.as_deref(), Some(RX_ELEMENT));
         assert!(wrapper_kind(&wrapped.payload).is_some());
@@ -724,7 +683,7 @@ mod tests {
 
     #[test]
     fn parts_round_trip_to_inner_bytes() {
-        let inner = Bytes::from(inner_json());
+        let inner = Bytes::from(inner_xml());
         let meta = WrapperMeta {
             kind: WrapperKind::Rx,
             message_type_enum: "POSITION_REPORT".into(),
@@ -747,7 +706,7 @@ mod tests {
         let wrapped = wrap(WrapRequest {
             topic: "offboard".into(),
             kind: WrapperKind::Tx,
-            inner: Bytes::from(inner_json()),
+            inner: Bytes::from(inner_xml()),
             message_type_enum: "POSITION_REPORT".into(),
             shell: shell(),
             destination_routing: "SPECIFIC_DESTINATION_ONLY".into(),
@@ -756,8 +715,7 @@ mod tests {
             timestamp: "2026-08-09T21:00:00Z".into(),
             priority: 0,
             precedence: 0,
-        })
-        .unwrap();
+        });
 
         let u = unwrap("offboard", &wrapped.payload).unwrap();
         assert_eq!(u.meta.kind, WrapperKind::Tx);
@@ -774,7 +732,7 @@ mod tests {
 
     #[test]
     fn unwrap_xml_rx() {
-        let hex = hex::encode_upper(inner_json().as_bytes());
+        let hex = hex::encode_upper(inner_xml().as_bytes());
         let xml = format!(
             r#"<MA_RxDataPayload xmlns="https://www.vdl.afrl.af.mil/programs/oam">
               <SecurityInformation><Classification>U</Classification></SecurityInformation>
@@ -800,8 +758,8 @@ mod tests {
 
     #[test]
     fn native_mt_is_not_a_wrapper() {
-        assert!(wrapper_kind(inner_json().as_bytes()).is_none());
-        assert!(unwrap("demo", inner_json().as_bytes()).is_err());
+        assert!(wrapper_kind(inner_xml().as_bytes()).is_none());
+        assert!(unwrap("demo", inner_xml().as_bytes()).is_err());
     }
 
     /// A wrapper as an actual producer emits it: an XML declaration ahead of the
@@ -845,6 +803,71 @@ mod tests {
         assert_eq!(u.inner.route.type_hint.as_deref(), Some("SystemStatus"));
         assert_eq!(u.wrapper.route.topic, "MA_TxDataPayloadCommand");
         assert_eq!(u.inner.route.topic, "MA_TxDataPayloadCommand");
+    }
+
+    /// `unwrapped_from_parts`'s synthesized wrapper is not a fully
+    /// schema-valid A-GRA document (it carries only what [`WrapperMeta`]
+    /// has — no `SecurityInformation`/`MessageHeader`, and for
+    /// [`WrapperKind::Tx`] no `Priority`/`CommandState`), so this checks
+    /// what is actually achievable: the fields it does emit land in the
+    /// real schema's declared `xs:sequence` order, well-formed, and still
+    /// recognized by `unwrap`. This is the same bug class the XML writer
+    /// ordering fix in `oa-gateway-uci` caught earlier.
+    #[test]
+    fn synthesized_wrapper_fields_are_in_schema_order() {
+        let rx_meta = WrapperMeta {
+            kind: WrapperKind::Rx,
+            message_type_enum: "POSITION_REPORT".into(),
+            originator_uuid: Some("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".into()),
+            rx_payload_id: Some("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb".into()),
+            command_id: None,
+            destination_routing: Some("TOPIC_AND_SPECIFIC_DESTINATION".into()),
+        };
+        let rx = unwrapped_from_parts("demo", rx_meta, Bytes::from(inner_xml())).unwrap();
+        let rx_xml = std::str::from_utf8(&rx.wrapper.payload).unwrap();
+        assert!(rx_xml.contains("<Timestamp>"), "{rx_xml}");
+        let order = [
+            "RxDataPayloadID",
+            "DataPayloadOriginatorID",
+            "EncodedPayload",
+            "Timestamp",
+            "MessageType",
+            "DestinationRouting",
+        ];
+        assert_ascending(rx_xml, &order);
+        assert!(unwrap("demo", rx_xml.as_bytes()).is_ok(), "{rx_xml}");
+
+        let tx_meta = WrapperMeta {
+            kind: WrapperKind::Tx,
+            message_type_enum: "POSITION_REPORT".into(),
+            originator_uuid: None,
+            rx_payload_id: None,
+            command_id: Some("cccccccc-cccc-4ccc-8ccc-cccccccccccc".into()),
+            destination_routing: Some("SPECIFIC_DESTINATION_ONLY".into()),
+        };
+        let tx = unwrapped_from_parts("demo", tx_meta, Bytes::from(inner_xml())).unwrap();
+        let tx_xml = std::str::from_utf8(&tx.wrapper.payload).unwrap();
+        let order = [
+            "CommandID",
+            "EncodedPayload",
+            "MessageType",
+            "Timestamp",
+            "DestinationRouting",
+        ];
+        assert_ascending(tx_xml, &order);
+        assert!(unwrap("demo", tx_xml.as_bytes()).is_ok(), "{tx_xml}");
+    }
+
+    /// Each name in `order` appears in `text`, each strictly after the one
+    /// before it.
+    fn assert_ascending(text: &str, order: &[&str]) {
+        let mut last = 0;
+        for name in order {
+            let pos = text[last..]
+                .find(name)
+                .unwrap_or_else(|| panic!("{name} not found after position {last} in {text}"));
+            last += pos + name.len();
+        }
     }
 
     #[test]

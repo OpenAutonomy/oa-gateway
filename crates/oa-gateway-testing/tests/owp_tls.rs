@@ -43,7 +43,11 @@ async fn tls_round_trip() {
     let mut ws = connect_tls(&url, tls).await.expect("tls handshake");
     handshake(&mut ws).await;
 
-    send_text(&mut ws, r#"PUB demo {"Ping":{"n":7}}"#).await;
+    send_text(
+        &mut ws,
+        r#"PUB demo <Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><n>7</n></Ping>"#,
+    )
+    .await;
     match parse_server(&recv_text(&mut ws).await).unwrap() {
         ServerOp::Ok => {}
         other => panic!("expected +OK, got {other}"),
@@ -52,7 +56,10 @@ async fn tls_round_trip() {
         .await
         .expect("timeout")
         .expect("closed");
-    assert_eq!(got.payload.as_ref(), br#"{"Ping":{"n":7}}"#);
+    assert_eq!(
+        got.payload.as_ref(),
+        br#"<Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><n>7</n></Ping>"#
+    );
 
     shutdown.cancel();
 }

@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `scripts/fetch-agra-schema.sh`, pinned by checksum to the public
   `open-arsenal/a-gra/standard` `v5.0a` tag (not `main`, which has since moved
-  to A-GRA 6.0a). CI now runs `oa-gateway-uci`'s `tests/agra_schema.rs` against
+  to A-GRA 6.0a). CI now runs `tests/agra_schema.rs` against
   the real fetched schema instead of silently skipping it for lack of a
   sibling `open-ma` checkout.
 - `oa-gateway-stomp` now validates against the compiled XSD too, in both
@@ -45,15 +45,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   libxml2 result directly. Conversion (`oa-gateway-uci`'s `Schema`/
   `xsd::compile`/JSON ↔ XML) is untouched — libxml2 has no JSON capability of
   any kind, so this bespoke mapping stays exactly as it was.
+- `oa-gateway-agra`'s wrapper synthesis (`minimal_wrapper_json` →
+  `minimal_wrapper_xml`) and its public `wrap()` helper now build real,
+  namespaced UCI/A-GRA XML directly, field-by-field in the schema's declared
+  `xs:sequence` order, instead of a JSON object later converted by
+  `oa-gateway-uci`. DDS's synthesized Rx/Tx wrapper envelope (built from a
+  DDS sample's structured fields, which carry no timestamp on the wire) now
+  stamps the current UTC time into the wrapper's required `Timestamp`
+  field rather than omitting it. The synthesized wrapper is still
+  deliberately not a fully schema-valid document — `SecurityInformation`,
+  `MessageHeader`, and, for Tx, `Priority`/`CommandState` stay absent, since
+  DDS's wire protocol carries none of that metadata — it remains a
+  recognition-only convenience, not a claim of full validity.
+- `oa-gateway-bench`'s `--xml-baseline` flag on the `owp` scenario now
+  selects a larger PositionReport payload instead of the minimal Ping one,
+  rather than switching a conversion mode that no longer exists.
 
 ### Removed
 
-- `oa-gateway-uci`'s hand-rolled validator (`validate::validate`,
-  `Violation`, `ViolationKind`, and `Message::violations()`) and its ~600
-  lines of validation logic plus ~638 lines of tests, replaced by
-  `oa-gateway-xsd-libxml` above. `oa-gateway-uci` keeps only `Mode`
-  (`ValidateMode`) and the schema-aware codec; it has no validator of its
-  own anymore and is purely a conversion library.
+- JSON support, entirely: nothing in the UCI/A-GRA standard this gateway
+  implements has a JSON representation, so "OMS JSON" — a bespoke,
+  non-standard convenience invented so OWP WebSocket clients could speak
+  JSON instead of XML, converting at the socket under `owp.xml_baseline` —
+  is gone. OWP, STOMP, and DDS all speak UCI XML only now; OWP no longer
+  accepts a JSON `PUB` payload at all, not just the conversion step.
+  `owp.xml_baseline` (and `OwpConfig.xml_baseline`) is removed from
+  `[owp]`; every shipped `config/*.toml` drops the key.
+- `oa-gateway-uci` entirely: once JSON↔XML conversion is gone, every other
+  part of it (`xsd::compile`, `Schema`, `Message`/`instance.rs`) had no
+  remaining caller — `oa-gateway-xsd-libxml` validates raw XSD/XML text
+  directly via libxml2 and never depended on any of it. The one thing
+  anything else in the workspace still needed, `Mode` (`ValidateMode`),
+  relocates to `oa-gateway-adapter` as `oa_gateway_adapter::ValidateMode`.
+- `oa-gateway-stomp`'s and `oa-gateway-dds`'s independent JSON-sniffing/
+  conversion fallback branches in `convert.rs`/`dest.rs` — both mirrored
+  OWP's conversion logic for their own validation paths; `violations_of`
+  in both crates is now a direct UTF-8-text-to-libxml2 check with no
+  `Schema` involved.
+- `oa-gateway-bench`'s `uci` scenario and CLI subcommand
+  (`Command::Uci`/`UciArgs`/`UciDirection`), which benchmarked
+  `Message::from_json`/`to_xml` conversion throughput.
+- The `uci_instance` and `uci_xsd` fuzz targets, which fuzzed the
+  now-deleted JSON↔XML round trip and hand-rolled `xsd::compile`
+  respectively.
 - The two startup warnings `values of these types will not be checked
   beyond the facets on them` and `some schema patterns cannot be checked and
   will not be enforced`. Both described gaps in the deleted hand-rolled

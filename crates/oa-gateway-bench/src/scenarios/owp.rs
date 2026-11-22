@@ -36,7 +36,7 @@ pub(crate) async fn run(args: OwpArgs) -> Result<(), String> {
     let (url, shutdown) = if let Some(url) = &args.url {
         (url.clone(), None)
     } else {
-        let (url, token) = start_owp(engine.clone(), args.xml_baseline).await;
+        let (url, token) = start_owp(engine.clone()).await;
         (url, Some(token))
     };
 

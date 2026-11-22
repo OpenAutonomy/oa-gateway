@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use oa_gateway_adapter::{after_join, Adapter, AdapterError, AfterSession};
+use oa_gateway_adapter::{after_join, Adapter, AdapterError, AfterSession, ValidateMode};
 use oa_gateway_agra::{
     element_to_enum, unwrap as unwrap_ma, unwrapped_from_parts, wrapper_kind, WrapperKind,
     WrapperMeta,
@@ -17,7 +17,6 @@ use oa_gateway_agra::{
 use oa_gateway_core::{
     AdapterId, Delivery, Engine, Envelope, RouteKey, SubId, DEFAULT_CHANNEL_CAPACITY,
 };
-use oa_gateway_uci::validate::Mode as ValidateMode;
 use oa_gateway_xsd_libxml::summarize;
 use tokio::sync::mpsc;
 use tokio::time::interval;
@@ -198,7 +197,7 @@ async fn inbound_publish(
     Ok(())
 }
 
-/// Checks `env`'s payload against [`DdsConfig::schema`], then publishes
+/// Checks `env`'s payload against the UCI schema, then publishes
 /// it — or drops it, when [`DdsConfig::validate`] is
 /// [`ValidateMode::Reject`].
 ///
@@ -208,7 +207,6 @@ async fn inbound_publish(
 async fn publish_checked(adapter: &DdsAdapter, engine: &Arc<Engine>, env: Envelope) {
     let violations = violations_of(
         &env.payload,
-        adapter.config.schema.as_deref(),
         adapter.config.xsd_validator.as_deref(),
         adapter.config.validate,
     )

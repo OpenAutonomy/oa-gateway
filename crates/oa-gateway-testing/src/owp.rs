@@ -1,13 +1,10 @@
 //! In-process OWP server and a WebSocket client for it.
 //!
 //! [`start_owp`] binds an ephemeral port and serves
-//! [`oa_gateway_owp::OwpAdapter`] with the UCI fixture schema
-//! ([`oa_gateway_uci::slice::v25`]), which drives conversion, and the
-//! libxml2-backed [`crate::xsd_fixtures::ping_validator`], which drives
-//! validation — the two are kept in sync by hand for `Ping`, the message
-//! the validation tests actually exercise. That is enough for the
-//! messages in [`crate::fixtures`]. Helpers panic on timeout or a
-//! surprising frame; they are not a public client API.
+//! [`oa_gateway_owp::OwpAdapter`] with the libxml2-backed
+//! [`crate::xsd_fixtures::ping_validator`], which drives validation.
+//! Helpers panic on timeout or a surprising frame; they are not a public
+//! client API.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -28,19 +25,15 @@ use crate::tls::{TestCa, TestCerts};
 /// Client WebSocket after the `owp` subprotocol handshake.
 pub type OwpWs = WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
-/// Starts an OWP adapter on an ephemeral port, wired to the fixture
-/// schema.
+/// Starts an OWP adapter on an ephemeral port, wired to the libxml2
+/// fixture validator.
 ///
-/// The fixture schema stands in for a real UCI schema, which the
-/// gateway otherwise loads from the published XSD at startup. It
-/// covers the message types the fixtures use, so `xml_baseline`
-/// conversion works without a local copy of the standard. INIT
-/// `schema` is `002.5.0` so [`handshake`] matches.
+/// INIT `schema` is `002.5.0` so [`handshake`] matches.
 ///
 /// Returns a `ws://127.0.0.1:{port}/` URL and a token that stops the
 /// accept loop. Panics if the port cannot be bound.
-pub async fn start_owp(engine: Arc<Engine>, xml_baseline: bool) -> (String, CancellationToken) {
-    start_owp_with(engine, |config| config.xml_baseline = xml_baseline).await
+pub async fn start_owp(engine: Arc<Engine>) -> (String, CancellationToken) {
+    start_owp_with(engine, |_| {}).await
 }
 
 /// As [`start_owp`], with the config open for editing first.
@@ -51,19 +44,6 @@ pub async fn start_owp(engine: Arc<Engine>, xml_baseline: bool) -> (String, Canc
 /// [`OwpConfig::bind`] to a different address.
 pub async fn start_owp_with(
     engine: Arc<Engine>,
-    edit: impl FnOnce(&mut OwpConfig),
-) -> (String, CancellationToken) {
-    start_owp_with_schema(engine, oa_gateway_uci::slice::v25().clone(), edit).await
-}
-
-/// As [`start_owp_with`], with the UCI schema open for editing too.
-///
-/// For a test that needs a shape the fixture schema does not declare —
-/// a specific facet, say — rather than stretching [`oa_gateway_uci::slice::v25`]
-/// to cover it.
-pub async fn start_owp_with_schema(
-    engine: Arc<Engine>,
-    schema: oa_gateway_uci::Schema,
     edit: impl FnOnce(&mut OwpConfig),
 ) -> (String, CancellationToken) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -82,7 +62,6 @@ pub async fn start_owp_with_schema(
 
     let adapter = Arc::new(
         OwpAdapter::new("owp-test", config)
-            .with_schema(Arc::new(schema))
             .with_xsd_validator(Arc::new(crate::xsd_fixtures::ping_validator())),
     );
     let token = shutdown.clone();
@@ -139,11 +118,7 @@ async fn start_owp_with_tls(
     };
     edit(&mut config);
 
-    let adapter = Arc::new(
-        OwpAdapter::new("owp-test", config)
-            .with_schema(Arc::new(oa_gateway_uci::slice::v25().clone()))
-            .with_tls(tls),
-    );
+    let adapter = Arc::new(OwpAdapter::new("owp-test", config).with_tls(tls));
     let token = shutdown.clone();
     tokio::spawn(async move {
         adapter.serve(listener, engine, token).await.unwrap();

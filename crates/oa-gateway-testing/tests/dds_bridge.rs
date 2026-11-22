@@ -4,12 +4,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use bytes::Bytes;
+use oa_gateway_adapter::ValidateMode;
 use oa_gateway_agra::{WrapperKind, WrapperMeta};
 use oa_gateway_core::{ContentType, Engine, Envelope, RouteKey};
 use oa_gateway_dds::{provider_for, DdsProviderKind, DdsSample};
 use oa_gateway_loopback::Loopback;
 use oa_gateway_testing::dds::{shipped_qos_path, start_dds_adapter, start_dds_adapter_with};
-use oa_gateway_uci::ValidateMode;
 use tokio::time::timeout;
 
 const DOMAIN: u16 = 71;
@@ -29,7 +29,9 @@ async fn dds_peer_reaches_loopback() {
     let mut peer = provider.join(DOMAIN, &shipped_qos_path()).unwrap();
     peer.create_topic("demo").unwrap();
 
-    let inner = Bytes::from_static(br#"{"Ping":{"n":7}}"#);
+    let inner = Bytes::from_static(
+        br#"<Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><n>7</n></Ping>"#,
+    );
     let sample = DdsSample {
         meta: WrapperMeta {
             kind: WrapperKind::Rx,
@@ -60,7 +62,7 @@ async fn dds_peer_reaches_loopback() {
     let got = got.expect("timeout waiting for dds inbound");
     assert_eq!(got.route.topic, "demo");
     assert_eq!(got.route.type_hint.as_deref(), Some("Ping"));
-    assert_eq!(got.content_type, ContentType::json());
+    assert_eq!(got.content_type, ContentType::xml());
     assert_eq!(got.payload, inner);
     assert_eq!(
         got.headers.get("oag.origin_adapter").map(String::as_str),
@@ -86,7 +88,9 @@ async fn loopback_pub_does_not_echo_back() {
     engine
         .publish(Envelope::new(
             RouteKey::typed("demo", "Ping"),
-            Bytes::from_static(br#"{"Ping":{"n":1}}"#),
+            Bytes::from_static(
+                br#"<Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><n>1</n></Ping>"#,
+            ),
         ))
         .await;
 
@@ -181,7 +185,7 @@ async fn an_oversized_sample_is_dropped_not_the_adapter() {
         "dds-oversize",
         DOMAIN + 2,
         vec!["demo".into()],
-        |config| config.max_sample_size = 64,
+        |config| config.max_sample_size = 128,
     )
     .await;
 
@@ -193,11 +197,16 @@ async fn an_oversized_sample_is_dropped_not_the_adapter() {
     // leave a duplicate delivery in flight afterward, so what follows
     // checks the oversized payload never arrives by content, not by
     // whether the channel stays empty.
-    let small = rx_sample(Bytes::from_static(br#"{"Ping":{"n":7}}"#));
+    let small = rx_sample(Bytes::from_static(
+        br#"<Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><n>7</n></Ping>"#,
+    ));
     write_until_matched(&mut *peer, "demo", &small, &mut rx).await;
 
     // Well-formed, and far too large: dropped for its size, not its content.
-    let padded = format!(r#"{{"Ping":{{"n":"{}"}}}}"#, "x".repeat(200));
+    let padded = format!(
+        r#"<Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><from>{}</from></Ping>"#,
+        "x".repeat(200)
+    );
     let big = rx_sample(Bytes::from(padded.into_bytes()));
     peer.write("demo", big).unwrap();
     assert!(
@@ -207,7 +216,10 @@ async fn an_oversized_sample_is_dropped_not_the_adapter() {
 
     // The adapter itself must still be alive and processing after dropping it.
     let after = write_until_matched(&mut *peer, "demo", &small, &mut rx).await;
-    assert_eq!(after.payload.as_ref(), br#"{"Ping":{"n":7}}"#);
+    assert_eq!(
+        after.payload.as_ref(),
+        br#"<Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><n>7</n></Ping>"#
+    );
 
     shutdown.cancel();
 }
@@ -236,20 +248,32 @@ async fn reject_drops_a_sample_that_does_not_follow_the_schema() {
 
     // Establishes SEDP match and confirms a conforming sample still passes
     // under reject mode.
-    let conforming = rx_sample(Bytes::from_static(br#"{"Ping":{"n":7}}"#));
+    let conforming = rx_sample(Bytes::from_static(
+        br#"<Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><n>7</n></Ping>"#,
+    ));
+    eprintln!("DEBUG: first write_until_matched starting");
     write_until_matched(&mut *peer, "demo", &conforming, &mut rx).await;
+    eprintln!("DEBUG: first write_until_matched done");
 
     // `nope` is not a field Ping declares.
-    let bad = rx_sample(Bytes::from_static(br#"{"Ping":{"nope":1}}"#));
+    let bad = rx_sample(Bytes::from_static(
+        br#"<Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><nope>1</nope></Ping>"#,
+    ));
     peer.write("demo", bad).unwrap();
+    eprintln!("DEBUG: wrote bad sample, checking any_payload_contains");
     assert!(
         !any_payload_contains(&mut rx, Duration::from_millis(800), "nope").await,
         "a sample that does not follow the schema must not reach the engine"
     );
+    eprintln!("DEBUG: any_payload_contains done, starting second write_until_matched");
 
     // The adapter itself must still be alive and processing after dropping it.
     let after = write_until_matched(&mut *peer, "demo", &conforming, &mut rx).await;
-    assert_eq!(after.payload.as_ref(), br#"{"Ping":{"n":7}}"#);
+    eprintln!("DEBUG: second write_until_matched done");
+    assert_eq!(
+        after.payload.as_ref(),
+        br#"<Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><n>7</n></Ping>"#
+    );
 
     shutdown.cancel();
 }

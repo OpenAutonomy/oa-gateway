@@ -11,7 +11,6 @@ use std::time::Duration;
 use oa_gateway_adapter::tls::{MaybeTlsStream, ServerTls};
 use oa_gateway_adapter::AdapterError;
 use oa_gateway_core::{AdapterId, Engine};
-use oa_gateway_uci::Schema;
 use oa_gateway_xsd_libxml::XsdLibxmlValidator;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Semaphore;
@@ -34,13 +33,12 @@ const TLS_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 /// OWP/WebSocket server adapter.
 ///
 /// [`Self::new`] does not bind. [`Self::serve`] takes a listener the
-/// host already bound. A compiled UCI schema is optional and is
-/// attached with [`Self::with_schema`].
+/// host already bound. A compiled libxml2 validator is optional and is
+/// attached with [`Self::with_xsd_validator`].
 pub struct OwpAdapter {
     id: AdapterId,
     config: OwpConfig,
     conn_seq: AtomicU64,
-    schema: Option<Arc<Schema>>,
     xsd_validator: Option<Arc<XsdLibxmlValidator>>,
     tls: Option<ServerTls>,
     /// One permit per allowed connection, held for the life of the session.
@@ -54,8 +52,8 @@ impl OwpAdapter {
     /// Builds an adapter that is not yet listening.
     ///
     /// The connection semaphore is sized from
-    /// [`OwpConfig::max_connections`]. No schema is attached until
-    /// [`Self::with_schema`], and the listener is plaintext until
+    /// [`OwpConfig::max_connections`]. No validator is attached until
+    /// [`Self::with_xsd_validator`], and the listener is plaintext until
     /// [`Self::with_tls`].
     #[must_use]
     pub fn new(id: impl Into<AdapterId>, config: OwpConfig) -> Self {
@@ -64,7 +62,6 @@ impl OwpAdapter {
             id: id.into(),
             config,
             conn_seq: AtomicU64::new(1),
-            schema: None,
             xsd_validator: None,
             tls: None,
             connections,
@@ -72,19 +69,7 @@ impl OwpAdapter {
         }
     }
 
-    /// Supply the UCI schema used to convert between OMS JSON and UCI XML.
-    ///
-    /// Without one the adapter still routes, but it cannot convert: XML payloads
-    /// keep their topic as the type hint and are forwarded verbatim. A schema is
-    /// mandatory for [`OwpConfig::xml_baseline`], which the host enforces at
-    /// startup so the failure surfaces before any traffic arrives.
-    #[must_use]
-    pub fn with_schema(mut self, schema: Arc<Schema>) -> Self {
-        self.schema = Some(schema);
-        self
-    }
-
-    /// Supply the libxml2-backed validator checked against the same UCI
+    /// Supply the libxml2-backed validator checked against the UCI
     /// schema. Without one, `validate` has nothing to check and behaves
     /// like `off` regardless of its configured mode.
     #[must_use]
@@ -228,7 +213,6 @@ impl OwpAdapter {
         session::run(Session {
             adapter_id: self.id.clone(),
             config: self.config.clone(),
-            schema: self.schema.clone(),
             xsd_validator: self.xsd_validator.clone(),
             conn_id,
             ws,

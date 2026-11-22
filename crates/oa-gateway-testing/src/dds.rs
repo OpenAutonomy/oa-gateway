@@ -29,9 +29,8 @@ pub async fn start_dds_adapter(
 
 /// As [`start_dds_adapter`], with the config open for editing first.
 ///
-/// The fixture schema ([`oa_gateway_uci::slice::v25`]) and the
-/// libxml2-backed [`crate::xsd_fixtures::ping_validator`] are always
-/// attached, the same way [`crate::owp::start_owp_with`] attaches them —
+/// The libxml2-backed [`crate::xsd_fixtures::ping_validator`] is always
+/// attached, the same way [`crate::owp::start_owp_with`] attaches it —
 /// `edit` only needs to set [`DdsConfig::validate`] to turn checking on.
 /// Tests for `max_sample_size` set it far below the default, so reaching
 /// it costs a few bytes rather than megabytes.
@@ -50,7 +49,6 @@ pub async fn start_dds_adapter_with(
         topics,
         unwrap_ma_payloads: true,
         suppress_echo: true,
-        schema: Some(Arc::new(oa_gateway_uci::slice::v25().clone())),
         xsd_validator: Some(Arc::new(crate::xsd_fixtures::ping_validator())),
         ..DdsConfig::default()
     };

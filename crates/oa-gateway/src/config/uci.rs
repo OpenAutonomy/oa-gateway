@@ -1,27 +1,27 @@
 //! `[uci]` section: schema documents and what to do when a payload is not one.
 //!
-//! The standard is not redistributed here. Conversion and validation both
-//! need the files named explicitly, and both documents the catalog spans.
+//! The standard is not redistributed here, so the entry document has to be
+//! named explicitly.
 
 use std::path::PathBuf;
 
-use oa_gateway_uci::ValidateMode;
+use oa_gateway_adapter::ValidateMode;
 use serde::Deserialize;
 
-/// Where to find the UCI schema that drives JSON ↔ XML conversion.
+/// Where to find the UCI schema that drives validation.
 ///
-/// The standard is not redistributed here, so the documents have to be
-/// named explicitly. List every file the schema spans:
-/// `UCI_MessageDefinitions` alone leaves the security-marking types
-/// dangling, which is reported as an error rather than discovered later
-/// against live traffic.
+/// The standard is not redistributed here. libxml2 resolves
+/// `xs:include`/`xs:import` itself from the first listed file's own path
+/// on disk, so that first entry has to be the one that spans the rest of
+/// the catalog (`UCI_MessageDefinitions` before `UCI_SecurityMarkings`,
+/// say) — see [`crate::xsd_libxml::load`].
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct UciSection {
-    /// XSD paths, relative to the process working directory.
+    /// XSD paths, relative to the process working directory. Only the
+    /// first entry is read; see the struct doc.
     ///
-    /// Empty (the default) means no conversion and no validation. That is
-    /// fine for routing and refused when `owp.xml_baseline` is on.
+    /// Empty (the default) means no validation. That is fine for routing.
     #[serde(default)]
     pub(crate) schema: Vec<PathBuf>,
     /// What to do about a payload that does not follow the schema: `"off"`,

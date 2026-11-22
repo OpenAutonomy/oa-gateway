@@ -8,9 +8,7 @@ use oa_gateway_agra::{wrap, WrapRequest, WrapShell, WrapperKind, RX_ELEMENT};
 use oa_gateway_core::{ContentType, Engine, Envelope, RouteKey};
 use oa_gateway_loopback::Loopback;
 use oa_gateway_owp::{parse_server, ServerOp};
-use oa_gateway_testing::fixtures::POSITION_REPORT_XML_BYTES;
 use oa_gateway_testing::owp::{connect, handshake, recv_text, send_text, start_owp};
-use serde_json::json;
 use tokio::time::timeout;
 
 #[tokio::test]
@@ -22,11 +20,15 @@ async fn owp_pub_reaches_loopback() {
         .await
         .unwrap();
 
-    let (url, shutdown) = start_owp(engine, false).await;
+    let (url, shutdown) = start_owp(engine).await;
     let mut ws = connect(&url).await;
     handshake(&mut ws).await;
 
-    send_text(&mut ws, r#"PUB demo {"Ping":{"n":7}}"#).await;
+    send_text(
+        &mut ws,
+        r#"PUB demo <Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><n>7</n></Ping>"#,
+    )
+    .await;
     match parse_server(&recv_text(&mut ws).await).unwrap() {
         ServerOp::Ok => {}
         other => panic!("expected +OK after PUB, got {other}"),
@@ -38,8 +40,11 @@ async fn owp_pub_reaches_loopback() {
         .expect("closed");
     assert_eq!(got.route.type_hint.as_deref(), Some("Ping"));
     assert_eq!(got.route.topic, "demo");
-    assert_eq!(got.content_type, ContentType::json());
-    assert_eq!(got.payload.as_ref(), br#"{"Ping":{"n":7}}"#);
+    assert_eq!(got.content_type, ContentType::xml());
+    assert_eq!(
+        got.payload.as_ref(),
+        br#"<Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><n>7</n></Ping>"#
+    );
     assert_eq!(
         got.headers.get("owp.service_id").map(String::as_str),
         Some("web-app")
@@ -53,7 +58,7 @@ async fn loopback_pub_reaches_owp_sub() {
     let engine = Arc::new(Engine::new());
     let loopback = Loopback::new(engine.clone(), "loop-a");
 
-    let (url, shutdown) = start_owp(engine, false).await;
+    let (url, shutdown) = start_owp(engine).await;
     let mut ws = connect(&url).await;
     handshake(&mut ws).await;
 
@@ -67,16 +72,21 @@ async fn loopback_pub_reaches_owp_sub() {
         .publish(
             Envelope::new(
                 RouteKey::typed("demo", "Ping"),
-                Bytes::from_static(br#"{"Ping":{"from":"loop"}}"#),
+                Bytes::from_static(
+                    br#"<Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><from>loop</from></Ping>"#,
+                ),
             )
-            .with_content_type(ContentType::json()),
+            .with_content_type(ContentType::xml()),
         )
         .await;
 
     match parse_server(&recv_text(&mut ws).await).unwrap() {
         ServerOp::Msg { sid, payload } => {
             assert_eq!(sid, "sub-1");
-            assert_eq!(payload, r#"{"Ping":{"from":"loop"}}"#);
+            assert_eq!(
+                payload,
+                r#"<Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><from>loop</from></Ping>"#
+            );
         }
         other => panic!("expected MSG, got {other}"),
     }
@@ -89,7 +99,7 @@ async fn disconnect_unsubscribes() {
     let engine = Arc::new(Engine::new());
     let loopback = Loopback::new(engine.clone(), "loop-a");
 
-    let (url, shutdown) = start_owp(engine.clone(), false).await;
+    let (url, shutdown) = start_owp(engine.clone()).await;
     let mut ws = connect(&url).await;
     handshake(&mut ws).await;
     send_text(&mut ws, "SUB sub-1 Ping demo").await;
@@ -103,7 +113,7 @@ async fn disconnect_unsubscribes() {
     loopback
         .publish(Envelope::new(
             RouteKey::typed("demo", "Ping"),
-            Bytes::from_static(b"{}"),
+            Bytes::from_static(b"<Ping/>"),
         ))
         .await;
 
@@ -123,20 +133,19 @@ async fn owp_rx_wrapper_fans_out_wrapper_and_inner() {
         .await
         .unwrap();
 
-    let inner = br#"{"PositionReport":{"MessageData":{"n":1}}}"#;
+    let inner = br#"<PositionReport xmlns="https://www.vdl.afrl.af.mil/programs/oam"><MessageData><n>1</n></MessageData></PositionReport>"#;
     let wrapped = wrap(WrapRequest {
         topic: "offboard".into(),
         kind: WrapperKind::Rx,
         inner: Bytes::from_static(inner),
         message_type_enum: "POSITION_REPORT".into(),
         shell: WrapShell {
-            security_information: json!({"Classification": "U"}),
-            message_header: json!({
-                "SystemID": {"UUID": "00000000-0000-4000-8000-000000000001"},
-                "Timestamp": "2026-08-09T21:00:00Z",
-                "SchemaVersion": "002.5.0",
-                "Mode": "SIMULATION"
-            }),
+            security_information: "<Classification>U</Classification>".into(),
+            message_header:
+                "<SystemID><UUID>00000000-0000-4000-8000-000000000001</UUID></SystemID>\
+                <Timestamp>2026-08-09T21:00:00Z</Timestamp>\
+                <SchemaVersion>002.5.0</SchemaVersion><Mode>SIMULATION</Mode>"
+                    .into(),
         },
         destination_routing: "TOPIC_AND_SPECIFIC_DESTINATION".into(),
         originator_uuid: Some("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".into()),
@@ -144,11 +153,10 @@ async fn owp_rx_wrapper_fans_out_wrapper_and_inner() {
         timestamp: "2026-08-09T21:00:00Z".into(),
         priority: 4,
         precedence: 1,
-    })
-    .unwrap();
+    });
     let wrap_text = String::from_utf8(wrapped.payload.to_vec()).unwrap();
 
-    let (url, shutdown) = start_owp(engine, false).await;
+    let (url, shutdown) = start_owp(engine).await;
     let mut ws = connect(&url).await;
     handshake(&mut ws).await;
     send_text(&mut ws, &format!("PUB offboard {wrap_text}")).await;
@@ -179,79 +187,6 @@ async fn owp_rx_wrapper_fans_out_wrapper_and_inner() {
     shutdown.cancel();
 }
 
-#[tokio::test]
-async fn owp_json_pub_becomes_xml_on_engine() {
-    let engine = Arc::new(Engine::new());
-    let loopback = Loopback::new(engine.clone(), "loop-b");
-    let mut rx = loopback
-        .subscribe(RouteKey::typed("PositionReport", "PositionReport"))
-        .await
-        .unwrap();
-
-    let (url, shutdown) = start_owp(engine, true).await;
-    let mut ws = connect(&url).await;
-    handshake(&mut ws).await;
-    send_text(
-        &mut ws,
-        r#"PUB PositionReport {"PositionReport":{"MessageData":{"n":7}}}"#,
-    )
-    .await;
-    match parse_server(&recv_text(&mut ws).await).unwrap() {
-        ServerOp::Ok => {}
-        other => panic!("expected +OK, got {other}"),
-    }
-
-    let got = timeout(Duration::from_secs(2), rx.recv())
-        .await
-        .expect("timeout")
-        .expect("closed");
-    assert_eq!(got.content_type, ContentType::xml());
-    let body = std::str::from_utf8(&got.payload).unwrap();
-    assert!(body.contains("<PositionReport"), "{body}");
-    assert!(body.contains("<n>7</n>"), "{body}");
-
-    shutdown.cancel();
-}
-
-#[tokio::test]
-async fn engine_xml_becomes_owp_json() {
-    let engine = Arc::new(Engine::new());
-    let loopback = Loopback::new(engine.clone(), "loop-a");
-
-    let (url, shutdown) = start_owp(engine, true).await;
-    let mut ws = connect(&url).await;
-    handshake(&mut ws).await;
-    send_text(&mut ws, "SUB sub-1 PositionReport PositionReport").await;
-    match parse_server(&recv_text(&mut ws).await).unwrap() {
-        ServerOp::Ok => {}
-        other => panic!("expected +OK, got {other}"),
-    }
-
-    loopback
-        .publish(
-            Envelope::new(
-                RouteKey::typed("PositionReport", "PositionReport"),
-                Bytes::from_static(POSITION_REPORT_XML_BYTES),
-            )
-            .with_content_type(ContentType::xml()),
-        )
-        .await;
-
-    match parse_server(&recv_text(&mut ws).await).unwrap() {
-        ServerOp::Msg { sid, payload } => {
-            assert_eq!(sid, "sub-1");
-            let v: serde_json::Value = serde_json::from_str(&payload).unwrap();
-            assert_eq!(
-                v.pointer("/PositionReport/MessageData/n"),
-                Some(&serde_json::json!(1))
-            );
-        }
-        other => panic!("expected MSG, got {other}"),
-    }
-
-    shutdown.cancel();
-}
-
 /// An XML publish is named by its root element, not by the topic it arrived on.
 ///
 /// The two differ deliberately here: a subscriber keyed on the message type is
@@ -266,7 +201,7 @@ async fn xml_publish_takes_its_type_from_the_document() {
         .await
         .unwrap();
 
-    let (url, shutdown) = start_owp(engine, false).await;
+    let (url, shutdown) = start_owp(engine).await;
     let mut ws = connect(&url).await;
     handshake(&mut ws).await;
 
@@ -291,7 +226,7 @@ async fn xml_publish_takes_its_type_from_the_document() {
 #[tokio::test]
 async fn xml_with_no_element_is_refused_rather_than_named_after_the_topic() {
     let engine = Arc::new(Engine::new());
-    let (url, shutdown) = start_owp(engine, false).await;
+    let (url, shutdown) = start_owp(engine).await;
     let mut ws = connect(&url).await;
     handshake(&mut ws).await;
 
@@ -308,68 +243,6 @@ async fn xml_with_no_element_is_refused_rather_than_named_after_the_topic() {
             );
         }
         other => panic!("expected ERR for a payload with no element, got {other}"),
-    }
-
-    shutdown.cancel();
-}
-
-/// A delivery that will not convert is dropped, and the client is told which
-/// subscription lost it.
-///
-/// Forwarding the XML instead would hand a JSON subscriber a document it has no
-/// way to distinguish from an expected payload. The session stays usable either
-/// way: one unconvertible message is not a reason to end it.
-#[tokio::test]
-async fn an_unconvertible_delivery_is_refused_not_forwarded_as_xml() {
-    let engine = Arc::new(Engine::new());
-    let loopback = Loopback::new(engine.clone(), "loop-bad");
-
-    let (url, shutdown) = start_owp(engine, true).await;
-    let mut ws = connect(&url).await;
-    handshake(&mut ws).await;
-    send_text(&mut ws, "SUB sub-1 PositionReport PositionReport").await;
-    match parse_server(&recv_text(&mut ws).await).unwrap() {
-        ServerOp::Ok => {}
-        other => panic!("expected +OK, got {other}"),
-    }
-
-    // Well-formed XML naming a message the schema does not define, which is what
-    // a broker carrying a wider catalog than the gateway was given looks like.
-    let unknown = r#"<NotInTheSchema xmlns="https://www.vdl.afrl.af.mil/programs/oam"><MessageData/></NotInTheSchema>"#;
-    loopback
-        .publish(
-            Envelope::new(
-                RouteKey::typed("PositionReport", "PositionReport"),
-                Bytes::from(unknown),
-            )
-            .with_content_type(ContentType::xml()),
-        )
-        .await;
-
-    match parse_server(&recv_text(&mut ws).await).unwrap() {
-        ServerOp::Err { details, .. } => {
-            let details = details.unwrap_or_default();
-            assert!(details.contains("sub-1"), "unhelpful details: {details}");
-        }
-        ServerOp::Msg { payload, .. } => {
-            panic!("XML was forwarded to a JSON subscriber: {payload}")
-        }
-        other => panic!("expected ERR, got {other}"),
-    }
-
-    // Still usable: a convertible payload on the same subscription arrives.
-    loopback
-        .publish(
-            Envelope::new(
-                RouteKey::typed("PositionReport", "PositionReport"),
-                Bytes::from_static(POSITION_REPORT_XML_BYTES),
-            )
-            .with_content_type(ContentType::xml()),
-        )
-        .await;
-    match parse_server(&recv_text(&mut ws).await).unwrap() {
-        ServerOp::Msg { sid, .. } => assert_eq!(sid, "sub-1"),
-        other => panic!("expected the subscription to keep working, got {other}"),
     }
 
     shutdown.cancel();

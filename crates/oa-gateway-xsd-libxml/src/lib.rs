@@ -1,10 +1,11 @@
 //! XSD instance validation via libxml2.
 //!
-//! Independent of `oa-gateway-uci`: that crate's hand-rolled `Schema` still
-//! owns JSON <-> XML conversion (libxml2 has no equivalent — it validates
-//! XML instances, full stop, with no JSON concept at all). This crate is
-//! the one and only conformance check on the XML wire form, replacing the
-//! hand-rolled `validate` module that used to live in `oa-gateway-uci`.
+//! This crate is the one and only conformance check on the XML wire form.
+//! It replaced a hand-rolled `validate` module and, later, a hand-rolled
+//! JSON<->XML conversion layer that both used to live in a now-deleted
+//! `oa-gateway-uci` crate — JSON was never part of the standard this
+//! gateway implements, so once this crate could check XML directly there
+//! was nothing left for that conversion layer to do.
 //!
 //! `libxml::schemas::SchemaValidationContext` is `!Send`/`!Sync` and takes
 //! `&mut self` to validate, so it cannot be moved into a `spawn_blocking`

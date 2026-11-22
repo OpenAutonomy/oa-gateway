@@ -1,15 +1,14 @@
 //! OWP 1.0 text-frame codec. Grammar follows OMSC-SPC-013; no UCI types.
 //!
-//! A frame is a keyword plus space-or-tab separated fields. JSON payloads
-//! (`INIT`, `INFO`, `PUB`) keep their spaces: the first token is the
-//! field, the rest of the line is the payload. This module does not
-//! compile a schema or convert XML.
+//! A frame is a keyword plus space-or-tab separated fields. `INIT`/`INFO`
+//! carry a JSON body (this crate's own wire protocol, unrelated to UCI);
+//! `PUB`/`MSG` keep their spaces, with the rest of the line as the UCI
+//! XML payload. This module does not compile a schema or parse XML.
 
 use std::fmt;
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 /// Whether `s` is an OWP identifier: `^[A-Za-z0-9_\-.]+$`.
 ///
@@ -105,8 +104,8 @@ pub struct InfoPayload {
 
 /// A parsed client frame.
 ///
-/// `PUB` `payload` is the rest of the line, not a validated JSON
-/// object. Call [`type_hint_from_json`] when the root key is needed.
+/// `PUB` `payload` is the rest of the line, not a validated XML
+/// document.
 #[derive(Debug, Clone)]
 pub enum ClientOp {
     Init(InitPayload),
@@ -478,44 +477,17 @@ fn parse_unsub(rest: &str) -> Result<ClientOp, ParseError> {
     })
 }
 
-/// Returns the single root key of an OMS JSON object.
-///
-/// That key is the type hint the engine matches on. This does not
-/// validate UCI and does not walk nested members.
-///
-/// # Errors
-///
-/// Returns a parse error (labelled as `PUB`) if `text` is not an
-/// object with exactly one member.
-pub fn type_hint_from_json(text: &str) -> Result<String, ParseError> {
-    let value: Value = serde_json::from_str(text).map_err(|e| ParseError::InvalidJson {
-        op: "PUB",
-        message: e.to_string(),
-    })?;
-    let obj = value.as_object().ok_or(ParseError::InvalidJson {
-        op: "PUB",
-        message: "root must be a JSON object".into(),
-    })?;
-    if obj.len() != 1 {
-        return Err(ParseError::InvalidJson {
-            op: "PUB",
-            message: "root object must have exactly one member".into(),
-        });
-    }
-    Ok(obj.keys().next().expect("len == 1").clone())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn parse_pub_and_type_hint() {
-        let op = parse_client(r#"PUB demo.topic {"Ping":{"n":1}}"#).unwrap();
+    fn parse_pub() {
+        let op = parse_client(r"PUB demo.topic <Ping><n>1</n></Ping>").unwrap();
         match op {
             ClientOp::Pub { topic, payload } => {
                 assert_eq!(topic, "demo.topic");
-                assert_eq!(type_hint_from_json(&payload).unwrap(), "Ping");
+                assert_eq!(payload, "<Ping><n>1</n></Ping>");
             }
             _ => panic!("expected PUB"),
         }

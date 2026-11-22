@@ -2,10 +2,9 @@
 
 use std::sync::Arc;
 
-use oa_gateway_adapter::Adapter;
+use oa_gateway_adapter::{Adapter, ValidateMode};
 use oa_gateway_core::Engine;
 use oa_gateway_dds::{DdsAdapter, DdsConfig};
-use oa_gateway_uci::{Schema, ValidateMode};
 use oa_gateway_xsd_libxml::XsdLibxmlValidator;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -15,8 +14,8 @@ use crate::config::DdsSection;
 
 /// Spawns [`DdsAdapter`] and returns a handle to its `run` task.
 ///
-/// `schema` and `validate` check inbound samples the same way they
-/// check OWP traffic; `validate` has no effect without a `schema`.
+/// `xsd_validator` and `validate` check inbound samples the same way
+/// they check OWP traffic; `validate` has no effect without a validator.
 ///
 /// # Errors
 ///
@@ -24,7 +23,6 @@ use crate::config::DdsSection;
 /// `on_panic` is not `abort` or `reconnect`.
 pub(crate) fn start(
     section: &DdsSection,
-    schema: Option<&Arc<Schema>>,
     xsd_validator: Option<&Arc<XsdLibxmlValidator>>,
     validate: ValidateMode,
     engine: Arc<Engine>,
@@ -43,7 +41,6 @@ pub(crate) fn start(
             on_panic: section.on_panic_mode()?,
             reconnect: section.reconnect,
             reconnect_delay: std::time::Duration::from_secs(section.reconnect_delay_secs),
-            schema: schema.cloned(),
             xsd_validator: xsd_validator.cloned(),
             validate,
             max_sample_size: section.max_sample_size,

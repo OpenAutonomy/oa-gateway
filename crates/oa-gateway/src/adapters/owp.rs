@@ -1,17 +1,16 @@
 //! Constructs and spawns the OWP/WebSocket adapter.
 //!
 //! `bind` is already resolved. This module maps the TOML section onto
-//! [`oa_gateway_owp::OwpConfig`] and attaches a compiled UCI schema when
-//! the host loaded one.
+//! [`oa_gateway_owp::OwpConfig`] and attaches a compiled libxml2 validator
+//! when the host loaded one.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
 
 use oa_gateway_adapter::tls::ServerTls;
-use oa_gateway_adapter::Adapter;
+use oa_gateway_adapter::{Adapter, ValidateMode};
 use oa_gateway_core::Engine;
 use oa_gateway_owp::{OwpAdapter, OwpConfig};
-use oa_gateway_uci::{Schema, ValidateMode};
 use oa_gateway_xsd_libxml::XsdLibxmlValidator;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -24,9 +23,8 @@ use crate::config::OwpSection;
 ///
 /// An empty `section.schema` becomes `None`, so INIT does not require a
 /// protocol schema string. `system_uuid` is generated per process, not
-/// read from the config. The compiled UCI `schema` is a separate object:
-/// it drives JSON ↔ XML conversion and validation, and `validate` has no
-/// effect without one.
+/// read from the config. `validate` has no effect without a compiled
+/// `xsd_validator`.
 ///
 /// A failure from `run` is logged and the task still finishes, so one
 /// adapter cannot take the host down.
@@ -38,7 +36,6 @@ use crate::config::OwpSection;
 pub(crate) fn start(
     section: &OwpSection,
     bind: SocketAddr,
-    schema: Option<&Arc<Schema>>,
     xsd_validator: Option<&Arc<XsdLibxmlValidator>>,
     validate: ValidateMode,
     tls: Option<ServerTls>,
@@ -58,7 +55,6 @@ pub(crate) fn start(
             },
             system_uuid: uuid::Uuid::new_v4().to_string(),
             unwrap_ma_payloads: section.unwrap_ma_payloads,
-            xml_baseline: section.xml_baseline,
             max_frame_size: section.max_frame_size,
             max_connections: section.max_connections,
             max_subscriptions: section.max_subscriptions,
@@ -73,9 +69,6 @@ pub(crate) fn start(
             reconnect_delay: std::time::Duration::from_secs(section.reconnect_delay_secs),
         },
     );
-    if let Some(schema) = schema {
-        adapter = adapter.with_schema(Arc::clone(schema));
-    }
     if let Some(validator) = xsd_validator {
         adapter = adapter.with_xsd_validator(Arc::clone(validator));
     }

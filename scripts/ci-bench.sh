@@ -25,7 +25,6 @@ run engine engine --duration 5s --warmup 1s
 run loopback loopback --duration 5s --warmup 1s
 run owp owp --duration 5s --warmup 1s
 run owp-xml-baseline owp --duration 5s --warmup 1s --xml-baseline
-run uci uci --iterations 2000
 
 install_plot_tools() {
   if command -v jq >/dev/null 2>&1 && command -v gnuplot >/dev/null 2>&1; then
@@ -46,7 +45,7 @@ plot_charts() {
 
   {
     echo -e "scenario\tp50\tp90\tp99"
-    for f in "$OUT"/engine.json "$OUT"/loopback.json "$OUT"/owp.json "$OUT"/owp-xml-baseline.json "$OUT"/uci.json; do
+    for f in "$OUT"/engine.json "$OUT"/loopback.json "$OUT"/owp.json "$OUT"/owp-xml-baseline.json; do
       [ -f "$f" ] || continue
       jq -r '[.scenario, ((.latency_ns.p50 // 0)/1000), ((.latency_ns.p90 // 0)/1000), ((.latency_ns.p99 // 0)/1000)] | @tsv' "$f"
     done
@@ -54,7 +53,7 @@ plot_charts() {
 
   {
     echo -e "scenario\trecv_per_sec"
-    for f in "$OUT"/engine.json "$OUT"/loopback.json "$OUT"/owp.json "$OUT"/owp-xml-baseline.json "$OUT"/uci.json; do
+    for f in "$OUT"/engine.json "$OUT"/loopback.json "$OUT"/owp.json "$OUT"/owp-xml-baseline.json; do
       [ -f "$f" ] || continue
       jq -r '[.scenario, .received_per_sec] | @tsv' "$f"
     done

@@ -15,13 +15,12 @@ use tracing::{info, warn};
 
 use crate::adapters;
 use crate::config;
-use crate::schema;
 use crate::tls;
 use crate::xsd_libxml;
 
 /// Loads `config_path`, starts the enabled adapters, and blocks until Ctrl-C.
 ///
-/// Schema compilation and address resolution happen before any adapter
+/// Validator compilation and address resolution happen before any adapter
 /// task is spawned, so a bad input exits cleanly instead of leaving an
 /// earlier adapter already listening.
 ///
@@ -32,7 +31,7 @@ use crate::xsd_libxml;
 ///
 /// # Errors
 ///
-/// Returns an error if the config cannot be loaded, the schema or
+/// Returns an error if the config cannot be loaded, the validator or
 /// validation mode is unusable, `stomp.on_panic` is not `abort` or
 /// `reconnect`, `dds.provider` or `dds.qos` is unusable, no adapters
 /// are enabled, an address cannot be resolved, or the process cannot
@@ -42,14 +41,13 @@ pub(crate) async fn serve(config_path: &Path) -> Result<(), String> {
 
     let config = config::load(config_path)?;
 
-    // Compile the schema and read any TLS material before anything starts
-    // listening, for the same reason addresses are resolved up front: a bad
-    // input should fail cleanly rather than after adapters are already
-    // accepting traffic.
-    let schema = schema::load(&config)?;
+    // Compile the validator and read any TLS material before anything
+    // starts listening, for the same reason addresses are resolved up
+    // front: a bad input should fail cleanly rather than after adapters
+    // are already accepting traffic.
     let xsd_validator = xsd_libxml::load(&config)?;
     let validate = config.uci.validate_mode()?;
-    if schema.is_some() {
+    if xsd_validator.is_some() {
         info!(mode = %validate, "schema validation");
     }
     let host_tls = tls::load(&config)?;
@@ -59,7 +57,6 @@ pub(crate) async fn serve(config_path: &Path) -> Result<(), String> {
     let mut handles = adapters::start(
         &config,
         engine.clone(),
-        schema,
         xsd_validator,
         validate,
         host_tls,

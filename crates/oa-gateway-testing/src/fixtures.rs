@@ -1,9 +1,8 @@
 //! Sample payloads. Paths stay valid when crates move; do not
 //! `include_str!` from the workspace root.
 //!
-//! The XML and JSON documents are the same logical `PositionReport`
-//! (UCI 2.5 / OMS). Integration tests send them over OWP, STOMP, and
-//! loopback; `oa-gateway-uci` uses them as a codec round-trip.
+//! Integration tests send this `PositionReport` document over OWP, STOMP,
+//! and loopback.
 
 /// Minimal UCI XML `PositionReport` used on the ASB / STOMP path.
 ///
@@ -13,9 +12,6 @@ pub const POSITION_REPORT_XML: &str = include_str!("../fixtures/PositionReport.x
 
 /// Same document as bytes (loopback / STOMP SEND).
 pub const POSITION_REPORT_XML_BYTES: &[u8] = POSITION_REPORT_XML.as_bytes();
-
-/// OMS JSON `PositionReport` matching the sleet v2.5 fixture shape.
-pub const POSITION_REPORT_JSON: &str = include_str!("../fixtures/PositionReport.json");
 
 /// Filesystem path to the XML fixture (scripts / non-Rust tools).
 ///
@@ -33,7 +29,6 @@ mod tests {
     #[test]
     fn fixtures_are_nonempty() {
         assert!(POSITION_REPORT_XML.contains("<PositionReport"));
-        assert!(POSITION_REPORT_JSON.contains("\"PositionReport\""));
         assert_eq!(POSITION_REPORT_XML_BYTES, POSITION_REPORT_XML.as_bytes());
     }
 }

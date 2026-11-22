@@ -7,13 +7,13 @@
 #
 # Engine topic == JMS / STOMP dest suffix (UCI message type name).
 
-# The UCI schema that drives JSON ↔ XML conversion. The standard is not
-# redistributed with this repository, so run scripts/fetch-uci-schema.sh to
-# populate these paths, or point them at your own copy. Both documents are
-# needed: the message definitions include the security markings, and leaving
-# them out is reported as unresolved types. xml_baseline below cannot work
-# without a schema, and startup says so rather than failing per message.
-# Paths are relative to where you run oa-gateway, normally the repo root.
+# The UCI schema that drives validation. The standard is not redistributed
+# with this repository, so run scripts/fetch-uci-schema.sh to populate these
+# paths, or point them at your own copy. Only the first entry is read —
+# libxml2 resolves xs:include/xs:import itself, relative to that file's own
+# path, and UCI_MessageDefinitions includes UCI_SecurityMarkings from the
+# same directory. Paths are relative to where you run oa-gateway, normally
+# the repo root.
 [uci]
 schema = [
   "schema/uci/UCI_MessageDefinitions_v2_5_0.xsd",
@@ -23,9 +23,7 @@ schema = [
 # declares, a required one absent, an occurrence range or an alternation broken.
 # "warn" reports it and carries the message anyway, which is what you want while
 # bringing a producer up. "reject" refuses it and tells the peer what was wrong.
-# "off" skips the check, and the parse it costs. Conversion succeeding says
-# nothing about this: a message can convert cleanly and still not be a valid
-# instance of the standard.
+# "off" skips the check, and the parse it costs.
 validate = "warn"
 
 [loopback]
@@ -38,8 +36,6 @@ server_id = "oa-gateway-0"
 system_label = "OA-Gateway ASB"
 schema = "002.5.0"
 unwrap_ma_payloads = true
-# OMS JSON at the WebSocket; UCI XML toward ActiveMQ.
-xml_baseline = true
 
 [stomp]
 id = "stomp"

@@ -8,12 +8,11 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use oa_gateway_adapter::{after_join, Adapter, AdapterError, AfterSession};
+use oa_gateway_adapter::{after_join, Adapter, AdapterError, AfterSession, ValidateMode};
 use oa_gateway_agra::{unwrap as unwrap_ma, wrapper_kind};
 use oa_gateway_core::{
     AdapterId, Delivery, Engine, Envelope, RouteKey, SubId, DEFAULT_CHANNEL_CAPACITY,
 };
-use oa_gateway_uci::validate::Mode as ValidateMode;
 use oa_gateway_xsd_libxml::summarize;
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
@@ -297,7 +296,7 @@ impl StompAdapter {
 /// Type hint comes from `oag.type_hint` or by sniffing the body. The
 /// envelope is stamped with this adapter's id so the outbound path can
 /// skip it. A-GRA wrappers publish wrapper and inner as two envelopes,
-/// each checked against [`StompConfig::schema`] on its own via
+/// each checked against the UCI schema on its own via
 /// [`publish_checked`].
 ///
 /// # Errors
@@ -323,7 +322,7 @@ async fn inbound_publish(
         .header(HDR_TYPE_HINT)
         .map(str::to_owned)
         .or_else(|| sniff_type_hint(&frame.body));
-    let content_type = sniff_content_type(&frame.body, frame.header("content-type"));
+    let content_type = sniff_content_type(frame.header("content-type"));
     let route = inbound_route(&topic, type_hint);
 
     let stamp = |env: Envelope| {
@@ -349,7 +348,7 @@ async fn inbound_publish(
     Ok(())
 }
 
-/// Checks `env`'s payload against [`StompConfig::schema`], then publishes
+/// Checks `env`'s payload against the UCI schema, then publishes
 /// it — or drops it, when [`StompConfig::validate`] is
 /// [`ValidateMode::Reject`].
 ///
@@ -359,7 +358,6 @@ async fn inbound_publish(
 async fn publish_checked(adapter: &StompAdapter, engine: &Arc<Engine>, env: Envelope) {
     let violations = violations_of(
         &env.payload,
-        adapter.config.schema.as_deref(),
         adapter.config.xsd_validator.as_deref(),
         adapter.config.validate,
     )
@@ -391,7 +389,7 @@ async fn publish_checked(adapter: &StompAdapter, engine: &Arc<Engine>, env: Enve
 /// MESSAGE just taken from the broker is not sent back. `stomp.*`
 /// headers and `oag.origin_adapter` are not copied onto the wire.
 ///
-/// Checked against [`StompConfig::schema`] before it is written: the
+/// Checked against the UCI schema before it is written: the
 /// engine does not transform payloads, so a non-conforming delivery here
 /// did not necessarily enter through this adapter's own, already-checked
 /// inbound path — it may have come from another adapter under `Warn`
@@ -414,7 +412,6 @@ async fn forward_outbound(
 
     let violations = violations_of(
         &delivery.envelope.payload,
-        adapter.config.schema.as_deref(),
         adapter.config.xsd_validator.as_deref(),
         adapter.config.validate,
     )

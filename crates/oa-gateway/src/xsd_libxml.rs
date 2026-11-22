@@ -1,13 +1,10 @@
 //! Compiles the libxml2 validator from `[uci].schema` before any adapter
-//! listens — the same timing as [`crate::schema::load`], for the same
-//! reason: a bad schema should fail startup, not surface against live
-//! traffic.
+//! listens, so a bad schema fails startup rather than surfacing against
+//! live traffic.
 //!
-//! Unlike the hand-rolled compiler (`oa_gateway_uci::xsd::compile`, which
-//! takes every spanning document explicitly and does not follow
-//! `xs:include`/`xs:import`), libxml2 wants one entry point and resolves
-//! includes itself, relative to that file's own path on disk. `uci.schema`'s
-//! first entry is treated as that entry point.
+//! libxml2 wants one entry point and resolves `xs:include`/`xs:import`
+//! itself, relative to that file's own path on disk. `uci.schema`'s first
+//! entry is treated as that entry point.
 
 use std::sync::Arc;
 
@@ -18,9 +15,7 @@ use crate::config::Config;
 
 /// Compiles the libxml2 validator named in `config`, if any.
 ///
-/// Returns `None` when `uci.schema` is empty — the same condition under
-/// which [`crate::schema::load`] returns `None`, so the two always agree
-/// on whether there is anything to check.
+/// Returns `None` when `uci.schema` is empty: nothing is checked.
 ///
 /// # Errors
 ///

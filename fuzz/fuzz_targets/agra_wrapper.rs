@@ -1,7 +1,7 @@
 //! A-GRA Rx/Tx wrapper detection and unwrapping on arbitrary bytes. The
 //! wrapper fields were once located by substring search, which could anchor
 //! to the wrong place on adversarial input; this exercises the roxmltree
-//! and JSON paths that replaced it.
+//! parsing that replaced it.
 
 #![no_main]
 
