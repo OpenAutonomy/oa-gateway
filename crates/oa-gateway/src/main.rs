@@ -11,6 +11,7 @@ mod config;
 mod schema;
 mod serve;
 mod tls;
+mod xsd_libxml;
 
 use cli::{parse_args, Cli, USAGE};
 use serve::serve;

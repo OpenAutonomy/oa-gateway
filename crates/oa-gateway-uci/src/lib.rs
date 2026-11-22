@@ -1,9 +1,15 @@
 //! Schema-aware UCI XML ↔ OMS JSON.
 //!
 //! The engine stays on opaque bytes. Adapters call [`Message::from_json`] /
-//! [`Message::from_xml`] and emit the other serialization. Conversion
-//! is deliberately forgiving; [`Message::violations`] is what names a
-//! payload that converted and still does not follow the schema.
+//! [`Message::from_xml`] and emit the other serialization. Conversion is
+//! deliberately forgiving: an element it cannot place is carried as a
+//! string, and an alternation is mapped as though its branches were
+//! siblings. Whether a converted payload actually follows the schema is
+//! `oa-gateway-xsd-libxml`'s question, not this crate's — this crate has
+//! no XML schema *validator* at all, only the schema-aware *codec*. See
+//! [`mod@validate`] for the one piece of that split still owned here:
+//! [`validate::Mode`], which every adapter config holds regardless of
+//! which engine performs the check.
 //!
 //! A [`Schema`] tells the converter what it cannot infer from a single
 //! document: whether a field repeats, and whether a leaf is a number, a
@@ -42,17 +48,9 @@ pub use schema::{
     choice, el, el_many, el_opt, sequence, ComplexContent, ComplexType, Effective, Element, Facets,
     Group, GroupKind, MaxOccurs, Schema, SimpleType,
 };
-pub use validate::{validate, Mode as ValidateMode, Violation, ViolationKind};
+pub use validate::Mode as ValidateMode;
 
 impl Message {
-    /// Every way this message departs from `schema`; empty when none.
-    ///
-    /// See [`mod@validate`] for what that does and does not cover.
-    #[must_use]
-    pub fn violations(&self, schema: &Schema) -> Vec<Violation> {
-        validate::validate(self, schema)
-    }
-
     /// Parses OMS JSON. The root is a single-key object whose key is a
     /// global element. `$type` selects a concrete type. An undeclared
     /// field is carried as `xs:string` rather than refused.

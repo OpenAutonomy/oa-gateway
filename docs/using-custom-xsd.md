@@ -27,16 +27,9 @@ A schema that will not compile stops the gateway and names the reason. Otherwise
 INFO oa_gateway: uci schema compiled files=1 messages=1 complex_types=1 simple_types=1
 ```
 
-Two warnings are worth reading. Both mean the same thing: a constraint the gateway cannot read enforces nothing, and no later log can distinguish that from a value that passed.
-
-```
-WARN values of these types will not be checked beyond the facets on them primitives="xs:base64Binary"
-WARN some schema patterns cannot be checked and will not be enforced count=1 types="TagType"
-```
-
-The first names a primitive with no check behind it, such as `xs:base64Binary` or `xs:anyURI`. `xs:string` is never listed, because there is nothing to check about a string beyond the facets on it. The second names a type whose `xs:pattern` uses a corner of XSD's regex language that this build does not translate: character-class subtraction, or the `\i` and `\c` name shorthands.
-
-Neither warning fires on the published UCI catalog.
+This is the conversion schema only. Validation is a separate compile, by
+`oa-gateway-xsd-libxml`, of the same `[uci].schema` entry file against
+libxml2 — see [Validation](#validation) below.
 
 ## Supported XSD subset
 
@@ -62,4 +55,24 @@ It reports what compiled, how long it took, and the deepest message the catalog 
 
 ## Validation
 
-`validate` decides what a payload the schema does not permit costs. `warn` reports it and carries it; `reject` refuses it and tells the peer what was wrong; `off` skips the check. See [SECURITY.md](../SECURITY.md) for what validation covers and the two things it still does not.
+`validate` decides what a payload the schema does not permit costs. `warn` reports it and carries it; `reject` refuses it and tells the peer what was wrong; `off` skips the check. See [SECURITY.md](../SECURITY.md) for what validation covers and the one thing it still does not.
+
+Validation itself is a second, independent compile, by `oa-gateway-xsd-libxml`
+against libxml2 — not the `Schema` conversion reads and writes XML with. The
+two compiles want their input named differently, and this matters once a
+custom schema spans more than one file:
+
+- **Conversion** (`[uci].schema`) wants every document the schema spans,
+  listed explicitly, because it does not follow `xs:include`/`xs:import` (see
+  above).
+- **Validation** wants one entry point and resolves `xs:include`/
+  `xs:import` itself, relative to that file's path on disk. It compiles
+  `[uci].schema`'s *first* entry — so put the document that includes the
+  others first in the list. The published UCI and A-GRA catalogs both work
+  this way already: a single `...MessageDefinitions...xsd` that includes a
+  `...SecurityMarkings...xsd` from the same directory.
+
+The gateway warns at startup if `[uci].schema` lists more than two files,
+since a larger custom Message Set could have a document that the first
+entry does not transitively include — which would silently go unchecked on
+the validation side while still converting normally.

@@ -19,6 +19,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v7
+      - name: install libxml2 (oa-gateway-xsd-libxml)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libxml2-dev pkg-config libclang-dev
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.85.0

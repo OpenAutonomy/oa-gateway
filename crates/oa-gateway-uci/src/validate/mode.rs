@@ -54,3 +54,19 @@ impl std::str::FromStr for Mode {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn a_mode_reads_back_the_way_it_is_written() {
+        for mode in [Mode::Off, Mode::Warn, Mode::Reject] {
+            assert_eq!(Mode::from_str(&mode.to_string()), Ok(mode));
+        }
+        assert!(Mode::from_str("strict").is_err());
+        // Loaded-schema default: report, do not refuse.
+        assert_eq!(Mode::default(), Mode::Warn);
+    }
+}

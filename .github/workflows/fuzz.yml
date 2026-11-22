@@ -26,6 +26,8 @@ jobs:
         target: [stomp_codec, owp_codec, agra_wrapper, uci_instance, uci_xsd]
     steps:
       - uses: actions/checkout@v7
+      - name: install libxml2 (oa-gateway-xsd-libxml, now in owp's dependency tree)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libxml2-dev pkg-config libclang-dev
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: nightly

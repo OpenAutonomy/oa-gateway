@@ -17,7 +17,8 @@ use oa_gateway_agra::{
 use oa_gateway_core::{
     AdapterId, Delivery, Engine, Envelope, RouteKey, SubId, DEFAULT_CHANNEL_CAPACITY,
 };
-use oa_gateway_uci::validate::{summarize, Mode as ValidateMode};
+use oa_gateway_uci::validate::Mode as ValidateMode;
+use oa_gateway_xsd_libxml::summarize;
 use tokio::sync::mpsc;
 use tokio::time::interval;
 use tokio_util::sync::CancellationToken;
@@ -208,8 +209,10 @@ async fn publish_checked(adapter: &DdsAdapter, engine: &Arc<Engine>, env: Envelo
     let violations = violations_of(
         &env.payload,
         adapter.config.schema.as_deref(),
+        adapter.config.xsd_validator.as_deref(),
         adapter.config.validate,
-    );
+    )
+    .await;
     if !violations.is_empty() {
         let summary = summarize(&violations);
         if adapter.config.validate == ValidateMode::Reject {

@@ -1,13 +1,15 @@
 //! Compiles the UCI schema named in the config before any adapter listens.
 //!
-//! Conversion and validation both need a compiled schema. Doing that here,
-//! once, keeps a bad or incomplete catalog from being discovered against
-//! live traffic.
+//! Conversion needs this compiled `Schema`. Validation does not: it is a
+//! separate pass over the same converted XML, done by `oa-gateway-xsd-libxml`
+//! against the raw XSD text directly, not through this struct. Doing the
+//! conversion compile here, once, keeps a bad or incomplete catalog from
+//! being discovered against live traffic.
 
 use std::sync::Arc;
 
 use oa_gateway_uci::Schema;
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::config::Config;
 
@@ -18,10 +20,6 @@ use crate::config::Config;
 /// It is not fine for `owp.xml_baseline`, which exists only to convert, so
 /// that combination is refused here rather than failing per message once
 /// traffic is flowing.
-///
-/// After a successful compile, types this build cannot check are logged as
-/// warnings. A constraint that cannot be read enforces nothing, and nothing
-/// downstream can tell that from a value that passed.
 ///
 /// # Errors
 ///
@@ -58,29 +56,6 @@ pub(crate) fn load(config: &Config) -> Result<Option<Arc<Schema>>, String> {
         simple_types = schema.simple_types.len(),
         "uci schema compiled"
     );
-
-    // A constraint this build cannot read enforces nothing. Nothing downstream
-    // can tell that from a value that passed, so the one place to say so is here,
-    // where an operator is still reading startup output.
-    let primitives = schema.unchecked_primitives();
-    if !primitives.is_empty() {
-        warn!(
-            primitives = primitives.join(", "),
-            "values of these types will not be checked beyond the facets on them"
-        );
-    }
-    let unchecked = schema.unchecked_patterns();
-    if !unchecked.is_empty() {
-        warn!(
-            count = unchecked.len(),
-            types = unchecked
-                .iter()
-                .map(|(name, _)| *name)
-                .collect::<Vec<_>>()
-                .join(", "),
-            "some schema patterns cannot be checked and will not be enforced"
-        );
-    }
 
     Ok(Some(Arc::new(schema)))
 }

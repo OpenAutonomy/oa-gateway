@@ -73,8 +73,14 @@ already permit.
 
 ## In scope
 
-- Memory unsafety. There is no `unsafe` in the workspace; anything that
-  introduces it by way of a dependency or a new crate is worth reporting.
+- Memory unsafety. There is no `unsafe` in this workspace's own code — every
+  crate sets `unsafe_code = "forbid"`. The one deliberate, reviewed exception
+  is the FFI boundary a dependency crosses: `oa-gateway-xsd-libxml` links
+  libxml2 (via the `libxml` crate) to validate UCI/A-GRA payloads against
+  their real XSD, and that `unsafe` lives inside libxml2 and its Rust
+  bindings, not in any crate here. Anything that introduces `unsafe` by way
+  of a *different* dependency or a new crate, beyond that one accepted
+  boundary, is worth reporting.
 - A panic, hang, or unbounded loop reachable from a peer's frames or payloads.
   The STOMP decoder had exactly this bug — a hostile `content-length` panicked
   the process — and that class is treated as a defect, not a limitation.
@@ -87,8 +93,9 @@ already permit.
   literal text of a tag name could anchor extraction to the wrong place — and
   that class is treated as a defect, not a limitation. They are parsed with
   `roxmltree` now, the same library `oa-gateway-uci` uses.
-- `scripts/fetch-uci-schema.sh` accepting a schema document that does not match
-  the digests pinned in `scripts/uci-schema.sha256`.
+- `scripts/fetch-uci-schema.sh` or `scripts/fetch-agra-schema.sh` accepting a
+  schema document that does not match the digests pinned in
+  `scripts/uci-schema.sha256` or `scripts/agra-schema.sha256`, respectively.
 
 ## Known limitations, not vulnerabilities
 
@@ -106,21 +113,20 @@ correctness rather than resources:
 
 - **Conversion still accepts what the standard does not.** `maxOccurs` decides
   only whether a field becomes an array, an alternation converts as a set of
-  optional siblings, and an undeclared element is carried as a string. Those are
-  now *reported* — `uci.validate` checks each payload against the compiled schema
-  and defaults to `warn` where a schema is loaded — but warning is not refusing:
-  a non-conforming payload still crosses unless the mode is `reject`.
-- **A valid instance is not a fully checked instance.** Validation reads
-  declarations, occurrence ranges, alternations, abstract types, the facets a type
-  declares — enumerations, lengths, numeric bounds, patterns — and the lexical
-  space of the primitive underneath, including the calendar, so `2026-02-30` is
-  not a date and 99999999999999 is not an `xs:int`. Two things are still outside
-  it. Identity constraints (`xs:unique`, `xs:key`) are not read, and neither is
-  the co-occurrence logic a standard states in prose rather than in schema.
-  Patterns from the corners of XSD's regex language that this build cannot
-  translate are named in a startup warning rather than enforced, as are
-  primitives it does not recognize; against the published catalog both lists are
-  empty.
+  optional siblings, and an undeclared element is carried as a string.
+  Conversion itself does not check any of this against the schema; checking
+  happens as a separate step, after conversion, and `uci.validate` defaults to
+  `warn` where a schema is loaded — but warning is not refusing: a
+  non-conforming payload still crosses unless the mode is `reject`.
+- **A valid instance is not a fully checked instance.** Validation is backed by
+  libxml2 (`oa-gateway-xsd-libxml`), a general-purpose XSD 1.0 engine, not a
+  hand-rolled subset — so it is not approximating the facet and pattern
+  language, it implements it, and it also checks identity constraints
+  (`xs:unique`, `xs:key`), which an earlier, hand-rolled validator in this
+  codebase did not. One thing is still outside it, and always will be for any
+  schema-only check: the co-occurrence logic a standard states in prose
+  ("field B is required when field A is X") rather than in the schema itself
+  has nothing in the XSD for a validator to read, libxml2 included.
 
 ## Supported versions
 

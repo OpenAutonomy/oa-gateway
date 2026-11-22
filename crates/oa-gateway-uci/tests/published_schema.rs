@@ -73,134 +73,16 @@ fn round_trips_a_message_the_fixture_never_had(schema: &Schema) {
     );
 }
 
-/// Validation against the real schema, on the message the conversion test uses.
-///
-/// It converts cleanly in both directions and it is not a valid instance of the
-/// standard: four elements UCI requires are absent. That gap is the whole reason
-/// validation is separate from conversion, and it is worth pinning to a real
-/// message rather than a fixture built to fail.
-fn reports_what_conversion_accepts(schema: &Schema) {
-    let src = r#"{
-        "SubsystemStatus": {
-            "MessageHeader": {
-                "Timestamp": "2026-01-22T00:00:00Z",
-                "SchemaVersion": "002.5.0",
-                "Mode": "SIMULATION"
-            },
-            "MessageData": { "SubsystemState": "OPERATE" }
-        }
-    }"#;
-    let message = Message::from_json(src, schema).expect("it converts; that is the point");
-    let reported: Vec<String> = message
-        .violations(schema)
-        .iter()
-        .map(ToString::to_string)
-        .collect();
-
-    for expected in [
-        "SubsystemStatus: 'SecurityInformation' is required and absent",
-        "SubsystemStatus.MessageHeader: 'SystemID' is required and absent",
-        "SubsystemStatus.MessageData: 'SubsystemID' is required and absent",
-    ] {
-        assert!(
-            reported.iter().any(|v| v == expected),
-            "expected to be told {expected:?}, got {reported:?}"
-        );
-    }
-
-    // Real values satisfying real facets: SIMULATION is a MessageModeEnum member
-    // and 002.5.0 fits the schema-version constraints, so neither is reported.
-    // A facet check that fired on those would be worse than none.
-    assert!(
-        !reported.iter().any(|v| v.contains("SIMULATION")),
-        "a valid enumeration member must not be reported: {reported:?}"
-    );
-    assert!(
-        !reported.iter().any(|v| v.contains("Timestamp")),
-        "a well-formed xs:dateTime must not be reported: {reported:?}"
-    );
-
-    // The same message as XML has to report the same list: validation reads the
-    // schema, not the serialization it arrived in.
-    let xml = message.to_xml(schema).expect("emits XML");
-    let from_xml = Message::from_xml(&xml, schema).expect("reads its own XML");
-    let reported_from_xml: Vec<String> = from_xml
-        .violations(schema)
-        .iter()
-        .map(ToString::to_string)
-        .collect();
-    assert_eq!(reported, reported_from_xml);
-}
-
-/// Facet checks against the values the standard actually declares.
-///
-/// The UUID case is not hypothetical. UCI declares
-/// `UniversallyUniqueIdentifierType` as exactly 36 characters in the hyphenated
-/// RFC 4122 form, while A-GRA carries the same identifier as `hexBinary` — and
-/// the live traffic in `repos/open-ma` sends the unhyphenated 32-character form.
-/// A gateway between the two is exactly where that shows up, so it is worth a
-/// test that says so against the published schema rather than a fixture.
-fn reports_values_the_standard_does_not_allow(schema: &Schema) {
-    let with_mode = |mode: &str, uuid: &str| {
-        format!(
-            r#"{{"SubsystemStatus":{{
-                 "MessageHeader":{{
-                   "Timestamp":"2026-01-22T00:00:00Z",
-                   "SchemaVersion":"002.5.0",
-                   "Mode":"{mode}",
-                   "SystemID":{{"UUID":"{uuid}"}}
-                 }},
-                 "MessageData":{{"SubsystemState":"OPERATE"}}
-               }}}}"#
-        )
-    };
-    let hyphenated = "7ea053ea-dcc5-45ba-ac26-d5bc909417dc";
-    let unhyphenated = "7ea053eadcc545baac26d5bc909417dc";
-
-    let report = |json: &str| -> Vec<String> {
-        Message::from_json(json, schema)
-            .expect("all of these convert")
-            .violations(schema)
-            .iter()
-            .map(ToString::to_string)
-            .collect()
-    };
-
-    // A mode outside MessageModeEnum is named, and so are the values it could
-    // have been.
-    let reported = report(&with_mode("OFFLINE", hyphenated));
-    let mode = reported
-        .iter()
-        .find(|v| v.contains("MessageHeader.Mode"))
-        .unwrap_or_else(|| panic!("expected the mode to be reported: {reported:?}"));
-    assert!(mode.contains("'OFFLINE' is not one of"), "{mode}");
-    assert!(mode.contains("SIMULATION"), "{mode}");
-
-    // The A-GRA form of a UUID is not the UCI form, and both the length and the
-    // RFC 4122 pattern say so.
-    let reported = report(&with_mode("SIMULATION", unhyphenated));
-    let uuid: Vec<&String> = reported
-        .iter()
-        .filter(|v| v.contains("SystemID.UUID"))
-        .collect();
-    assert!(
-        uuid.iter()
-            .any(|v| v.contains("32 characters") && v.contains("exactly 36")),
-        "expected the length to be reported: {reported:?}"
-    );
-    assert!(
-        uuid.iter()
-            .any(|v| v.contains("does not match the pattern")),
-        "expected the pattern to be reported: {reported:?}"
-    );
-
-    // The UCI form passes, so the check is about the form and not about UUIDs.
-    let reported = report(&with_mode("SIMULATION", hyphenated));
-    assert!(
-        !reported.iter().any(|v| v.contains("SystemID.UUID")),
-        "a well-formed UUID must not be reported: {reported:?}"
-    );
-}
+// `reports_what_conversion_accepts` and `reports_values_the_standard_does_not_allow`
+// used to live here, pinning specific violation strings from the hand-rolled
+// validator against this same message (missing-required-elements, an
+// out-of-enumeration `Mode`, and A-GRA's unhyphenated-32-character UUID form
+// against UCI's hyphenated-36-character one). That validator is gone —
+// `oa-gateway-xsd-libxml` is the one schema check now, and it validates
+// against A-GRA specifically (`tests/agra_schema.rs`, both there and in this
+// crate). Porting this UCI-specific regression coverage to a libxml2-backed
+// equivalent is useful follow-up, not done here: this test is `#[ignore]`d
+// and not run in CI today, so it was not blocking anything.
 
 /// Every primitive the catalog resolves to is one this build understands.
 ///
@@ -381,8 +263,6 @@ fn the_published_schema_compiles_and_every_type_resolves() {
 
     round_trips_a_message_the_fixture_never_had(&schema);
 
-    reports_what_conversion_accepts(&schema);
-    reports_values_the_standard_does_not_allow(&schema);
     every_pattern_is_checkable(&schema);
     every_primitive_is_checked(&schema);
 

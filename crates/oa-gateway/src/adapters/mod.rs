@@ -13,6 +13,7 @@ use std::sync::Arc;
 
 use oa_gateway_core::Engine;
 use oa_gateway_uci::{Schema, ValidateMode};
+use oa_gateway_xsd_libxml::XsdLibxmlValidator;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
@@ -39,6 +40,7 @@ pub(crate) async fn start(
     config: &Config,
     engine: Arc<Engine>,
     schema: Option<Arc<Schema>>,
+    xsd_validator: Option<Arc<XsdLibxmlValidator>>,
     validate: ValidateMode,
     tls: HostTls,
     shutdown: CancellationToken,
@@ -69,6 +71,7 @@ pub(crate) async fn start(
             &config.owp,
             bind,
             schema.as_ref(),
+            xsd_validator.as_ref(),
             validate,
             tls.owp,
             Arc::clone(&engine),
@@ -90,6 +93,7 @@ pub(crate) async fn start(
         handles.push(dds::start(
             &config.dds,
             schema.as_ref(),
+            xsd_validator.as_ref(),
             validate,
             engine,
             shutdown,

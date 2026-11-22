@@ -17,6 +17,7 @@ use crate::adapters;
 use crate::config;
 use crate::schema;
 use crate::tls;
+use crate::xsd_libxml;
 
 /// Loads `config_path`, starts the enabled adapters, and blocks until Ctrl-C.
 ///
@@ -46,6 +47,7 @@ pub(crate) async fn serve(config_path: &Path) -> Result<(), String> {
     // input should fail cleanly rather than after adapters are already
     // accepting traffic.
     let schema = schema::load(&config)?;
+    let xsd_validator = xsd_libxml::load(&config)?;
     let validate = config.uci.validate_mode()?;
     if schema.is_some() {
         info!(mode = %validate, "schema validation");
@@ -58,6 +60,7 @@ pub(crate) async fn serve(config_path: &Path) -> Result<(), String> {
         &config,
         engine.clone(),
         schema,
+        xsd_validator,
         validate,
         host_tls,
         shutdown.clone(),
