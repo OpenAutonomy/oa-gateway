@@ -1116,6 +1116,8 @@ dependencies = [
  "oa-gateway-adapter",
  "oa-gateway-agra",
  "oa-gateway-core",
+ "oa-gateway-uci",
+ "oa-gateway-xsd-libxml",
  "serde",
  "serde_json",
  "thiserror 2.0.20",

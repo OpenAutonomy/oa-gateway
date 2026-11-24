@@ -1,8 +1,11 @@
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::Duration;
 
 use oa_gateway_adapter::tls::ClientTls;
 use oa_gateway_adapter::OnPanic;
+use oa_gateway_uci::{Schema, ValidateMode};
+use oa_gateway_xsd_libxml::XsdLibxmlValidator;
 
 use crate::codec::DEFAULT_MAX_FRAME_SIZE;
 use crate::Secret;
@@ -52,6 +55,19 @@ pub struct StompConfig {
     /// Wrap the broker connection in TLS. `None` dials plaintext, which
     /// is the default.
     pub tls: Option<ClientTls>,
+    /// Compiled UCI schema used to convert a JSON-origin payload to XML
+    /// before checking it. `None` skips the check: there is nothing to
+    /// convert or check against. STOMP traffic is XML already in the
+    /// common case (CAL peers on the bus speak it natively), so this
+    /// mostly feeds [`Self::xsd_validator`] directly.
+    pub schema: Option<Arc<Schema>>,
+    /// Compiled libxml2 validator checked against the same schema, both
+    /// on inbound MESSAGE frames and outbound SEND frames. `None` skips
+    /// the check the same way `schema: None` does.
+    pub xsd_validator: Option<Arc<XsdLibxmlValidator>>,
+    /// What to do about a frame that does not follow [`Self::schema`],
+    /// in either direction. Has no effect without one.
+    pub validate: ValidateMode,
 }
 
 impl Default for StompConfig {
@@ -75,6 +91,9 @@ impl Default for StompConfig {
             on_panic: OnPanic::Abort,
             max_frame_size: DEFAULT_MAX_FRAME_SIZE,
             tls: None,
+            schema: None,
+            xsd_validator: None,
+            validate: ValidateMode::default(),
         }
     }
 }

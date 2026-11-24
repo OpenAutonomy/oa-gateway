@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to A-GRA 6.0a). CI now runs `oa-gateway-uci`'s `tests/agra_schema.rs` against
   the real fetched schema instead of silently skipping it for lack of a
   sibling `open-ma` checkout.
+- `oa-gateway-stomp` now validates against the compiled XSD too, in both
+  directions: an inbound MESSAGE frame before it reaches the engine, and an
+  outbound SEND frame before it reaches the broker. It was the one adapter
+  that forwarded bytes unchecked; the outbound side matters in particular
+  because `uci.validate` defaults to `warn`, not `reject`, so a
+  non-conforming payload from any other adapter already crosses the
+  engine today and would otherwise reach the real ActiveMQ bus unchecked.
+  `StompConfig` gains `schema`/`xsd_validator`/`validate` fields, matching
+  `DdsConfig`'s shape; a rejected frame is dropped and logged, the same
+  way DDS already handles a rejected inbound sample, since STOMP has no
+  peer connection to answer the way OWP's WebSocket session can.
 - `oa-gateway-xsd-libxml`, a new crate that validates converted UCI/A-GRA XML
   against a real XSD using libxml2 (via the `libxml` crate), compiled once at
   startup on its own OS thread and called from `oa-gateway-owp` and
