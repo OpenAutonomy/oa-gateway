@@ -92,7 +92,7 @@ already permit.
   located by substring search, so a sibling field's free text containing the
   literal text of a tag name could anchor extraction to the wrong place — and
   that class is treated as a defect, not a limitation. They are parsed with
-  `roxmltree` now, the same library `oa-gateway-uci` uses.
+  `roxmltree` now, a real parser rather than substring search.
 - `scripts/fetch-uci-schema.sh` or `scripts/fetch-agra-schema.sh` accepting a
   schema document that does not match the digests pinned in
   `scripts/uci-schema.sha256` or `scripts/agra-schema.sha256`, respectively.
@@ -107,17 +107,16 @@ what is already written down.
 Every edge now caps what a peer can hand it: `stomp.max_frame_size`,
 `owp.max_frame_size`, and `dds.max_sample_size` are 16 MiB by default,
 `owp.max_connections` and `owp.max_subscriptions` bound how much state one
-caller can create, hex payloads are capped before they are decoded, and
-conversion refuses nesting deeper than 96 elements. What remains is about
+caller can create, and hex payloads are capped before they are decoded.
+Nothing separately caps how deeply nested a payload's own XML elements are —
+only its overall byte size is — so parsing or validating a pathologically
+deep but small document relies on `roxmltree`'s and libxml2's own limits,
+not anything this gateway enforces itself. What remains is about
 correctness rather than resources:
 
-- **Conversion still accepts what the standard does not.** `maxOccurs` decides
-  only whether a field becomes an array, an alternation converts as a set of
-  optional siblings, and an undeclared element is carried as a string.
-  Conversion itself does not check any of this against the schema; checking
-  happens as a separate step, after conversion, and `uci.validate` defaults to
-  `warn` where a schema is loaded — but warning is not refusing: a
-  non-conforming payload still crosses unless the mode is `reject`.
+- **`uci.validate` defaults to `warn`, not `reject`.** Warning is not
+  refusing: a non-conforming payload still crosses unless the mode is
+  `reject`.
 - **A valid instance is not a fully checked instance.** Validation is backed by
   libxml2 (`oa-gateway-xsd-libxml`), a general-purpose XSD 1.0 engine, not a
   hand-rolled subset — so it is not approximating the facet and pattern

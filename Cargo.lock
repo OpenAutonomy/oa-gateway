@@ -983,7 +983,6 @@ dependencies = [
  "oa-gateway-loopback",
  "oa-gateway-owp",
  "oa-gateway-stomp",
- "oa-gateway-uci",
  "oa-gateway-xsd-libxml",
  "rcgen",
  "serde",
@@ -1020,9 +1019,8 @@ dependencies = [
  "hex",
  "oa-gateway-core",
  "roxmltree",
- "serde",
- "serde_json",
  "thiserror 2.0.20",
+ "time",
  "uuid",
 ]
 
@@ -1036,7 +1034,7 @@ dependencies = [
  "oa-gateway-loopback",
  "oa-gateway-owp",
  "oa-gateway-testing",
- "oa-gateway-uci",
+ "roxmltree",
  "serde",
  "serde_json",
  "tokio",
@@ -1062,7 +1060,6 @@ dependencies = [
  "oa-gateway-adapter",
  "oa-gateway-agra",
  "oa-gateway-core",
- "oa-gateway-uci",
  "oa-gateway-xsd-libxml",
  "roxmltree",
  "rustdds",
@@ -1095,7 +1092,6 @@ dependencies = [
  "oa-gateway-adapter",
  "oa-gateway-agra",
  "oa-gateway-core",
- "oa-gateway-uci",
  "oa-gateway-xsd-libxml",
  "serde",
  "serde_json",
@@ -1116,7 +1112,6 @@ dependencies = [
  "oa-gateway-adapter",
  "oa-gateway-agra",
  "oa-gateway-core",
- "oa-gateway-uci",
  "oa-gateway-xsd-libxml",
  "serde",
  "serde_json",
@@ -1139,7 +1134,6 @@ dependencies = [
  "oa-gateway-loopback",
  "oa-gateway-owp",
  "oa-gateway-stomp",
- "oa-gateway-uci",
  "oa-gateway-xsd-libxml",
  "rcgen",
  "serde_json",
@@ -1149,22 +1143,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "oa-gateway-uci"
-version = "0.3.0"
-dependencies = [
- "oa-gateway-testing",
- "regex",
- "roxmltree",
- "serde_json",
- "thiserror 2.0.20",
-]
-
-[[package]]
 name = "oa-gateway-xsd-libxml"
 version = "0.3.0"
 dependencies = [
  "libxml",
- "oa-gateway-uci",
  "thiserror 2.0.20",
  "tokio",
 ]

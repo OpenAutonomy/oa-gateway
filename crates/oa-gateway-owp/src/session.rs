@@ -9,13 +9,11 @@ use std::sync::Arc;
 
 use futures_util::{SinkExt, StreamExt};
 use oa_gateway_adapter::tls::MaybeTlsStream;
-use oa_gateway_adapter::AdapterError;
+use oa_gateway_adapter::{AdapterError, ValidateMode};
 use oa_gateway_agra::{unwrap as unwrap_ma, wrapper_kind, xml_root_local_name};
 use oa_gateway_core::{
     AdapterId, ContentType, Delivery, Engine, Envelope, RouteKey, SubId, DEFAULT_CHANNEL_CAPACITY,
 };
-use oa_gateway_uci::validate::Mode as ValidateMode;
-use oa_gateway_uci::Schema;
 use oa_gateway_xsd_libxml::{summarize, XsdError, XsdLibxmlValidator};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
@@ -29,11 +27,10 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
 use crate::codec::{
-    parse_client, type_hint_from_json, ClientOp, Identifiers, InfoPayload, InitPayload, OwpError,
-    ServerOp,
+    parse_client, ClientOp, Identifiers, InfoPayload, InitPayload, OwpError, ServerOp,
 };
 use crate::config::OwpConfig;
-use crate::convert::{toward_xml, violations_of, xml_to_oms_json};
+use crate::convert::violations_of;
 
 /// Protocol version this server speaks. INIT must list it.
 const OWP_VERSION: &str = "1.0";
@@ -45,7 +42,6 @@ const OWP_VERSION: &str = "1.0";
 pub(crate) struct Session {
     pub(crate) adapter_id: AdapterId,
     pub(crate) config: OwpConfig,
-    pub(crate) schema: Option<Arc<Schema>>,
     pub(crate) xsd_validator: Option<Arc<XsdLibxmlValidator>>,
     pub(crate) conn_id: u64,
     pub(crate) ws: WebSocketStream<MaybeTlsStream<TcpStream>>,
@@ -406,8 +402,6 @@ async fn handle_sub(
     }
     let forward_tx = out_tx.clone();
     let local_sid = sid.clone();
-    let xml_baseline = session.config.xml_baseline;
-    let schema = session.schema.clone();
     let xsd_validator = session.xsd_validator.clone();
     let adapter_id = session.adapter_id.clone();
     let validate = session.config.validate;
@@ -415,7 +409,6 @@ async fn handle_sub(
         // The client is told about every dropped delivery, since each is
         // a message it will not receive; the log is told once, since the
         // cause is the same for every payload on this route.
-        let mut logged = false;
         let mut logged_invalid = false;
         while let Some(delivery) = rx.recv().await {
             let Ok(raw) = String::from_utf8(delivery.envelope.payload.to_vec()) else {
@@ -423,15 +416,10 @@ async fn handle_sub(
                 continue;
             };
 
-            // What arrived off the bus, before any conversion of ours,
-            // so a violation is attributed to the producer.
-            let violations = violations_of(
-                raw.as_bytes(),
-                schema.as_deref(),
-                xsd_validator.as_deref(),
-                validate,
-            )
-            .await;
+            // What arrived off the bus, so a violation is attributed to
+            // the producer.
+            let violations =
+                violations_of(raw.as_bytes(), xsd_validator.as_deref(), validate).await;
             match handle_violations(
                 &violations,
                 validate,
@@ -446,48 +434,10 @@ async fn handle_sub(
                 Verdict::Closed => break,
                 Verdict::Forward => {}
             }
-            // There used to be a second check here, on the JSON
-            // xml_to_oms_json just produced, to catch a bug in conversion
-            // itself. libxml2 validates XML instances and has no opinion
-            // about JSON, and re-converting that JSON back to XML just to
-            // check it again would only repeat the producer check above —
-            // so that recheck is gone along with the validator it used.
-            let payload = if xml_baseline {
-                match xml_to_oms_json(&raw, schema.as_deref()) {
-                    Ok(json) => json,
-                    Err(err) => {
-                        if !logged {
-                            logged = true;
-                            warn!(
-                                adapter = %adapter_id,
-                                sid = %local_sid,
-                                error = %err,
-                                "dropping a delivery that will not convert to JSON; \
-                                 later failures on this subscription are not logged"
-                            );
-                        }
-                        // Forwarding the XML instead would hand the client
-                        // a format it did not subscribe for, and it has no
-                        // way to tell that from an ordinary payload.
-                        let details =
-                            format!("delivery on {local_sid} could not be converted: {err}");
-                        if forward_tx
-                            .send(err_op(OwpError::InvalidMessage, Some(&details)))
-                            .await
-                            .is_err()
-                        {
-                            break;
-                        }
-                        continue;
-                    }
-                }
-            } else {
-                raw
-            };
             if forward_tx
                 .send(ServerOp::Msg {
                     sid: local_sid.clone(),
-                    payload,
+                    payload: raw,
                 })
                 .await
                 .is_err()
@@ -567,44 +517,26 @@ async fn publish_owp(
         outgoing.push(peeled.wrapper);
         outgoing.push(peeled.inner);
     } else {
-        let hint = if oa_gateway_uci::looks_like_xml(payload.as_bytes()) {
-            // The name is in the document, so no schema is needed to read it,
-            // and this is how the STOMP edge names an XML payload too. The topic
-            // used to stand in when the schema could not parse the payload,
-            // which routed the message under a key no subscriber of that type
-            // would match and reported +OK regardless.
-            xml_root_local_name(&payload)
-                .ok_or_else(|| "XML payload has no element to take a type from".to_string())?
-        } else {
-            type_hint_from_json(&payload).map_err(|e| e.to_string())?
-        };
-        let ct = if oa_gateway_uci::looks_like_xml(payload.as_bytes()) {
-            ContentType::xml()
-        } else {
-            ContentType::json()
-        };
+        // The name is in the document, so no schema is needed to read it,
+        // and this is how the STOMP edge names an XML payload too. The topic
+        // used to stand in when the payload could not be parsed, which
+        // routed the message under a key no subscriber of that type would
+        // match and reported +OK regardless.
+        let hint = xml_root_local_name(&payload)
+            .ok_or_else(|| "payload has no element to take a type from".to_string())?;
         outgoing.push(
-            Envelope::new(RouteKey::typed(topic, hint), payload.into_bytes()).with_content_type(ct),
+            Envelope::new(RouteKey::typed(topic, hint), payload.into_bytes())
+                .with_content_type(ContentType::xml()),
         );
     }
 
-    // Convert and check everything before publishing any of it: an A-GRA wrapper
-    // and the message inside it are one publish as far as the client is
-    // concerned, and half of one is worse than neither.
+    // Check everything before publishing any of it: an A-GRA wrapper and the
+    // message inside it are one publish as far as the client is concerned,
+    // and half of one is worse than neither.
     let mut ready = Vec::with_capacity(outgoing.len());
     for env in outgoing {
-        let env = if session.config.xml_baseline {
-            let schema = session.schema.as_deref().ok_or_else(|| {
-                "owp.xml_baseline is enabled but no UCI schema is loaded".to_string()
-            })?;
-            toward_xml(env, schema)?
-        } else {
-            env
-        };
-
         let violations = violations_of(
             &env.payload,
-            session.schema.as_deref(),
             session.xsd_validator.as_deref(),
             session.config.validate,
         )

@@ -13,8 +13,7 @@ This page defines OA-Gateway's own terms, then the domain terms it borrows. Expa
 | **Adapter** | A protocol plugin that owns its own I/O loop. It talks only to the engine, never to another adapter. |
 | **Engine** | The in-process router. It is protocol-agnostic and does not parse payloads. |
 | **wildcard subscription** | A subscription with `type_hint: None`, matching every type on its topic. |
-| **conversion** | Mapping a payload between OMS JSON and UCI XML. Deliberately forgiving: an element the schema does not declare is carried rather than refused, and a value that does not fit its declared type is carried as written rather than coerced into fitting. |
-| **validation** | Checking a payload against what the compiled schema states — declarations, occurrence ranges, alternations, abstract types, facets, and the primitive a value has to be. Separate from conversion, because a message can convert cleanly in both directions and still not be a valid instance of the standard. Controlled by `uci.validate`. |
+| **validation** | Checking a payload against what the compiled schema states — declarations, occurrence ranges, alternations, abstract types, facets, and the primitive a value has to be. Controlled by `uci.validate`. |
 | **facet** | A constraint a simple type puts on a value: the enumeration it has to belong to, the length it has to be, the numeric bounds it sits within, the pattern it has to match. The published UCI catalog declares 7,766 enumerated values and 143 patterns across 945 types. |
 | **violation** | One way a payload departs from the schema, with a dotted path to the element. A message is reported in full rather than at the first fault. |
 
@@ -23,14 +22,14 @@ This page defines OA-Gateway's own terms, then the domain terms it borrows. Expa
 | Term | Meaning |
 |---|---|
 | **OMS** | Open Mission Systems. The standards family this gateway interoperates with. |
-| **UCI** | Universal Command and Control Interface. Supplies the message schema — message types such as `PositionReport` and `SubsystemStatus`. `oa-gateway-uci` compiles the published XSD, so conversion covers whatever catalog the operator loads through `uci.schema`; [`scripts/fetch-uci-schema.sh`](../scripts/fetch-uci-schema.sh) fetches the published UCI 2.5 documents. |
+| **UCI** | Universal Command and Control Interface. Supplies the message schema — message types such as `PositionReport` and `SubsystemStatus`. `oa-gateway-xsd-libxml` compiles the published XSD via libxml2, so validation covers whatever catalog the operator loads through `uci.schema`; [`scripts/fetch-uci-schema.sh`](../scripts/fetch-uci-schema.sh) fetches the published UCI 2.5 documents. |
 | **CAL** | Critical Abstraction Layer. The OMS component boundary a participant implements. Java CALs speak OpenWire; `uci-cal-jms` and `sk-cal` are CAL implementations this gateway is meant to sit alongside. |
 | **OWP** | OMS WebSocket Protocol. The text-frame protocol `oa-gateway-owp` serves, with `INIT`/`SUB`/`PUB`/`MSG`/`OK`/`ERR` operations. Its grammar comes from OMSC-SPC-013, the language-agnostic CAL specification. |
 | **MT** | Message type. Used in this repo for the UCI type name carried in `type_hint`, as in "the wrapper MT and the inner MT". |
 | **A-GRA** | The standard defining the `MA_RxDataPayload` and `MA_TxDataPayloadCommand` wrappers that `oa-gateway-agra` peels, published as `A-GRA_MessageDefinitions_v5_0_a.xsd` alongside the ASK 5.0a interface volumes. |
 | **MA-C2, MA-MA, MA-VI, MA-MS** | A-GRA interface designators. They line up with the ASK 5.0a interface volumes: Command and Control, Peer, Vehicle, and Mission Systems respectively. The first two are external interfaces and use the Rx/Tx hexBinary wrappers; the platform-facing two use native MTs and skip the wrapper. |
 | **hexBinary** | `xs:hexBinary`, the XSD type A-GRA uses to carry a complete inner message as hex text inside a wrapper's `EncodedPayload`. |
-| **PolySample** | A UCI construct whose JSON form carries a `$type` discriminator; `oa-gateway-uci` handles it explicitly. |
+| **PolySample** | A UCI construct where an element's declared type is abstract and the instance names the concrete subtype with an `xsi:type` attribute (an XSD-native discriminator, not anything this gateway adds). |
 | **ASB** | In this repo, the ActiveMQ Classic broker acting as the shared bus between protocols — the setup `config/asb.toml` and `compose/activemq.yml` bring up. The "ASB path" is the naming rule where UCI message type, engine topic, STOMP destination, and JMS topic are all the same name. |
 
 ## Messaging protocols

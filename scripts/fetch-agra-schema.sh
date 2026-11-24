@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Fetch the A-GRA 5.0a schema documents that oa-gateway-uci's agra_schema.rs
-# test converts and validates against.
+# Fetch the A-GRA 5.0a schema documents that oa-gateway-xsd-libxml's
+# agra_schema.rs test validates against.
 #
 # The standard is public — Distribution Statement A, approved for public release —
 # but it is not redistributed in this repository. Files land in schema/a-gra/, which

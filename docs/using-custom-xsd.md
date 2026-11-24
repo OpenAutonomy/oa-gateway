@@ -1,6 +1,10 @@
 # Using a custom XSD
 
-Nothing about a message set is compiled into the binary. The gateway reads XSD at startup and builds its schema from the documents you name. A program-specific Message Set, a later UCI revision, or a trimmed subset all work the same way. `scripts/fetch-uci-schema.sh` is only a convenience for the published UCI 2.5 documents.
+Nothing about a message set is compiled into the binary. The gateway compiles
+the XSD you name at startup and validates UCI XML against it. A
+program-specific Message Set, a later UCI revision, or a trimmed subset all
+work the same way. `scripts/fetch-uci-schema.sh` is only a convenience for
+the published UCI 2.5 documents.
 
 `[uci]` keys and defaults are also listed in [configuration.md](configuration.md).
 
@@ -15,64 +19,55 @@ schema = [
 validate = "warn"
 ```
 
-Pass every document the schema spans. `xs:include` and `xs:import` are not followed, because following them would mean reading file paths out of the schema text. A document you leave out appears as unresolved type names, not as a type that quietly goes missing later.
+A schema is optional. Without one, payloads cross the engine unchecked.
 
-A schema is optional. Without one, payloads cross the engine untouched. `owp.xml_baseline` requires a schema, because converting between OMS JSON and XML is what the schema is for.
+Only the *first* entry is actually read: libxml2 resolves `xs:include`/
+`xs:import` itself, relative to that file's own path on disk, so the first
+entry has to be the document that spans the rest of the catalog
+(`...MessageDefinitions...xsd` before `...SecurityMarkings...xsd`, say). The
+published UCI and A-GRA catalogs both work this way already. List any
+further files anyway if you like — the gateway warns at startup when
+`[uci].schema` names more than two, since a larger custom Message Set could
+have a document the first entry does not transitively include, which would
+then go unchecked silently.
 
 ## Startup output
 
-A schema that will not compile stops the gateway and names the reason. Otherwise the log reports what was read:
+A schema that will not compile stops the gateway and names the reason.
+Otherwise the log reports that validation is on and in which mode:
 
 ```
-INFO oa_gateway: uci schema compiled files=1 messages=1 complex_types=1 simple_types=1
+INFO oa_gateway::serve: schema validation mode=warn
 ```
-
-This is the conversion schema only. Validation is a separate compile, by
-`oa-gateway-xsd-libxml`, of the same `[uci].schema` entry file against
-libxml2 — see [Validation](#validation) below.
-
-## Supported XSD subset
-
-The compiler follows UCI's Schema Style & Design Specification rather than XSD at large. It refuses what falls outside that subset instead of guessing. A custom schema needs to keep to:
-
-- **Named top-level types.** An element with an anonymous inline type is refused. Give the type a name and refer to it.
-- **Extension as the only complex derivation.** `xs:restriction` on complex content is refused, as is `xs:redefine`.
-- **Flat compositors.** An `xs:sequence` or `xs:choice` that holds another compositor, or that carries its own `minOccurs`/`maxOccurs`, has no representation in the flat element model.
-- **Restriction for simple types**, with the facets the validator understands: `enumeration`, `pattern`, `length`, `minLength`, `maxLength`, and the four `min`/`max` bounds. `whiteSpace` is accepted and ignored. Any other facet is refused, because a constraint that is silently dropped cannot be told apart from one that was never there.
-
-The constructs outside that list do not appear in UCI, so none of them is a limitation you will meet with the published schema. Attributes and `xs:any` are refused by name. `substitutionGroup=` is the one construct read past rather than refused: the element still compiles, but the substitution relationship is not known, so nothing enforces it. If a message set needs any of those constructs, the compiler is `crates/oa-gateway-uci/src/xsd/`, and the error names the construct it stopped on.
-
-## Checking a schema before deploy
-
-The suite has a test that compiles a real schema and walks every type reference. Point it at a custom catalog:
-
-```bash
-OAG_UCI_XSD=/path/YourDefs.xsd:/path/YourMarkings.xsd \
-  cargo test -p oa-gateway-uci -- --ignored --nocapture
-```
-
-It reports what compiled, how long it took, and the deepest message the catalog can express. That depth has to stay under the conversion limit, or nesting the schema permits will not convert.
 
 ## Validation
 
-`validate` decides what a payload the schema does not permit costs. `warn` reports it and carries it; `reject` refuses it and tells the peer what was wrong; `off` skips the check. See [SECURITY.md](../SECURITY.md) for what validation covers and the one thing it still does not.
+`validate` decides what a payload the schema does not permit costs. `warn`
+reports it and carries it; `reject` refuses it and tells the peer what was
+wrong; `off` skips the check. See [SECURITY.md](../SECURITY.md) for what
+validation covers and the one thing it still does not.
 
-Validation itself is a second, independent compile, by `oa-gateway-xsd-libxml`
-against libxml2 — not the `Schema` conversion reads and writes XML with. The
-two compiles want their input named differently, and this matters once a
-custom schema spans more than one file:
+Validation is done entirely by `oa-gateway-xsd-libxml` against libxml2 — the
+same schema compile the gateway runs at startup, reused for every payload on
+a dedicated thread (`SchemaValidationContext` is `!Send`). There is no
+separate, hand-rolled schema model: whatever libxml2 accepts as valid XSD,
+the gateway accepts.
 
-- **Conversion** (`[uci].schema`) wants every document the schema spans,
-  listed explicitly, because it does not follow `xs:include`/`xs:import` (see
-  above).
-- **Validation** wants one entry point and resolves `xs:include`/
-  `xs:import` itself, relative to that file's path on disk. It compiles
-  `[uci].schema`'s *first* entry — so put the document that includes the
-  others first in the list. The published UCI and A-GRA catalogs both work
-  this way already: a single `...MessageDefinitions...xsd` that includes a
-  `...SecurityMarkings...xsd` from the same directory.
+## Checking a schema before deploy
 
-The gateway warns at startup if `[uci].schema` lists more than two files,
-since a larger custom Message Set could have a document that the first
-entry does not transitively include — which would silently go unchecked on
-the validation side while still converting normally.
+The simplest check is to run the gateway itself against your schema and a
+sample payload — a schema that does not compile fails startup immediately,
+named by file. To check compilation alone, without starting any adapter,
+`oa_gateway_xsd_libxml::XsdLibxmlValidator::compile` is the same call the
+host makes:
+
+```rust
+let validator = oa_gateway_xsd_libxml::XsdLibxmlValidator::compile(
+    "/path/to/YourMessageDefinitions.xsd".as_ref(),
+)?;
+```
+
+`crates/oa-gateway-xsd-libxml/tests/agra_schema.rs` is a worked example:
+it compiles the real A-GRA 5.0a schema and validates XML fixtures against
+it, including a path (`AGRA_SCHEMA_DIR`) for pointing the same test at a
+different copy of the schema.

@@ -77,6 +77,9 @@ pub use supervise::{after_join, AfterSession, OnPanic};
 
 pub mod tls;
 
+mod validate;
+pub use validate::Mode as ValidateMode;
+
 /// Fatal failure of one adapter. The host logs it and leaves the others running.
 ///
 /// This is not a per-message error. A bad payload is handled inside `run`

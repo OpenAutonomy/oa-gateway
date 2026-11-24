@@ -14,7 +14,7 @@ OWP (OMS WebSocket Protocol) is the one adapter a client talks to directly rathe
 cargo run -p oa-gateway-bench --release -- ping --url ws://127.0.0.1:9000/
 ```
 
-That does `INIT`, `SUB Ping demo`, `PUB demo {"Ping":{"n":1}}`, waits for the `MSG` it should get back, and exits `0`. Reading [`crates/oa-gateway-bench/src/scenarios/ping.rs`](../crates/oa-gateway-bench/src/scenarios/ping.rs) is the fastest way to see a minimal client in Rust; [`crates/oa-gateway-testing/src/owp.rs`](../crates/oa-gateway-testing/src/owp.rs) has a second one built on plain `tokio-tungstenite`.
+That does `INIT`, `SUB Ping demo`, `PUB demo <Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><n>1</n></Ping>`, waits for the `MSG` it should get back, and exits `0`. Reading [`crates/oa-gateway-bench/src/scenarios/ping.rs`](../crates/oa-gateway-bench/src/scenarios/ping.rs) is the fastest way to see a minimal client in Rust; [`crates/oa-gateway-testing/src/owp.rs`](../crates/oa-gateway-testing/src/owp.rs) has a second one built on plain `tokio-tungstenite`.
 
 ## Configure the adapter
 
@@ -28,7 +28,6 @@ server_id = "oa-gateway-0"
 system_label = "OA-Gateway Prototype"
 schema = "002.5.0"
 unwrap_ma_payloads = true
-xml_baseline = false
 ```
 
 | Key | What it does |
@@ -37,13 +36,12 @@ xml_baseline = false
 | `server_id`, `system_label` | Sent back on `INFO`; identify this gateway to the client. |
 | `schema` | The protocol version string `INIT.schema` must match exactly. Not a UCI XSD path — that is `[uci].schema`. Empty skips the check. |
 | `unwrap_ma_payloads` | An A-GRA `MA_RxDataPayload`/`MA_TxDataPayloadCommand` wrapper on `PUB` is peeled; the engine sees the wrapper and the inner UCI message as two envelopes. |
-| `xml_baseline` | Convert OMS JSON ↔ UCI XML at the socket, so a client sends and receives JSON while the engine and any bridged broker see XML. Requires `[uci].schema`. |
 | `allowed_origins` | Opt-in browser `Origin` allowlist. See [Limits](#limits). |
 | `init_timeout_secs`, `idle_timeout_secs` | See [Timeouts](#timeouts). |
 
 ## The protocol
 
-A frame is one line of text: a keyword, then space- or tab-separated fields. `INIT`, `PUB`, and `INFO` keep a JSON body as the rest of the line rather than tokenizing it. Binary WebSocket frames are refused and end the session.
+A frame is one line of text: a keyword, then space- or tab-separated fields. `INIT` and `INFO` keep a JSON body as the rest of the line rather than tokenizing it — that is the OWP control protocol's own framing, unrelated to UCI. `PUB`'s payload is handled the same way (the whole rest of the line, not tokenized), but it is UCI XML, not JSON. Binary WebSocket frames are refused and end the session.
 
 ### Connect and INIT
 
@@ -76,7 +74,7 @@ SUB <sid> <message_name> <topic> [group]
 UNSUB <sid>
 ```
 
-`topic` and `sid` are OWP identifiers; `sid` is chosen by the client and must be unique per connection — reusing one before `UNSUB` is `-ERR Illegal-Argument`. `payload` on `PUB` is the rest of the line: OMS JSON or, with `xml_baseline`, UCI XML — whichever it looks like decides how it is handled, and the root key (or XML root element) becomes the route's type. `SUB` always names a `message_name`; there is no wildcard subscribe over OWP the way an engine subscription can be untyped. `group` is accepted and currently ignored.
+`topic` and `sid` are OWP identifiers; `sid` is chosen by the client and must be unique per connection — reusing one before `UNSUB` is `-ERR Illegal-Argument`. `payload` on `PUB` is the rest of the line: UCI XML, and its root element becomes the route's type. `SUB` always names a `message_name`; there is no wildcard subscribe over OWP the way an engine subscription can be untyped. `group` is accepted and currently ignored.
 
 A subscription receives:
 
@@ -104,7 +102,7 @@ WARN nothing is subscribed to this route, so the publish went nowhere route=Foo 
 | `Illegal-State` | `INIT` was not the first frame, `INIT` was sent twice, or the per-connection subscription limit was reached. |
 | `Illegal-Argument` | A frame parsed but failed a semantic check — a bad identifier, a duplicate `sid`, an unknown `sid` on `UNSUB`. |
 | `Illegal-Operation` | A binary WebSocket frame was sent. The session ends. |
-| `Invalid-Message` | `PUB` failed to convert, unwrap, or (in `reject` mode) validate; or a delivery to this subscription failed to convert, or itself failed `reject`-mode validation, and could not be forwarded. |
+| `Invalid-Message` | `PUB` failed to unwrap or (in `reject` mode) validate; or a delivery to this subscription itself failed `reject`-mode validation and could not be forwarded. |
 | `Internal-Error` | The engine subscribe call itself failed. |
 
 A frame the codec cannot parse at all (unknown keyword, missing field) is `Illegal-Argument` with the parse failure as `details`, and does not close the session — only a rejected `INIT`, a protocol violation after `INIT`, or a binary frame does that.

@@ -10,7 +10,6 @@ use oa_gateway_loopback::Loopback;
 use oa_gateway_stomp::{HDR_ORIGIN, HDR_TYPE_HINT};
 use oa_gateway_testing::stomp::{start_mini_broker, start_stomp_adapter, StompPeer};
 use oa_gateway_testing::util::recv_envelope;
-use serde_json::json;
 use tokio::time::timeout;
 
 #[tokio::test]
@@ -35,16 +34,19 @@ async fn stomp_send_reaches_loopback() {
     let mut peer = StompPeer::connect(broker.addr).await;
     peer.send(
         "/topic/demo",
-        br#"{"Ping":{"n":7}}"#,
-        &[("content-type", "application/json")],
+        br#"<Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><n>7</n></Ping>"#,
+        &[],
     )
     .await;
 
     let got = recv_envelope(&mut rx).await;
     assert_eq!(got.route.topic, "demo");
     assert_eq!(got.route.type_hint.as_deref(), Some("Ping"));
-    assert_eq!(got.content_type, ContentType::json());
-    assert_eq!(got.payload.as_ref(), br#"{"Ping":{"n":7}}"#);
+    assert_eq!(got.content_type, ContentType::xml());
+    assert_eq!(
+        got.payload.as_ref(),
+        br#"<Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><n>7</n></Ping>"#
+    );
     assert_eq!(
         got.headers.get(HDR_ORIGIN).map(String::as_str),
         Some("stomp-test")
@@ -77,9 +79,9 @@ async fn loopback_pub_reaches_stomp_peer() {
         .publish(
             Envelope::new(
                 RouteKey::typed("demo", "Ping"),
-                Bytes::from_static(br#"{"Ping":{"from":"loop"}}"#),
+                Bytes::from_static(br#"<Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><from>loop</from></Ping>"#),
             )
-            .with_content_type(ContentType::json()),
+            .with_content_type(ContentType::xml()),
         )
         .await;
 
@@ -87,7 +89,10 @@ async fn loopback_pub_reaches_stomp_peer() {
     assert_eq!(msg.command, "MESSAGE");
     assert_eq!(msg.header("destination"), Some("/topic/demo"));
     assert_eq!(msg.header(HDR_TYPE_HINT), Some("Ping"));
-    assert_eq!(msg.body, br#"{"Ping":{"from":"loop"}}"#);
+    assert_eq!(
+        msg.body,
+        br#"<Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><from>loop</from></Ping>"#
+    );
 
     shutdown.cancel();
     broker.shutdown();
@@ -152,7 +157,7 @@ async fn xml_root_becomes_type_hint() {
     let mut peer = StompPeer::connect(broker.addr).await;
     peer.send(
         "/topic/PositionReport",
-        b"<?xml version=\"1.0\"?><PositionReport><n>1</n></PositionReport>",
+        br#"<?xml version="1.0"?><PositionReport xmlns="https://www.vdl.afrl.af.mil/programs/oam"><n>1</n></PositionReport>"#,
         &[("content-type", "application/xml")],
     )
     .await;
@@ -188,20 +193,19 @@ async fn rx_wrapper_fans_out_wrapper_and_inner() {
     )
     .await;
 
-    let inner = br#"{"PositionReport":{"MessageData":{"n":1}}}"#;
+    let inner = br#"<PositionReport xmlns="https://www.vdl.afrl.af.mil/programs/oam"><MessageData><n>1</n></MessageData></PositionReport>"#;
     let wrapped = wrap(WrapRequest {
         topic: "offboard".into(),
         kind: WrapperKind::Rx,
         inner: Bytes::from_static(inner),
         message_type_enum: "POSITION_REPORT".into(),
         shell: WrapShell {
-            security_information: json!({"Classification": "U"}),
-            message_header: json!({
-                "SystemID": {"UUID": "00000000-0000-4000-8000-000000000001"},
-                "Timestamp": "2026-08-09T21:00:00Z",
-                "SchemaVersion": "002.5.0",
-                "Mode": "SIMULATION"
-            }),
+            security_information: "<Classification>U</Classification>".into(),
+            message_header:
+                "<SystemID><UUID>00000000-0000-4000-8000-000000000001</UUID></SystemID>\
+                <Timestamp>2026-08-09T21:00:00Z</Timestamp>\
+                <SchemaVersion>002.5.0</SchemaVersion><Mode>SIMULATION</Mode>"
+                    .into(),
         },
         destination_routing: "TOPIC_AND_SPECIFIC_DESTINATION".into(),
         originator_uuid: Some("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".into()),
@@ -209,8 +213,7 @@ async fn rx_wrapper_fans_out_wrapper_and_inner() {
         timestamp: "2026-08-09T21:00:00Z".into(),
         priority: 4,
         precedence: 1,
-    })
-    .unwrap();
+    });
 
     let mut peer = StompPeer::connect(broker.addr).await;
     peer.send("/topic/offboard", &wrapped.payload, &[]).await;

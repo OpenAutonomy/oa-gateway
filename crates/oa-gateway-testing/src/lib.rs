@@ -6,9 +6,8 @@
 //! stay in each crate; anything that crosses the engine lives here.
 //!
 //! `harness` is on by default and pulls OWP, STOMP, DDS, and loopback.
-//! [`fixtures`] is always available. `oa-gateway-uci` depends with
-//! `default-features = false` so it can compile against the sample
-//! payloads without taking the adapters.
+//! [`fixtures`] is always available, even with `default-features = false`,
+//! for a caller that only wants the sample payloads without the adapters.
 
 pub mod fixtures;
 

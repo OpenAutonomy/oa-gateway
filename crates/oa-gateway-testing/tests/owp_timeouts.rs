@@ -106,7 +106,11 @@ async fn an_active_session_outlasts_the_idle_timeout() {
     // Well under idle_timeout each time, for several times its length in total.
     for _ in 0..8 {
         tokio::time::sleep(Duration::from_millis(120)).await;
-        send_text(&mut ws, r#"PUB demo {"Ping":{"n":1}}"#).await;
+        send_text(
+            &mut ws,
+            r#"PUB demo <Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><n>1</n></Ping>"#,
+        )
+        .await;
         match parse_server(&recv_text(&mut ws).await).unwrap() {
             ServerOp::Ok => {}
             other => panic!("an active session should still answer, got {other}"),

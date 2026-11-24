@@ -18,7 +18,6 @@ server_id = "oa-gateway-0"
 system_label = "OA-Gateway Prototype"
 schema = "002.5.0"
 unwrap_ma_payloads = true
-xml_baseline = false
 
 [stomp]
 enabled = false

@@ -1,9 +1,9 @@
 //! OWP 1.0 adapter: WebSocket text frames in, [`oa_gateway_core::Envelope`] out.
 //!
 //! This crate is a server. Clients speak OWP over a text WebSocket; the
-//! codec follows OMSC-SPC-013 and does not compile UCI. Conversion and
-//! validation happen in the session when a schema and `xml_baseline`
-//! are configured. The engine sees only envelopes.
+//! codec follows OMSC-SPC-013 and does not compile UCI. PUB/MSG payloads
+//! are UCI XML, checked against a compiled libxml2 validator when one is
+//! configured. The engine sees only envelopes.
 //!
 //! [`OwpAdapter::run`] binds [`OwpConfig::bind`] and accepts until
 //! cancelled. A failed bind is fatal for this adapter only.
@@ -24,8 +24,8 @@ use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
 pub use codec::{
-    is_identifier, parse_client, parse_server, type_hint_from_json, ClientOp, InfoPayload,
-    InitPayload, OwpError, ServerOp,
+    is_identifier, parse_client, parse_server, ClientOp, InfoPayload, InitPayload, OwpError,
+    ServerOp,
 };
 pub use config::{
     OwpConfig, DEFAULT_IDLE_TIMEOUT_SECS, DEFAULT_INIT_TIMEOUT_SECS, DEFAULT_MAX_CONNECTIONS,

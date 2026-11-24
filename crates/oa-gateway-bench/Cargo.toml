@@ -18,7 +18,7 @@ oa-gateway-core.workspace = true
 oa-gateway-loopback.workspace = true
 oa-gateway-owp.workspace = true
 oa-gateway-testing = { workspace = true, features = ["harness"] }
-oa-gateway-uci.workspace = true
+roxmltree.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 tokio.workspace = true

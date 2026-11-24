@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 publish.workspace = true
 rust-version.workspace = true
-description = "XSD instance validation via libxml2, independent of oa-gateway-uci's conversion"
+description = "XSD instance validation via libxml2"
 
 [dependencies]
 # Pinned, not latest (0.3.24): 0.3.15+ declare rust-version = "1.88", this
@@ -16,7 +16,6 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["sync", "rt"] }
 
 [dev-dependencies]
-oa-gateway-uci.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 
 [lints]

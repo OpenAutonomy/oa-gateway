@@ -19,7 +19,6 @@ harness = [
     "dep:oa-gateway-owp",
     "dep:oa-gateway-stomp",
     "dep:oa-gateway-dds",
-    "dep:oa-gateway-uci",
     "dep:oa-gateway-xsd-libxml",
     "dep:rcgen",
     "dep:tokio",
@@ -37,7 +36,6 @@ oa-gateway-loopback = { workspace = true, optional = true }
 oa-gateway-owp = { workspace = true, optional = true }
 oa-gateway-stomp = { workspace = true, optional = true }
 oa-gateway-dds = { workspace = true, optional = true }
-oa-gateway-uci = { workspace = true, optional = true }
 oa-gateway-xsd-libxml = { workspace = true, optional = true }
 rcgen = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
@@ -53,7 +51,6 @@ oa-gateway-loopback.workspace = true
 oa-gateway-owp.workspace = true
 oa-gateway-stomp.workspace = true
 oa-gateway-dds.workspace = true
-oa-gateway-uci.workspace = true
 oa-gateway-xsd-libxml.workspace = true
 rcgen.workspace = true
 serde_json.workspace = true

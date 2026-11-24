@@ -1,23 +1,25 @@
 //! STOMP checks both directions against the libxml2-backed validator:
 //! inbound MESSAGE frames from the broker, and outbound SEND frames to it.
 //!
-//! `{"Ping":{"nope":1}}` converts without complaint — an element the type
-//! does not declare is carried as a string — which is exactly the case
-//! validation exists to notice. Mirrors `dds_bridge.rs`'s one validation
-//! test in scope: `reject` proving the check actually blocks something and
-//! the adapter keeps working afterward, not every mode combination.
+//! `<Ping><nope>1</nope></Ping>` is well-formed XML but `nope` is not a
+//! field `PingType` declares — exactly the case validation exists to
+//! notice. Mirrors `dds_bridge.rs`'s one validation test in scope:
+//! `reject` proving the check actually blocks something and the adapter
+//! keeps working afterward, not every mode combination.
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use bytes::Bytes;
+use oa_gateway_adapter::ValidateMode;
 use oa_gateway_core::{ContentType, Engine, Envelope, RouteKey};
 use oa_gateway_loopback::Loopback;
 use oa_gateway_testing::stomp::{start_mini_broker, start_stomp_adapter_with, StompPeer};
 use oa_gateway_testing::util::recv_envelope;
-use oa_gateway_uci::ValidateMode;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
+
+const NS: &str = "https://www.vdl.afrl.af.mil/programs/oam";
 
 /// As `dds_bridge.rs`'s helper of the same shape: polls `rx` for up to
 /// `window`, true the moment a payload containing `needle` arrives, false
@@ -69,36 +71,24 @@ async fn reject_drops_an_inbound_message_that_does_not_follow_the_schema() {
     let mut peer = StompPeer::connect(broker.addr).await;
 
     // A conforming send still crosses under reject mode.
-    peer.send(
-        "/topic/demo",
-        br#"{"Ping":{"n":7}}"#,
-        &[("content-type", "application/json")],
-    )
-    .await;
+    let conforming = format!(r#"<Ping xmlns="{NS}"><n>7</n></Ping>"#);
+    peer.send("/topic/demo", conforming.as_bytes(), &[]).await;
     let first = recv_envelope(&mut rx).await;
-    assert_eq!(first.payload.as_ref(), br#"{"Ping":{"n":7}}"#);
+    assert_eq!(first.payload.as_ref(), conforming.as_bytes());
 
     // `nope` is not a field Ping declares.
-    peer.send(
-        "/topic/demo",
-        br#"{"Ping":{"nope":1}}"#,
-        &[("content-type", "application/json")],
-    )
-    .await;
+    let bad = format!(r#"<Ping xmlns="{NS}"><nope>1</nope></Ping>"#);
+    peer.send("/topic/demo", bad.as_bytes(), &[]).await;
     assert!(
         !any_payload_contains(&mut rx, Duration::from_millis(800), "nope").await,
         "a message that does not follow the schema must not reach the engine"
     );
 
     // The adapter itself must still be alive and processing after dropping it.
-    peer.send(
-        "/topic/demo",
-        br#"{"Ping":{"n":9}}"#,
-        &[("content-type", "application/json")],
-    )
-    .await;
+    let again = format!(r#"<Ping xmlns="{NS}"><n>9</n></Ping>"#);
+    peer.send("/topic/demo", again.as_bytes(), &[]).await;
     let after = recv_envelope(&mut rx).await;
-    assert_eq!(after.payload.as_ref(), br#"{"Ping":{"n":9}}"#);
+    assert_eq!(after.payload.as_ref(), again.as_bytes());
 
     shutdown.cancel();
     broker.shutdown();
@@ -125,27 +115,29 @@ async fn reject_drops_an_outbound_message_that_does_not_follow_the_schema() {
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     // A conforming publish still crosses under reject mode.
+    let conforming = format!(r#"<Ping xmlns="{NS}"><n>7</n></Ping>"#);
     loopback
         .publish(
             Envelope::new(
                 RouteKey::typed("demo", "Ping"),
-                Bytes::from_static(br#"{"Ping":{"n":7}}"#),
+                Bytes::from(conforming.clone().into_bytes()),
             )
-            .with_content_type(ContentType::json()),
+            .with_content_type(ContentType::xml()),
         )
         .await;
     let first = peer.recv().await;
     assert_eq!(first.command, "MESSAGE");
-    assert_eq!(first.body, br#"{"Ping":{"n":7}}"#);
+    assert_eq!(first.body, conforming.as_bytes());
 
     // `nope` is not a field Ping declares; nothing should reach the broker.
+    let bad = format!(r#"<Ping xmlns="{NS}"><nope>1</nope></Ping>"#);
     loopback
         .publish(
             Envelope::new(
                 RouteKey::typed("demo", "Ping"),
-                Bytes::from_static(br#"{"Ping":{"nope":1}}"#),
+                Bytes::from(bad.into_bytes()),
             )
-            .with_content_type(ContentType::json()),
+            .with_content_type(ContentType::xml()),
         )
         .await;
     assert!(
@@ -154,17 +146,18 @@ async fn reject_drops_an_outbound_message_that_does_not_follow_the_schema() {
     );
 
     // The adapter itself must still be alive and processing after dropping it.
+    let again = format!(r#"<Ping xmlns="{NS}"><n>9</n></Ping>"#);
     loopback
         .publish(
             Envelope::new(
                 RouteKey::typed("demo", "Ping"),
-                Bytes::from_static(br#"{"Ping":{"n":9}}"#),
+                Bytes::from(again.clone().into_bytes()),
             )
-            .with_content_type(ContentType::json()),
+            .with_content_type(ContentType::xml()),
         )
         .await;
     let after = peer.recv().await;
-    assert_eq!(after.body, br#"{"Ping":{"n":9}}"#);
+    assert_eq!(after.body, again.as_bytes());
 
     shutdown.cancel();
     broker.shutdown();

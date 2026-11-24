@@ -22,7 +22,7 @@ async fn owp_pub_reaches_stomp() {
         Duration::ZERO,
     )
     .await;
-    let (url, owp_sd) = start_owp(engine, true).await;
+    let (url, owp_sd) = start_owp(engine).await;
 
     let mut peer = StompPeer::connect(broker.addr).await;
     peer.subscribe("s1", "/topic/PositionReport").await;
@@ -32,7 +32,7 @@ async fn owp_pub_reaches_stomp() {
     handshake(&mut ws).await;
     send_text(
         &mut ws,
-        r#"PUB PositionReport {"PositionReport":{"MessageData":{"n":1}}}"#,
+        r#"PUB PositionReport <PositionReport xmlns="https://www.vdl.afrl.af.mil/programs/oam"><MessageData><n>1</n></MessageData></PositionReport>"#,
     )
     .await;
     match parse_server(&recv_text(&mut ws).await).unwrap() {
@@ -64,7 +64,7 @@ async fn stomp_send_reaches_owp_sub() {
         Duration::ZERO,
     )
     .await;
-    let (url, owp_sd) = start_owp(engine, true).await;
+    let (url, owp_sd) = start_owp(engine).await;
 
     let mut ws = connect(&url).await;
     handshake(&mut ws).await;
@@ -85,11 +85,7 @@ async fn stomp_send_reaches_owp_sub() {
     match parse_server(&recv_text(&mut ws).await).unwrap() {
         ServerOp::Msg { sid, payload } => {
             assert_eq!(sid, "sub-1");
-            let v: serde_json::Value = serde_json::from_str(&payload).unwrap();
-            assert_eq!(
-                v.pointer("/PositionReport/MessageData/n"),
-                Some(&serde_json::json!(1))
-            );
+            assert!(payload.contains("<n>1</n>"), "{payload}");
         }
         other => panic!("expected MSG, got {other}"),
     }

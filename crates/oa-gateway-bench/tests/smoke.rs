@@ -37,7 +37,8 @@ fn ping_smoke_prints_received() {
         out.status
     );
     assert!(
-        stdout.contains(r#"{"Ping":{"n":1}}"#),
+        stdout
+            .contains(r#"<Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><n>1</n></Ping>"#),
         "expected Ping payload in stdout, got {stdout}"
     );
 }

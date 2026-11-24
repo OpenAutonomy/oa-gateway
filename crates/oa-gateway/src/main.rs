@@ -8,7 +8,6 @@ mod adapters;
 mod addr;
 mod cli;
 mod config;
-mod schema;
 mod serve;
 mod tls;
 mod xsd_libxml;

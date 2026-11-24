@@ -26,7 +26,9 @@ async fn a_frame_over_the_limit_ends_the_session() {
     // Well-formed, and far too large: the frame is refused for its size, not
     // for its content.
     let payload = "x".repeat(4096);
-    let frame = format!(r#"PUB demo {{"Ping":{{"n":"{payload}"}}}}"#);
+    let frame = format!(
+        r#"PUB demo <Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><from>{payload}</from></Ping>"#
+    );
     // The send itself succeeds — the client has its own, larger limit — so the
     // rejection has to show up as the session ending.
     let _ = ws.send(Message::Text(frame.into())).await;
@@ -55,8 +57,8 @@ async fn a_frame_at_the_limit_still_works() {
     let mut ws = connect(&url).await;
     handshake(&mut ws).await;
 
-    let prefix = r#"PUB demo {"Ping":{"n":""#;
-    let suffix = r#""}}"#;
+    let prefix = r#"PUB demo <Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><from>"#;
+    let suffix = "</from></Ping>";
     let payload = "x".repeat(1024 - prefix.len() - suffix.len());
     let frame = format!("{prefix}{payload}{suffix}");
     assert_eq!(frame.len(), 1024);
@@ -96,7 +98,11 @@ async fn subscriptions_past_the_limit_are_refused() {
 
     // The connection survives a refusal: the limit is not a reason to hang up,
     // and the subscriptions already established keep working.
-    send_text(&mut ws, r#"PUB demo {"Ping":{"n":1}}"#).await;
+    send_text(
+        &mut ws,
+        r#"PUB demo <Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><n>1</n></Ping>"#,
+    )
+    .await;
     match parse_server(&recv_text(&mut ws).await).unwrap() {
         ServerOp::Ok => {}
         other => panic!("expected the session to continue after a refusal, got {other}"),

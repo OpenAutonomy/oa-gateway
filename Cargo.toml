@@ -7,7 +7,6 @@ members = [
     "crates/oa-gateway-owp",
     "crates/oa-gateway-stomp",
     "crates/oa-gateway-dds",
-    "crates/oa-gateway-uci",
     "crates/oa-gateway-xsd-libxml",
     "crates/oa-gateway-testing",
     "crates/oa-gateway-bench",
@@ -76,6 +75,7 @@ rustls-pki-types = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
+time = { version = "0.3", default-features = false, features = ["std"] }
 tokio = { version = "1", features = ["full"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12", "logging"] }
 tokio-tungstenite = "0.30"
@@ -88,7 +88,6 @@ uuid = { version = "1", features = ["v4", "v5", "serde"] }
 oa-gateway-core = { path = "crates/oa-gateway-core" }
 oa-gateway-adapter = { path = "crates/oa-gateway-adapter" }
 oa-gateway-agra = { path = "crates/oa-gateway-agra" }
-oa-gateway-uci = { path = "crates/oa-gateway-uci" }
 oa-gateway-xsd-libxml = { path = "crates/oa-gateway-xsd-libxml" }
 oa-gateway-loopback = { path = "crates/oa-gateway-loopback" }
 oa-gateway-owp = { path = "crates/oa-gateway-owp" }

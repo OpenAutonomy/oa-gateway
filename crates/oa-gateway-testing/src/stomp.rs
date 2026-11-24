@@ -367,10 +367,9 @@ pub async fn start_stomp_adapter(
 /// As [`start_stomp_adapter`], with the config open for editing first —
 /// for example to set [`StompConfig::tls`].
 ///
-/// The fixture schema ([`oa_gateway_uci::slice::v25`]) and the
-/// libxml2-backed [`crate::xsd_fixtures::ping_validator`] are always
+/// The libxml2-backed [`crate::xsd_fixtures::ping_validator`] is always
 /// attached, the same way [`crate::owp::start_owp_with`] and
-/// [`crate::dds::start_dds_adapter_with`] attach them — `edit` only needs
+/// [`crate::dds::start_dds_adapter_with`] attach it — `edit` only needs
 /// to set [`StompConfig::validate`] to turn checking on.
 pub async fn start_stomp_adapter_with(
     engine: Arc<Engine>,
@@ -385,7 +384,6 @@ pub async fn start_stomp_adapter_with(
         broker,
         topics,
         reconnect: false,
-        schema: Some(Arc::new(oa_gateway_uci::slice::v25().clone())),
         xsd_validator: Some(Arc::new(crate::xsd_fixtures::ping_validator())),
         ..StompConfig::default()
     };

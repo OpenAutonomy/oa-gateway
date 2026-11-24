@@ -79,47 +79,27 @@ pub fn inbound_route(topic: &str, type_hint: Option<String>) -> RouteKey {
     }
 }
 
-/// Best-effort type hint from a JSON or XML body.
-///
-/// JSON must be a single-key object; the key is the hint. XML uses the
-/// root local name (prefix stripped). Multi-key JSON, non-UTF-8, and
-/// other shapes return [`None`].
+/// Best-effort type hint from an XML body: the root element's local name
+/// (prefix stripped). Non-UTF-8 or non-XML returns [`None`].
 #[must_use]
 pub fn sniff_type_hint(payload: &[u8]) -> Option<String> {
-    let text = std::str::from_utf8(payload).ok()?.trim_start();
-    if text.starts_with('{') {
-        let value: serde_json::Value = serde_json::from_str(text).ok()?;
-        let obj = value.as_object()?;
-        if obj.len() == 1 {
-            return obj.keys().next().cloned();
-        }
-        return None;
-    }
-    if text.starts_with('<') {
-        return xml_root_local_name(text);
-    }
-    None
+    let text = std::str::from_utf8(payload).ok()?;
+    xml_root_local_name(text)
 }
 
-/// MIME type from a STOMP `content-type` header, or a sniff of the
-/// body.
-///
-/// The header wins when its type (before `;`) is non-empty. Otherwise
-/// a leading `{` is JSON, a leading `<` is XML, and everything else is
-/// `application/octet-stream`. Does not fail.
+/// MIME type from a STOMP `content-type` header, or `application/xml`
+/// when the header is absent or empty. Does not fail — a payload that
+/// turns out not to be well-formed XML is a parse/validate failure
+/// downstream, not a content-type-detection concern.
 #[must_use]
-pub fn sniff_content_type(payload: &[u8], header: Option<&str>) -> ContentType {
+pub fn sniff_content_type(header: Option<&str>) -> ContentType {
     if let Some(ct) = header {
         let mime = ct.split(';').next().unwrap_or(ct).trim();
         if !mime.is_empty() {
             return ContentType::new(mime);
         }
     }
-    match std::str::from_utf8(payload).map(str::trim_start) {
-        Ok(t) if t.starts_with('{') => ContentType::json(),
-        Ok(t) if t.starts_with('<') => ContentType::xml(),
-        _ => ContentType::octet_stream(),
-    }
+    ContentType::xml()
 }
 
 #[cfg(test)]
@@ -138,11 +118,7 @@ mod tests {
     }
 
     #[test]
-    fn sniff_json_and_xml_with_prolog() {
-        assert_eq!(
-            sniff_type_hint(br#"{"Ping":{"n":1}}"#).as_deref(),
-            Some("Ping")
-        );
+    fn sniff_xml_with_prolog() {
         let xml = b"<?xml version=\"1.0\"?>\n<uci:PositionReport xmlns:uci=\"x\"/>";
         assert_eq!(sniff_type_hint(xml).as_deref(), Some("PositionReport"));
     }

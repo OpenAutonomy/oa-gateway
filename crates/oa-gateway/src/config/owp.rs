@@ -41,10 +41,6 @@ pub(crate) struct OwpSection {
     /// Defaults to `true`.
     #[serde(default = "default_true")]
     pub(crate) unwrap_ma_payloads: bool,
-    /// Convert OMS JSON ↔ UCI XML at the socket so the engine and ASB see
-    /// XML. Requires `[uci].schema`. Defaults to `false`.
-    #[serde(default)]
-    pub(crate) xml_baseline: bool,
     /// PEM certificate chain served to clients, leaf certificate first.
     /// Empty (the default) leaves the listener plaintext. Requires
     /// `tls_key`; setting one without the other is a startup error.
@@ -109,7 +105,6 @@ impl Default for OwpSection {
             system_label: default_label(),
             schema: default_schema(),
             unwrap_ma_payloads: true,
-            xml_baseline: false,
             tls_cert: String::new(),
             tls_key: String::new(),
             tls_client_ca: String::new(),

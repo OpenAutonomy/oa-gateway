@@ -16,7 +16,7 @@ TLS is off unless configured. `owp.tls_cert` / `owp.tls_key` make the OWP listen
 |---|---|
 | [`config/default.toml`](../config/default.toml) | Local development: loopback and OWP on loopback, STOMP off, no schema. |
 | [`config/compose.toml`](../config/compose.toml) | Container example for `compose/gateway.yml`: OWP on `0.0.0.0:9000`, STOMP off. |
-| [`config/asb.toml`](../config/asb.toml) | Host-side ActiveMQ bridge with a schema, `xml_baseline`, and STOMP enabled. Requires `scripts/fetch-uci-schema.sh` and a broker. |
+| [`config/asb.toml`](../config/asb.toml) | Host-side ActiveMQ bridge with a schema and STOMP enabled. Requires `scripts/fetch-uci-schema.sh` and a broker. |
 | [`config/dds.toml`](../config/dds.toml) | Loopback plus a rustdds participant on domain 0. Requires [`config/dds-qos.xml`](../config/dds-qos.xml). |
 
 `shipped_configs_parse` fails if one of those files names a key the structs do not declare.
@@ -31,14 +31,12 @@ The engine has no runtime settings of its own. This section controls how often t
 
 ## `[uci]`
 
-This section names the schema documents and what to do when a payload is not an instance of them. Conversion and validation both need the files listed explicitly; the standard is not redistributed here. See [using-custom-xsd.md](using-custom-xsd.md).
+This section names the schema documents and what to do when a payload is not an instance of them. Validation needs the files listed explicitly; the standard is not redistributed here. See [using-custom-xsd.md](using-custom-xsd.md).
 
 | Key | Default | What it does |
 |---|---|---|
-| `schema` | `[]` | XSD paths. Empty means no conversion and no validation. List every document the catalog spans; `xs:include` and `xs:import` are not followed. |
+| `schema` | `[]` | XSD paths. Empty means no validation. List every document the catalog spans; `xs:include` and `xs:import` are not followed. |
 | `validate` | `"warn"` | `"warn"` reports a departure and carries the message; `"reject"` refuses it and tells the peer; `"off"` skips the check. Ignored when `schema` is empty. A typo is refused as `uci.validate: …`. |
-
-`owp.xml_baseline` requires a schema. Startup refuses that combination rather than failing on the first converted message.
 
 ## `[loopback]`
 
@@ -65,7 +63,6 @@ OWP is the WebSocket server. It is off unless this table is in the file.
 | `system_label` | `"OA-Gateway Prototype"` | Human-readable label sent on INIT. |
 | `schema` | `"002.5.0"` | Protocol version string a client INIT must match exactly. This is not `[uci].schema`. Empty disables the check. |
 | `unwrap_ma_payloads` | `true` | Peel A-GRA Rx/Tx hex wrappers on PUB and publish the wrapper and the inner message. |
-| `xml_baseline` | `false` | Convert OMS JSON ↔ UCI XML at the socket so the engine and a broker see XML. Requires `[uci].schema`. |
 | `max_frame_size` | `16777216` | Largest frame accepted from a client, in bytes. An oversized frame ends that session. |
 | `max_connections` | `256` | Connections served at once. Further connections are closed on accept. |
 | `max_subscriptions` | `1024` | Subscriptions one connection may hold. A SUB past the limit is refused and the session continues. |
@@ -126,7 +123,7 @@ DDS is a participant on a domain. It is off unless this table is in the file. Th
 | `reconnect` | `false` | Rejoin the domain after the session ends or panics, instead of leaving the adapter stopped until the whole process restarts. Defaults off so an existing deployment sees no behavior change until it opts in. |
 | `reconnect_delay_secs` | `1` | Seconds to wait between rejoin attempts. |
 | `on_panic` | `"abort"` | `"abort"` ends the adapter when the session panics; `"reconnect"` treats the panic as a failed session and then follows `reconnect`. A typo is refused as `dds.on_panic: …`. |
-| `max_sample_size` | `16777216` | Largest inbound sample accepted, in bytes, before it is unwrapped or converted. An oversized sample is dropped and logged rather than ending the session — DDS has no per-peer connection to end. |
+| `max_sample_size` | `16777216` | Largest inbound sample accepted, in bytes, before it is unwrapped. An oversized sample is dropped and logged rather than ending the session — DDS has no per-peer connection to end. |
 
 Inbound samples are checked against `[uci].schema` the same way OWP traffic is; `[uci].validate` decides what a violation costs, and has no effect without a schema. Unlike OWP, DDS has no peer connection to notify, so `reject` drops the sample and logs it rather than answering an error frame.
 

@@ -17,7 +17,6 @@ libfuzzer-sys = "0.4"
 oa-gateway-stomp = { path = "../crates/oa-gateway-stomp" }
 oa-gateway-owp = { path = "../crates/oa-gateway-owp" }
 oa-gateway-agra = { path = "../crates/oa-gateway-agra" }
-oa-gateway-uci = { path = "../crates/oa-gateway-uci" }
 
 [[bin]]
 name = "stomp_codec"
@@ -36,20 +35,6 @@ bench = false
 [[bin]]
 name = "agra_wrapper"
 path = "fuzz_targets/agra_wrapper.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
-name = "uci_instance"
-path = "fuzz_targets/uci_instance.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
-name = "uci_xsd"
-path = "fuzz_targets/uci_xsd.rs"
 test = false
 doc = false
 bench = false

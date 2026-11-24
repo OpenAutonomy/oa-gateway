@@ -23,7 +23,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [stomp_codec, owp_codec, agra_wrapper, uci_instance, uci_xsd]
+        target: [stomp_codec, owp_codec, agra_wrapper]
     steps:
       - uses: actions/checkout@v7
       - name: install libxml2 (oa-gateway-xsd-libxml, now in owp's dependency tree)

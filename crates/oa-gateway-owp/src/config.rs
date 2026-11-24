@@ -1,13 +1,12 @@
 //! Listen address, INIT identity, and resource limits.
 //!
-//! `schema` here is the OWP protocol version string on INIT, not the UCI
-//! XSD the host compiles. `xml_baseline` is what needs that XSD.
+//! `schema` here is the OWP protocol version string on INIT, unrelated to
+//! the UCI XSD the host compiles for validation.
 
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use oa_gateway_adapter::OnPanic;
-use oa_gateway_uci::validate::Mode as ValidateMode;
+use oa_gateway_adapter::{OnPanic, ValidateMode};
 
 /// Largest OWP frame accepted from a client, in bytes.
 ///
@@ -54,8 +53,6 @@ pub struct OwpConfig {
     pub system_uuid: String,
     /// Peel A-GRA Rx/Tx hex wrappers on PUB and fan out wrapper + inner.
     pub unwrap_ma_payloads: bool,
-    /// Convert OMS JSON ↔ UCI XML at the socket. Engine / ASB see XML.
-    pub xml_baseline: bool,
     /// Largest frame accepted from a client. Oversized frames end the session.
     pub max_frame_size: usize,
     /// Connections served at once. Further ones are closed on accept.
@@ -96,7 +93,6 @@ impl Default for OwpConfig {
             schema: Some("002.5.0".into()),
             system_uuid: uuid::Uuid::new_v4().to_string(),
             unwrap_ma_payloads: true,
-            xml_baseline: false,
             max_frame_size: DEFAULT_MAX_FRAME_SIZE,
             max_connections: DEFAULT_MAX_CONNECTIONS,
             max_subscriptions: DEFAULT_MAX_SUBSCRIPTIONS,

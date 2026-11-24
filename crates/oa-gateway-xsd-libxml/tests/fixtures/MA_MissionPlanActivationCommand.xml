@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MA_MissionPlanActivationCommand xmlns="https://www.vdl.afrl.af.mil/programs/oam">
+  <SecurityInformation>
+    <Classification>U</Classification>
+    <OwnerProducer>
+      <GovernmentIdentifier>USA</GovernmentIdentifier>
+    </OwnerProducer>
+  </SecurityInformation>
+  <MessageHeader>
+    <SystemID>
+      <UUID>c2000000000000000000000000000001</UUID>
+      <DescriptiveLabel>C2</DescriptiveLabel>
+    </SystemID>
+    <Timestamp>2026-08-13T16:00:00Z</Timestamp>
+    <SchemaVersion>005.0a</SchemaVersion>
+    <Mode>SIMULATION</Mode>
+  </MessageHeader>
+  <MessageData>
+    <CommandID>
+      <UUID>d3000000000000000000000000000001</UUID>
+      <DescriptiveLabel>c2-path</DescriptiveLabel>
+    </CommandID>
+    <CommandState>NEW</CommandState>
+    <Command>
+      <MissionPlanID>
+        <UUID>d2000000000000000000000000000001</UUID>
+        <DescriptiveLabel>c2-path</DescriptiveLabel>
+      </MissionPlanID>
+      <ActivationDetails>
+        <ByMissionPlan>
+          <ActivationCommand>ACTIVATE</ActivationCommand>
+          <CommandSubordinatePlans>true</CommandSubordinatePlans>
+        </ByMissionPlan>
+      </ActivationDetails>
+    </Command>
+  </MessageData>
+</MA_MissionPlanActivationCommand>

@@ -1,14 +1,14 @@
-//! Bench payloads. Sequence numbers live in the JSON, not in engine headers.
+//! Bench payloads. Sequence numbers live in `<n>`, not in engine headers.
 
-use oa_gateway_testing::fixtures::POSITION_REPORT_JSON;
-use serde_json::{json, Value};
+use oa_gateway_testing::fixtures::POSITION_REPORT_XML;
+use oa_gateway_testing::util::xml_marked;
 
 /// Which document to send.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PayloadKind {
-    /// Small typed message the fixture schema and the engine both understand.
+    /// Small typed message the fixture validator and the engine both understand.
     Ping,
-    /// Realistic UCI document used when `xml_baseline` conversion is on.
+    /// Larger, more realistic UCI document.
     PositionReport,
 }
 
@@ -30,50 +30,48 @@ impl PayloadKind {
     }
 }
 
-/// Builds a JSON payload with `seq` in `n` and optional padding.
+/// Builds an XML payload with `seq` in `<n>` and optional padding.
 #[must_use]
 pub(crate) fn render(kind: PayloadKind, seq: u64, min_bytes: usize) -> String {
     match kind {
         PayloadKind::Ping => {
-            let mut from = String::new();
-            let mut text = ping_json(seq, &from);
+            let mut text = ping_xml(seq, "");
             if text.len() < min_bytes {
-                from = "x".repeat(min_bytes.saturating_sub(text.len()));
-                text = ping_json(seq, &from);
+                let pad = "x".repeat(min_bytes.saturating_sub(text.len()));
+                text = ping_xml(seq, &pad);
             }
             text
         }
         PayloadKind::PositionReport => {
-            let mut value: Value =
-                serde_json::from_str(POSITION_REPORT_JSON).expect("PositionReport fixture is JSON");
-            value["PositionReport"]["MessageData"]["n"] = json!(seq);
-            let mut text = serde_json::to_string(&value).expect("value is serializable");
+            let mut text = xml_marked(POSITION_REPORT_XML, &seq.to_string());
             if text.len() < min_bytes {
                 let pad = "x".repeat(min_bytes.saturating_sub(text.len()));
-                value["PositionReport"]["MessageData"]["pad"] = json!(pad);
-                text = serde_json::to_string(&value).expect("value is serializable");
+                text = text.replace("</MessageData>", &format!("<pad>{pad}</pad></MessageData>"));
             }
             text
         }
     }
 }
 
-fn ping_json(seq: u64, from: &str) -> String {
+fn ping_xml(seq: u64, from: &str) -> String {
+    const NS: &str = "https://www.vdl.afrl.af.mil/programs/oam";
     if from.is_empty() {
-        format!(r#"{{"Ping":{{"n":{seq}}}}}"#)
+        format!(r#"<Ping xmlns="{NS}"><n>{seq}</n></Ping>"#)
     } else {
-        format!(r#"{{"Ping":{{"n":{seq},"from":"{from}"}}}}"#)
+        format!(r#"<Ping xmlns="{NS}"><n>{seq}</n><from>{from}</from></Ping>"#)
     }
 }
 
-/// Reads the sequence number stamped by [`render`].
+/// Reads the sequence number stamped by [`render`]: the first `<n>`
+/// element's text, parsed as `u64`.
 #[must_use]
 pub(crate) fn parse_seq(payload: &[u8]) -> Option<u64> {
-    let value: Value = serde_json::from_slice(payload).ok()?;
-    value
-        .pointer("/Ping/n")
-        .or_else(|| value.pointer("/PositionReport/MessageData/n"))
-        .and_then(Value::as_u64)
+    let text = std::str::from_utf8(payload).ok()?;
+    let doc = roxmltree::Document::parse(text).ok()?;
+    doc.descendants()
+        .find(|n| n.is_element() && n.tag_name().name() == "n")
+        .and_then(|n| n.text())
+        .and_then(|t| t.parse().ok())
 }
 
 #[cfg(test)]
@@ -92,5 +90,12 @@ mod tests {
         let text = render(PayloadKind::PositionReport, 7, 1);
         assert_eq!(parse_seq(text.as_bytes()), Some(7));
         assert!(text.contains("PositionReport"));
+    }
+
+    #[test]
+    fn position_report_padding_still_parses() {
+        let text = render(PayloadKind::PositionReport, 9, 4096);
+        assert!(text.len() >= 4096, "{text}");
+        assert_eq!(parse_seq(text.as_bytes()), Some(9));
     }
 }

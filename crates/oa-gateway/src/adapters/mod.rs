@@ -11,8 +11,8 @@ mod stomp;
 
 use std::sync::Arc;
 
+use oa_gateway_adapter::ValidateMode;
 use oa_gateway_core::Engine;
-use oa_gateway_uci::{Schema, ValidateMode};
 use oa_gateway_xsd_libxml::XsdLibxmlValidator;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -28,8 +28,8 @@ use crate::tls::HostTls;
 /// logged inside its task; the handle still completes so shutdown can join
 /// it.
 ///
-/// `schema` and `validate` are handed to OWP, STOMP, and DDS, checking
-/// both directions on each. Loopback does not convert or check payloads —
+/// `xsd_validator` and `validate` are handed to OWP, STOMP, and DDS,
+/// checking both directions on each. Loopback does not check payloads —
 /// it is an in-process adapter with no external trust boundary to close a
 /// gap on.
 ///
@@ -41,7 +41,6 @@ use crate::tls::HostTls;
 pub(crate) async fn start(
     config: &Config,
     engine: Arc<Engine>,
-    schema: Option<Arc<Schema>>,
     xsd_validator: Option<Arc<XsdLibxmlValidator>>,
     validate: ValidateMode,
     tls: HostTls,
@@ -72,7 +71,6 @@ pub(crate) async fn start(
         handles.push(owp::start(
             &config.owp,
             bind,
-            schema.as_ref(),
             xsd_validator.as_ref(),
             validate,
             tls.owp,
@@ -86,7 +84,6 @@ pub(crate) async fn start(
             &config.stomp,
             broker,
             tls.stomp,
-            schema.as_ref(),
             xsd_validator.as_ref(),
             validate,
             Arc::clone(&engine),
@@ -97,7 +94,6 @@ pub(crate) async fn start(
     if config.dds.enabled {
         handles.push(dds::start(
             &config.dds,
-            schema.as_ref(),
             xsd_validator.as_ref(),
             validate,
             engine,

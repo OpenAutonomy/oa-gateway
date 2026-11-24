@@ -38,12 +38,20 @@ async fn tls_round_trip() {
 
     // Broker -> adapter -> engine.
     let mut peer = StompPeer::connect_tls(broker.addr, &tls).await;
-    peer.send("/topic/demo", br#"{"Ping":{"n":9}}"#, &[]).await;
+    peer.send(
+        "/topic/demo",
+        br#"<Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><n>9</n></Ping>"#,
+        &[],
+    )
+    .await;
     let got = tokio::time::timeout(Duration::from_secs(2), rx.recv())
         .await
         .expect("timeout")
         .expect("closed");
-    assert_eq!(got.payload.as_ref(), br#"{"Ping":{"n":9}}"#);
+    assert_eq!(
+        got.payload.as_ref(),
+        br#"<Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><n>9</n></Ping>"#
+    );
 
     shutdown.cancel();
     broker.shutdown();

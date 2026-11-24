@@ -10,7 +10,8 @@ use crate::cli::PingArgs;
 use crate::owp_client;
 
 const PING_SID: &str = "ping-1";
-const PING_PUB: &str = r#"PUB demo {"Ping":{"n":1}}"#;
+const PING_PUB: &str =
+    r#"PUB demo <Ping xmlns="https://www.vdl.afrl.af.mil/programs/oam"><n>1</n></Ping>"#;
 
 /// Runs the ping smoke.
 ///
@@ -26,7 +27,7 @@ pub(crate) async fn run(args: PingArgs) -> Result<(), String> {
     let (url, shutdown) = if let Some(url) = &args.url {
         (url.clone(), None)
     } else {
-        let (url, token) = start_owp(Arc::new(Engine::new()), false).await;
+        let (url, token) = start_owp(Arc::new(Engine::new())).await;
         (url, Some(token))
     };
 
@@ -69,7 +70,7 @@ mod tests {
 
     #[tokio::test]
     async fn attaches_to_in_process_owp() {
-        let (url, shutdown) = start_owp(Arc::new(Engine::new()), false).await;
+        let (url, shutdown) = start_owp(Arc::new(Engine::new())).await;
         run(PingArgs { url: Some(url) })
             .await
             .expect("ping against in-process OWP");
